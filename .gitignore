@@ -1,0 +1,176 @@
+# ------------------------------------------------------------
+#  C
+# ------------------------------------------------------------
+
+# Compiled object files
+*.o
+*.obj
+
+# Preprocessed / assembler output
+*.i
+*.s
+
+# Static & shared libraries
+*.a
+*.so
+*.so.*
+*.dylib
+*.lib
+*.dll
+
+# Executables (sem extensão no Linux/macOS, .exe no Windows)
+*.exe
+*.out
+*.elf
+
+# Debug / profiling
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Dependency / make artifacts
+*.d
+*.map
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+build/
+_build/
+out/
+
+# Autotools
+autom4te.cache/
+config.status
+config.log
+configure
+Makefile.in
+
+# ------------------------------------------------------------
+#  Python
+# ------------------------------------------------------------
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuição / empacotamento
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+share/python-wheels/
+*.whl
+
+# Ambientes virtuais
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# Testes & cobertura
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.pytest_cache/
+nosetests.xml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Linters / formatters
+.ruff_cache/
+
+# Instalador / pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Sphinx
+docs/_build/
+
+# pyenv
+.python-version
+
+# ------------------------------------------------------------
+#  Geral / IDE / OS
+# ------------------------------------------------------------
+
+# VS Code
+.vscode/
+
+# CLion / JetBrains
+.idea/
+*.iml
+
+# Eclipse / CDT
+.cproject
+.project
+.settings/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# Variáveis de ambiente / segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+
+# Zips e PDF do TCC
+Referencias Boas/
