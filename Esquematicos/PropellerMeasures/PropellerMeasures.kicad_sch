@@ -1,0 +1,200 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "33f4e91a-8b2f-46a0-a754-591d51435995")
+	(paper "A3")
+	(lib_symbols)
+	(text "Coisas que vão ter na placa:\n\nTração, Torque, RPM, velocidade do vento, pressão, temperatura e controlar o ESC\nPrecisa ter robustes na hora de ligar o ESC por meio de SSR DC"
+		(exclude_from_sim no)
+		(at 154.686 102.87 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "3ee22f94-de24-4a5f-bb9a-d112b91a86b9")
+	)
+	(sheet
+		(at 119.38 146.05)
+		(size 40.64 36.83)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 245 117 1.0000)
+		)
+		(uuid "dec90e41-6e62-4945-8d43-af5f0a55ae34")
+		(property "Sheetname" "PowerSupply"
+			(at 119.38 145.3384 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "PowerSupply.kicad_sch"
+			(at 119.38 183.4646 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "PropellerMeasures"
+				(path "/33f4e91a-8b2f-46a0-a754-591d51435995"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 166.37 118.11)
+		(size 38.1 35.56)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 248 69 1.0000)
+		)
+		(uuid "e39e1c0f-b6e8-40cf-87f2-6a84bf2ee755")
+		(property "Sheetname" "MicrocontrollerSch"
+			(at 166.37 117.3984 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "MicrocontrollerSch.kicad_sch"
+			(at 166.37 154.2546 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "PropellerMeasures"
+				(path "/33f4e91a-8b2f-46a0-a754-591d51435995"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 74.93 115.57)
+		(size 40.64 35.56)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 253 255 132 1.0000)
+		)
+		(uuid "e5285866-2821-4f3e-b227-7641779c79c7")
+		(property "Sheetname" "BatterySide"
+			(at 74.93 114.8584 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "BatterysSide.kicad_sch"
+			(at 74.93 151.7146 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "Vbatt" passive
+			(at 115.57 144.78 0)
+			(uuid "daf2586f-916b-430b-8ff9-2de0802f683d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ADC_Batt_Vout" output
+			(at 115.57 133.35 0)
+			(uuid "e2275c02-28fe-4e72-9408-cda099e348f9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ADC_Iout" output
+			(at 115.57 137.16 0)
+			(uuid "af796f42-d093-45c1-9138-121483c0406d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MCU_SignalReady" input
+			(at 115.57 128.27 0)
+			(uuid "8a738a59-cfd9-4e88-b922-b7f1a8e930ed")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "EmergencyButton" input
+			(at 115.57 123.19 0)
+			(uuid "e3c0828b-7456-4f63-a160-9a316321b0f0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "PropellerMeasures"
+				(path "/33f4e91a-8b2f-46a0-a754-591d51435995"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
