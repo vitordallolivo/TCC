@@ -16,7 +16,7 @@
 		(uuid "3ee22f94-de24-4a5f-bb9a-d112b91a86b9")
 	)
 	(sheet
-		(at 119.38 146.05)
+		(at 74.93 158.75)
 		(size 40.64 36.83)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -32,7 +32,7 @@
 		)
 		(uuid "dec90e41-6e62-4945-8d43-af5f0a55ae34")
 		(property "Sheetname" "PowerSupply"
-			(at 119.38 145.3384 0)
+			(at 74.93 158.0384 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -41,12 +41,62 @@
 			)
 		)
 		(property "Sheetfile" "PowerSupply.kicad_sch"
-			(at 119.38 183.4646 0)
+			(at 74.93 196.1646 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "Vbat" passive
+			(at 115.57 165.1 0)
+			(uuid "3c7b8af9-e472-4723-8f31-35f10b95b77f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "3.3Vbatt" output
+			(at 115.57 168.91 0)
+			(uuid "e7c1a21e-ab3b-45e5-bafe-8040018adde2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "5V_PSU" output
+			(at 115.57 181.61 0)
+			(uuid "f21be6de-afc5-492e-8081-4eea642602c0")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "3.3VA_PSU" output
+			(at 115.57 185.42 0)
+			(uuid "f34f3f2e-487a-494e-baf5-f69fcffa914c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "3.3V_PSU" output
+			(at 115.57 189.23 0)
+			(uuid "563c4735-39a9-494c-87c0-9c11ed4b2a57")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 			)
 		)
 		(instances
@@ -58,7 +108,7 @@
 		)
 	)
 	(sheet
-		(at 166.37 118.11)
+		(at 163.83 113.03)
 		(size 38.1 35.56)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -74,7 +124,7 @@
 		)
 		(uuid "e39e1c0f-b6e8-40cf-87f2-6a84bf2ee755")
 		(property "Sheetname" "MicrocontrollerSch"
-			(at 166.37 117.3984 0)
+			(at 163.83 112.3184 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -83,7 +133,7 @@
 			)
 		)
 		(property "Sheetfile" "MicrocontrollerSch.kicad_sch"
-			(at 166.37 154.2546 0)
+			(at 163.83 149.1746 0)
 			(effects
 				(font
 					(size 1.27 1.27)

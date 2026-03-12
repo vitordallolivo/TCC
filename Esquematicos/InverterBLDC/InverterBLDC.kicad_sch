@@ -6,7 +6,7 @@
 	(paper "A4")
 	(lib_symbols)
 	(sheet
-		(at 30.48 38.1)
+		(at 67.31 88.9)
 		(size 22.86 20.32)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -22,7 +22,7 @@
 		)
 		(uuid "916ab27f-519f-412a-87cf-6e5dfca5ef99")
 		(property "Sheetname" "Communication"
-			(at 30.48 37.3884 0)
+			(at 67.31 88.1884 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -31,7 +31,7 @@
 			)
 		)
 		(property "Sheetfile" "Communication.kicad_sch"
-			(at 30.48 59.0046 0)
+			(at 67.31 109.8046 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -48,8 +48,8 @@
 		)
 	)
 	(sheet
-		(at 111.76 72.39)
-		(size 33.02 24.13)
+		(at 68.58 36.83)
+		(size 31.75 22.86)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -64,7 +64,7 @@
 		)
 		(uuid "ba9bf299-9176-4ce4-becc-ccdba03f9a2d")
 		(property "Sheetname" "PowerSupply"
-			(at 111.76 71.6784 0)
+			(at 68.58 36.1184 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -73,7 +73,7 @@
 			)
 		)
 		(property "Sheetfile" "PSU.kicad_sch"
-			(at 111.76 97.1046 0)
+			(at 68.58 60.2746 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -90,7 +90,7 @@
 		)
 	)
 	(sheet
-		(at 170.18 73.66)
+		(at 101.6 87.63)
 		(size 31.75 22.86)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -106,7 +106,7 @@
 		)
 		(uuid "ca03e281-f1e3-4f02-96de-0f7b91048c83")
 		(property "Sheetname" "Driver&Inverter"
-			(at 170.18 72.9484 0)
+			(at 101.6 86.9184 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -115,7 +115,7 @@
 			)
 		)
 		(property "Sheetfile" "Driver&Inverter.kicad_sch"
-			(at 170.18 97.1046 0)
+			(at 101.6 111.0746 0)
 			(effects
 				(font
 					(size 1.27 1.27)
