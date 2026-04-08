@@ -1,14 +1,27 @@
-import numpy as np
-import time
+import socket
+import sys
 
-# Simula carga do observador por 1 segundo a 20kHz
-A = np.array([[0, 1], [-2, -3]], dtype=np.float32)
-x = np.array([0.0, 0.0], dtype=np.float32)
+def main():
+    # Cria socket UDP
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Permite reutilizar endereço (útil para reiniciar rápido)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # Habilita recebimento de broadcast (opcional, mas seguro)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-start = time.perf_counter()
-for _ in range(20000):
-    x = A @ x   # operação mais pesada do observador
-elapsed = time.perf_counter() - start
+    # Escuta em todas as interfaces (''), porta 5000
+    server_address = ('', 9999)
+    print(f"Aguardando pacotes UDP na porta {server_address[1]}...")
+    sock.bind(server_address)
 
-print(f"20000 iterações em {elapsed*1000:.1f}ms")
-print(f"{'OK — Python resolve' if elapsed < 1.0 else 'LENTO — precisa de hardware'}")
+    try:
+        while True:
+            data, address = sock.recvfrom(65535)  # buffer grande
+            print(f"Recebido {len(data)} bytes de {address}: {data}")
+    except KeyboardInterrupt:
+        print("\nEncerrado pelo usuário.")
+        sock.close()
+        sys.exit(0)
+
+if __name__ == "__main__":
+    main()

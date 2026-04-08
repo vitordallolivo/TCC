@@ -5,7 +5,7 @@
 	(uuid "33f4e91a-8b2f-46a0-a754-591d51435995")
 	(paper "A3")
 	(lib_symbols)
-	(text "Coisas que vão ter na placa:\n\nTração, Torque, RPM, velocidade do vento, pressão, temperatura e controlar o ESC\nPrecisa ter robustes na hora de ligar o ESC por meio de SSR DC"
+	(text "Coisas que vão ter na placa:\n\nTração, Torque, RPM, velocidade do vento, pressão, \ntemperatura \ncontrolar o ESC\nPrecisa ter robustes na hora de ligar o ESC por meio de SSR DC"
 		(exclude_from_sim no)
 		(at 154.686 102.87 0)
 		(effects
@@ -14,6 +14,76 @@
 			)
 		)
 		(uuid "3ee22f94-de24-4a5f-bb9a-d112b91a86b9")
+	)
+	(wire
+		(pts
+			(xy 143.51 181.61) (xy 143.51 135.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4a83288d-2e46-4946-9eaf-cf45c53a177c")
+	)
+	(wire
+		(pts
+			(xy 146.05 139.7) (xy 149.86 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4a9fe291-77e7-45ce-93cf-442d3191c6ec")
+	)
+	(wire
+		(pts
+			(xy 115.57 185.42) (xy 146.05 185.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5ab2ae0c-99fe-4dae-8a6d-961ff9cee6c2")
+	)
+	(wire
+		(pts
+			(xy 143.51 135.89) (xy 149.86 135.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9d32d6a8-1267-44e0-bb12-6d9e62c4d5f3")
+	)
+	(wire
+		(pts
+			(xy 115.57 128.27) (xy 149.86 128.27)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c066f999-59cb-4baa-a6af-353a6eb33251")
+	)
+	(wire
+		(pts
+			(xy 115.57 181.61) (xy 143.51 181.61)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d41314cc-a522-4c33-8470-bef5a5345cb4")
+	)
+	(wire
+		(pts
+			(xy 146.05 185.42) (xy 146.05 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ef3858f0-8043-415a-bd6f-917974c006c5")
 	)
 	(sheet
 		(at 74.93 158.75)
@@ -70,7 +140,7 @@
 			)
 		)
 		(pin "5V_PSU" output
-			(at 115.57 181.61 0)
+			(at 115.57 176.53 0)
 			(uuid "f21be6de-afc5-492e-8081-4eea642602c0")
 			(effects
 				(font
@@ -90,7 +160,7 @@
 			)
 		)
 		(pin "3.3V_PSU" output
-			(at 115.57 189.23 0)
+			(at 115.57 181.61 0)
 			(uuid "563c4735-39a9-494c-87c0-9c11ed4b2a57")
 			(effects
 				(font
@@ -108,7 +178,7 @@
 		)
 	)
 	(sheet
-		(at 163.83 113.03)
+		(at 149.86 120.65)
 		(size 38.1 35.56)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -124,7 +194,7 @@
 		)
 		(uuid "e39e1c0f-b6e8-40cf-87f2-6a84bf2ee755")
 		(property "Sheetname" "MicrocontrollerSch"
-			(at 163.83 112.3184 0)
+			(at 149.86 119.9384 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -133,12 +203,42 @@
 			)
 		)
 		(property "Sheetfile" "MicrocontrollerSch.kicad_sch"
-			(at 163.83 149.1746 0)
+			(at 149.86 156.7946 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "MCU_Sig_Ready" output
+			(at 149.86 128.27 180)
+			(uuid "d02fbdbc-9c36-4c29-93dd-1f9136a94864")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VSS" passive
+			(at 149.86 135.89 180)
+			(uuid "7deadb05-ba21-451e-a210-3757fe92eb14")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VSSA" passive
+			(at 149.86 139.7 180)
+			(uuid "f439b81e-741a-43d9-9d3c-e98d84b47f66")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 		(instances
@@ -216,16 +316,6 @@
 		(pin "MCU_SignalReady" input
 			(at 115.57 128.27 0)
 			(uuid "8a738a59-cfd9-4e88-b922-b7f1a8e930ed")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(pin "EmergencyButton" input
-			(at 115.57 123.19 0)
-			(uuid "e3c0828b-7456-4f63-a160-9a316321b0f0")
 			(effects
 				(font
 					(size 1.27 1.27)

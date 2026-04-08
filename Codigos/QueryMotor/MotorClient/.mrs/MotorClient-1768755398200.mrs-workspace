@@ -4,13 +4,12 @@
 			"path": "."
 		},
 		{
-			"name": "MotorClient",
-			"path": "/home/vitor/Documentos/Facul/TCC/Codigos/QueryMotor/MotorClient"
+			"name": "TesteNET",
+			"path": "/home/vitor/mounriver-studio-projects/TesteNET"
 		}
 	],
 	"settings": {
 		"mrs.workspace.type": "project",
-		"mrs.init.arg": "",
 		"files.associations": {
 			"*.c": "c",
 			"*.h": "cpp",

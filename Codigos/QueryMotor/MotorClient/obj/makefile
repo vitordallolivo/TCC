@@ -58,7 +58,7 @@ main-build: MotorClient.elf secondary-outputs
 MotorClient.elf: $(OBJS) $(USER_OBJS_ESCAPE)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GNU RISC-V Cross C Linker'
-	riscv-none-embed-gcc -march=rv32imafcxw -mabi=ilp32f -msmall-data-limit=8 -msave-restore -fmax-errors=20 -Os -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fsingle-precision-constant -Wunused -Wuninitialized -g -T "/home/vitor/Documentos/Facul/TCC/Codigos/QueryMotor/MotorClient/Ld/Link.ld" -nostartfiles -Xlinker --gc-sections -L"/home/vitor/Documentos/Facul/TCC/Codigos/QueryMotor/MotorClient/NetLib" -Wl,-Map,"MotorClient.map" --specs=nano.specs --specs=nosys.specs -o "MotorClient.elf" $(OBJS) $(LIBS) -lprintf
+	riscv-none-embed-gcc -march=rv32imafcxw -mabi=ilp32f -msmall-data-limit=8 -msave-restore -fmax-errors=20 -Os -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fsingle-precision-constant -Wunused -Wuninitialized -g -T "/home/vitor/Documentos/Facul/TCC/Codigos/QueryMotor/MotorClient/Ld/Link.ld" -nostartfiles -Xlinker --gc-sections -L"/home/vitor/Documentos/Facul/TCC/Codigos/QueryMotor/MotorClient/NetLib" -Xlinker --print-memory-usage -Wl,-Map,"MotorClient.map" --specs=nano.specs --specs=nosys.specs -o "MotorClient.elf" $(OBJS) $(LIBS) -lprintf
 	@echo 'Finished building target: $@'
 	@
 MotorClient.hex: MotorClient.elf

@@ -1167,131 +1167,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "power:+5V"
-			(power)
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 0)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "+5V"
-				(at 0 3.556 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"+5V\""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "global power"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "+5V_0_1"
-				(polyline
-					(pts
-						(xy -0.762 1.27) (xy 0 2.54)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 2.54) (xy 0.762 1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 2.54)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "+5V_1_1"
-				(pin power_in line
-					(at 0 0 90)
-					(length 0)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "power:GND2"
 			(power)
 			(pin_numbers
@@ -3218,6 +3093,16 @@
 	)
 	(wire
 		(pts
+			(xy 217.17 34.29) (xy 217.17 39.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fdd2c158-3beb-4252-9250-54777e680292")
+	)
+	(wire
+		(pts
 			(xy 113.03 173.8595) (xy 113.03 173.99)
 		)
 		(stroke
@@ -3235,16 +3120,6 @@
 			(type default)
 		)
 		(uuid "ff676c30-0110-40bd-8066-a1f461b81ef9")
-	)
-	(wire
-		(pts
-			(xy 217.17 34.29) (xy 217.17 39.37)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "fff1f795-b066-4c7c-8516-088b1dcc160c")
 	)
 	(hierarchical_label "3.3Vbatt"
 		(shape output)
@@ -3278,6 +3153,17 @@
 			(justify right)
 		)
 		(uuid "554a0a38-8161-47c3-8b16-9284ec0789eb")
+	)
+	(hierarchical_label "5V_PSU"
+		(shape output)
+		(at 217.17 34.29 90)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "5949496c-ff20-4817-a4df-6c71717787b5")
 	)
 	(hierarchical_label "3.3V_PSU"
 		(shape output)
@@ -4941,72 +4827,6 @@
 			(project "PropellerMeasures"
 				(path "/33f4e91a-8b2f-46a0-a754-591d51435995/dec90e41-6e62-4945-8d43-af5f0a55ae34"
 					(reference "C29")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+5V")
-		(at 217.17 34.29 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "68941b66-c39e-4bd5-825a-f65433ddf89a")
-		(property "Reference" "#PWR048"
-			(at 217.17 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "+5V"
-			(at 217.17 29.21 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 217.17 34.29 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 217.17 34.29 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 217.17 34.29 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "c5968ee4-e5eb-4ef8-87ce-d09714add58e")
-		)
-		(instances
-			(project "PropellerMeasures"
-				(path "/33f4e91a-8b2f-46a0-a754-591d51435995/dec90e41-6e62-4945-8d43-af5f0a55ae34"
-					(reference "#PWR048")
 					(unit 1)
 				)
 			)

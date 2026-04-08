@@ -12,7 +12,7 @@
 
 #define UDP_RECE_BUF_LEN                                    1472    //
 #define ADC_DMA_BUFFER_SIZE                                 672     // Tem que se multiplo de 8, so que esse buffer e u16 e nao u8 por isso e metade
-#define ADC_CHANNEL_COUNT                                   8
+#define ADC_CHANNEL_COUNT                                   8 // Quantos canais de ADC tem
 #define ADC_SAMPLE_RATE                                     SystemCoreClock  // Adjust as needed
 #define UDP_PACKET_SIZE                                     (8 + 1344) // Header + Data
 
@@ -422,6 +422,22 @@ int main(void)
     // Create UDP Socket
     WCHNET_CreateUdpSocket();
     
+    switch (FLASH->OBR & 0x300) {
+        case 0x300:
+            printf("CODE-288K+RAM-32K\r\n");
+            break;
+        case 0x200:
+            printf("CODE-256K+RAM-64K\r\n");
+            break;
+        case 0x100:
+            printf("CODE-224K+RAM-96K\r\n");
+            break;
+        case 0x000:
+            printf("CODE-192K+RAM-128K\r\n");
+            break;
+    } 
+
+
     // Main loop
     while(1)
     {

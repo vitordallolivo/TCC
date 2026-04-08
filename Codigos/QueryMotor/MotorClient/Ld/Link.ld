@@ -19,14 +19,14 @@ MEMORY
    CH32V30x_D8 - CH32V303VC-CH32V303RC
    FLASH + RAM supports the following configuration
    For specific choices, please refer :CH32FV2x_V3xRM.PDF\Table 32-3
-   FLASH-192K + RAM-128K
+   FLASH-192K + RAM-128K// this is mine
    FLASH-224K + RAM-96K
-   FLASH-256K + RAM-64K  // this is mine
+   FLASH-256K + RAM-64K  
    FLASH-288K + RAM-32K  
    FLASH-128K + RAM-192K  
 */
-	FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 288K
-	RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 32K
+	FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 192K
+	RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 128K
 }
 
 
