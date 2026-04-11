@@ -1,0 +1,6 @@
+board:
+  name: siba_board
+  full_name: SIBA Board
+  vendor: wch
+  socs:
+    - name: ch32v307

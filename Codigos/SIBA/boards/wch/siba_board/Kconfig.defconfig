@@ -1,0 +1,8 @@
+# Copyright (c) 2026 SIBA
+# SPDX-License-Identifier: Apache-2.0
+if BOARD_SIBA_BOARD
+
+config NET_L2_ETHERNET
+	default y
+
+endif # BOARD_SIBA_BOARD

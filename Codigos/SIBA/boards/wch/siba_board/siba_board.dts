@@ -1,0 +1,160 @@
+/dts-v1/;
+#include <wch/ch32v307/ch32v307vc.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/ch32v20x_30x-pinctrl.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/clock/ch32v20x_30x-clocks.h>
+
+/ {
+    model = "SIBA Board";
+    compatible = "wch,ch32v307";
+
+    chosen {
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zephyr,console = &usart1;
+        zephyr,shell-uart = &usart1;
+    };
+
+    tim4: timer@40000800 {
+        compatible = "wch,gptm";
+        reg = <0x40000800 0x400>;
+        clocks = <&rcc CH32V20X_V30X_CLOCK_TIM4>;
+        interrupt-parent = <&pfic>;
+        interrupts = <46>;
+        channels = <4>;
+        prescaler = <143>;
+        status = "okay";
+
+        pwm4: pwm {
+            compatible = "wch,gptm-pwm";
+            #pwm-cells = <3>;
+            pinctrl-0 = <&tim4_ch1_default>;
+            pinctrl-names = "default";
+            status = "okay";
+        };
+    };
+
+    ready_pin: ready-pin {
+        compatible = "gpio-leds";
+        ready {
+            gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
+        };
+    };
+};
+
+&pinctrl {
+    usart1_default: usart1_default {
+        group1 {
+            pinmux = <USART1_TX_PA9_0>;
+            output-high;
+            drive-push-pull;
+            slew-rate = "max-speed-10mhz";
+        };
+        group2 {
+            pinmux = <USART1_RX_PA10_0>;
+            bias-pull-up;
+        };
+    };
+
+    tim4_ch1_default: tim4_ch1_default {
+        group1 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 6, TIM4, 0)>;
+            drive-push-pull;
+            slew-rate = "max-speed-50mhz";
+        };
+    };
+
+    mac_default: mac_default {
+        mac_internal_rxp {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 6, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_rxn {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 7, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_txp {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 8, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_txn {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 9, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+    };
+
+    mdio_default: mdio_default {
+        /* No MDIO pinmux required for internal PHY */
+    };
+};
+
+&clk_hse {
+    status = "okay";
+};
+
+&pll {
+    clocks = <&clk_hse>;
+    status = "okay";
+};
+
+&rcc {
+    clocks = <&pll>;
+};
+
+&gpioa {
+    status = "okay";
+};
+
+&gpiob {
+    status = "okay";
+};
+
+&gpioc {
+    status = "okay";
+};
+
+&gpiod {
+    status = "okay";
+};
+
+&gpioe {
+    status = "okay";
+};
+
+&usart1 {
+    status = "okay";
+    current-speed = <115200>;
+    pinctrl-0 = <&usart1_default>;
+    pinctrl-names = "default";
+};
+
+&mac {
+    status = "okay";
+    pinctrl-0 = <&mac_default>;
+    pinctrl-names = "default";
+    phy-connection-type = "internal";
+    phy-handle = <&eth_phy>;
+};
+
+&mdio {
+    status = "okay";
+    pinctrl-0 = <&mdio_default>;
+    pinctrl-names = "default";
+    eth_phy: ethernet-phy@0 {
+        compatible = "ethernet-phy";
+        reg = <0x00>;
+    };
+};
+
+&rng {
+    status = "okay";
+};
+
+&sram0 {
+    reg = <0x20000000 DT_SIZE_K(128)>;
+};
+
+&flash0 {
+    reg = <0x08000000 DT_SIZE_K(198)>;
+};

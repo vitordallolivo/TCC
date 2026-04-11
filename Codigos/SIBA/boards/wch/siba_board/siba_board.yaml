@@ -1,0 +1,9 @@
+identifier: siba_board
+name: SIBA Board
+type: mcu
+arch: riscv
+toolchain:
+  - zephyr
+ram: 192
+flash: 480
+vendor: wch

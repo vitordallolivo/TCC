@@ -1,27 +1,13 @@
 import socket
-import sys
 
-def main():
-    # Cria socket UDP
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Permite reutilizar endereço (útil para reiniciar rápido)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # Habilita recebimento de broadcast (opcional, mas seguro)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+UDP_IP = "0.0.0.0"
+UDP_PORT = 5000
 
-    # Escuta em todas as interfaces (''), porta 5000
-    server_address = ('', 9999)
-    print(f"Aguardando pacotes UDP na porta {server_address[1]}...")
-    sock.bind(server_address)
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
 
-    try:
-        while True:
-            data, address = sock.recvfrom(65535)  # buffer grande
-            print(f"Recebido {len(data)} bytes de {address}: {data}")
-    except KeyboardInterrupt:
-        print("\nEncerrado pelo usuário.")
-        sock.close()
-        sys.exit(0)
+print(f"Aguardando pacotes na porta {UDP_PORT}...")
 
-if __name__ == "__main__":
-    main()
+while True:
+    data, addr = sock.recvfrom(1024)
+    print(f"[{addr[0]}:{addr[1]}] {data.decode()}")
