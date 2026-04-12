@@ -2,22 +2,26 @@
 #define NCI_H
 
 #include <zephyr/kernel.h>
-#include "OSSI.h"
+#include <stdbool.h>
+#include "OSSI.h" 
 
-/* Tamanho e prioridade da thread NCI (TX) */
-#define NCI_TX_STACK_SIZE 1024
-#define NCI_TX_PRIORITY   5 // Prioridade menor que o TCKEC/Vcore
+/* Prioridades das threads da rede */
+#define NCI_TX_PRIORITY 5
+#define NCI_RX_PRIORITY 5
 
-extern struct k_thread nci_tx_thread_data;
-extern k_thread_stack_t nci_tx_stack[];
+/* IDs lógicos para o TCKEC identificar essas threads internamente */
+#define NCI_TX_THREAD_ID 10
+#define NCI_RX_THREAD_ID 11
 
-/* Inicializa a NCI (Cria threads e gerencia estado) */
+/**
+ * @brief Solicita ao TCKEC (via OSSI) a criação das threads de rede (TX e RX).
+ */
 void NCI_Init(void);
 
-/* Simula a recepção de dados pela rede (NCI RX) */
-void NCI_RX_Simulate_Receive(uint8_t *dummy_data, size_t len);
-
-/* Simula a mudança de status da conexão WiFi/Ethernet */
+/**
+ * @brief Atualiza a flag interna que permite/bloqueia o tráfego de dados.
+ * * @param status true = online (envia/recebe), false = offline (descarta).
+ */
 void NCI_Set_Connection_Status(bool status);
 
 #endif // NCI_H

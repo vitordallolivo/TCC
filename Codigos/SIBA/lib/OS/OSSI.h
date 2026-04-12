@@ -6,7 +6,7 @@
 /* Destinos baseados no fluxo do roteador OSSI */
 typedef enum {
     TARGET_CMD = 0,     // Para o CMD Core Interpreter
-    TARGET_VCORE,       // Para o TCKEC / HAL
+    TARGET_TCKEC,       // Para o TCKEC / HAL
     TARGET_SYS,         // Para o System Manager (Propeller, Battery, etc)
     TARGET_NETWORK      // Para o NCI TX (Telemetria/Logs)
 } ossi_target_t;
@@ -15,6 +15,7 @@ typedef enum {
 typedef enum {
     REQ_TYPE_CMD_PARSE = 0,
     REQ_TYPE_TCKEC_CREATE_THREAD,
+    REQ_TYPE_TCKEC_KILL_THREAD,
     REQ_TYPE_SYS_UPDATE_SENSOR,
     REQ_TYPE_NET_SEND_TELEMETRY
 } ossi_req_type_t;
@@ -25,13 +26,7 @@ typedef struct {
     uint32_t req_type;      
     
     union {
-        /* Payload para o TCKEC/VCORE */
-        struct {
-            k_thread_entry_t entry_point;
-            int priority;
-        } vcore_req;
         
-        /* Payload para o CMD Core (ex: pacote binário traduzido) */
         struct {
             uint8_t buffer[64];
             size_t len;
@@ -43,7 +38,16 @@ typedef struct {
             float value;
         } sys_req;
 
-        /* Padding para garantir tamanho fixo */
+        struct {
+            uint32_t thread_id;             // ID único para a thread
+            k_thread_entry_t entry_point;   // Função thread 
+            void *p1;                       // Parâmetros opcionais
+            void *p2;
+            void *p3;
+            int priority;                   // Prioridade da thread
+        } tckec_req;
+
+        
         uint8_t raw[128]; 
     } payload;
 } ossi_msg_t;
@@ -52,7 +56,7 @@ typedef struct {
  * Cada thread consumidora vai dar um k_msgq_get na sua respectiva fila.
  */
 extern struct k_msgq fila_cmd;    //
-extern struct k_msgq fila_vcore;  //
+extern struct k_msgq fila_tckec;  //
 extern struct k_msgq fila_sys;    //
 extern struct k_msgq fila_nci;    //
 

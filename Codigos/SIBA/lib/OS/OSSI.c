@@ -7,7 +7,7 @@ LOG_MODULE_REGISTER(ossi_router, LOG_LEVEL_DBG);
  * O tamanho da fila (ex: 20 itens) pode ser ajustado conforme o uso de RAM.
  */
 K_MSGQ_DEFINE(fila_cmd, sizeof(ossi_msg_t), 20, 4);    // 
-K_MSGQ_DEFINE(fila_vcore, sizeof(ossi_msg_t), 20, 4);  // 
+K_MSGQ_DEFINE(fila_tckec, sizeof(ossi_msg_t), 20, 4);  // 
 K_MSGQ_DEFINE(fila_sys, sizeof(ossi_msg_t), 20, 4);    // 
 K_MSGQ_DEFINE(fila_nci, sizeof(ossi_msg_t), 20, 4);    // 
 
@@ -26,25 +26,21 @@ int OSSI_Send(ossi_msg_t *msg) {
     /* Roteador OSSI  */
     switch (msg->target) {
         case TARGET_CMD:
-            // Roteia para o CMD Core Interpreter [cite: 11, 12, 14]
             ret = k_msgq_put(&fila_cmd, msg, K_NO_WAIT);
             if (ret != 0) LOG_WRN("Fila CMD cheia! Msg descartada.");
             break;
 
-        case TARGET_VCORE:
-            // Roteia para Vcore / HAL / TCKEC [cite: 13, 17, 21]
-            ret = k_msgq_put(&fila_vcore, msg, K_NO_WAIT);
+        case TARGET_TCKEC:
+            ret = k_msgq_put(&fila_tckec, msg, K_NO_WAIT);
             if (ret != 0) LOG_WRN("Fila VCORE cheia! Msg descartada.");
             break;
 
         case TARGET_SYS:
-            // Roteia para o System Manager [cite: 15, 18, 22]
             ret = k_msgq_put(&fila_sys, msg, K_NO_WAIT);
             if (ret != 0) LOG_WRN("Fila SYS cheia! Msg descartada.");
             break;
 
         case TARGET_NETWORK:
-            // Roteia para NCI TX (Flush de logs/telemetria) [cite: 19, 20, 23]
             ret = k_msgq_put(&fila_nci, msg, K_NO_WAIT);
             if (ret != 0) LOG_WRN("Fila NCI cheia! Msg descartada.");
             break;

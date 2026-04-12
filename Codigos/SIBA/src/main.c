@@ -3,61 +3,59 @@
 #include <stdio.h>
 #include "OSSI.h"
 #include "NCI.h"
+#include "TCKEC.h"
 
 LOG_MODULE_REGISTER(siba_main, LOG_LEVEL_DBG);
 
-/* (Mantenha sua tckec_thread como estava) */
-#define TCKEC_STACK_SIZE 1024
-#define TCKEC_PRIORITY   -1 
-K_THREAD_STACK_DEFINE(tckec_stack, TCKEC_STACK_SIZE);
-struct k_thread tckec_thread_data;
 
-void tckec_thread(void *p1, void *p2, void *p3) {
+#define MOCK_CMD_THREAD_ID 20
+
+
+void mock_cmd_thread(void *p1, void *p2, void *p3) {
+
     ossi_msg_t msg;
+    LOG_INF("MOCK CMD Iniciado. Aguardando comandos na fila_cmd...");
+
     while (1) {
-        if (k_msgq_get(&fila_vcore, &msg, K_FOREVER) == 0) {
-            // Processamento TCKEC omitido por brevidade
+        if (k_msgq_get(&fila_cmd, &msg, K_FOREVER) == 0) {
+            LOG_INF("MOCK CMD: Recebido pacote via OSSI RX: %s [%d bytes].",msg.payload.raw, msg.payload.cmd_req.len);
         }
     }
 }
 
 int main(void) {
-    LOG_INF("--- Iniciando SIBA Board Network Test ---");
+    LOG_INF("\x1b[92m\n\n\n\n\n\n--- Iniciando SIBA Board Teste NCI/OSSI ---\n\n\n\n\n\n\x1b[0m");
 
-    /* Inicializa TCKEC e NCI */
-    k_thread_create(&tckec_thread_data, tckec_stack, K_THREAD_STACK_SIZEOF(tckec_stack),
-                    tckec_thread, NULL, NULL, NULL, TCKEC_PRIORITY, 0, K_NO_WAIT);
+    TCKEC_Init();
+
     NCI_Init(); 
 
-    /* Define a rede como conectada */
+    /* Solicita ao TCKEC a criação do MOCK CMD */
+    ossi_msg_t req_cmd = {
+        .target = TARGET_TCKEC,
+        .req_type = REQ_TYPE_TCKEC_CREATE_THREAD
+    };
+    req_cmd.payload.tckec_req.thread_id = MOCK_CMD_THREAD_ID;
+    req_cmd.payload.tckec_req.entry_point = mock_cmd_thread;
+    req_cmd.payload.tckec_req.priority = 7;
+    OSSI_Send(&req_cmd);
+
     NCI_Set_Connection_Status(true);
-    
-    // Dá um tempo para as threads inicializarem e o socket fazer o bind
-    k_sleep(K_MSEC(1000)); 
 
-    uint32_t contador_telemetria = 0;
+    uint32_t counter = 0;
 
-    /* Loop Infinito de Teste - Enviando a cada 1 segundo */
+    /* Loop de envio periódico para testar NCI TX */
     while (1) {
-        LOG_INF("Gerando novo pacote de telemetria...");
+        k_sleep(K_SECONDS(2));
 
-        ossi_msg_t telemetria_msg = {
+        ossi_msg_t tx_msg = {
             .target = TARGET_NETWORK,
             .req_type = REQ_TYPE_NET_SEND_TELEMETRY
         };
+        snprintf((char *)tx_msg.payload.raw, 32, "TESTE_UDP_TX:%d", counter++);
 
-        /* Injetamos um texto legível no payload apenas para testes no PC */
-        snprintf((char *)telemetria_msg.payload.raw, sizeof(telemetria_msg.payload.raw), 
-                 "SIBA_TELEMETRIA_PKT:%d", contador_telemetria);
-
-        /* Envia para o OSSI Router */
-        OSSI_Send(&telemetria_msg);
-
-        contador_telemetria++;
-
-        /* Aguarda 1 segundo antes do próximo envio */
-        k_msleep(1);
+        OSSI_Send(&tx_msg);
     }
-    
+
     return 0;
 }
