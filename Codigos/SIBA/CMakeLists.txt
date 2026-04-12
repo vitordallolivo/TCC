@@ -7,6 +7,7 @@ target_sources(app PRIVATE
     lib/OS/OSSI.c
     lib/OS/TCKEC.c
     lib/OS/NCI.c
+    lib/OS/HAL.c    
 )
 
 target_include_directories(app PRIVATE

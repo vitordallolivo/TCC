@@ -5,6 +5,9 @@
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/clock/ch32v20x_30x-clocks.h>
 
+/* ADICIONE ESTA LINHA: Cria um valor nulo para o pre-processador não quebrar */
+#define CH32V20X_V30X_PINMUX_ADC1_RM 0
+
 / {
     model = "SIBA Board";
     compatible = "wch,ch32v307";
@@ -16,12 +19,61 @@
         zephyr,shell-uart = &usart1;
     };
 
+    aliases {
+        led0 = &ready_pin;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        ready_pin: ready_pin {
+            gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
+            label = "System Ready LED";
+        };
+    };
+
+    adc1: adc@40012400 {
+        compatible = "wch,adc";
+        reg = <0x40012400 0x400>; 
+        clocks = <&rcc CH32V20X_V30X_CLOCK_ADC1>;
+        interrupt-parent = <&pfic>;
+        interrupts = <34>; 
+        
+        dmas = <&dma1 1>; 
+        dma-names = "rx";
+        
+        /* LINHAS ADICIONADAS AQUI */
+        pinctrl-0 = <&adc1_default>;
+        pinctrl-names = "default";
+        
+        status = "okay";
+        #io-channel-cells = <1>;
+    };
+
+
+    tim3: timer@40000400 {
+        compatible = "wch,gptm";
+        reg = <0x40000400 0x400>; 
+        clocks = <&rcc CH32V20X_V30X_CLOCK_TIM3>;
+        interrupt-parent = <&pfic>;
+        interrupts = <45>; 
+        channels = <4>; /* <-- ADICIONE ESTA LINHA AQUI */
+        status = "okay";
+        prescaler = <0>;
+        
+        counter3: counter {
+            compatible = "wch,gptm-counter";
+            pinctrl-0 = <&tim3_ch3_pb0>;
+            pinctrl-names = "default";
+            status = "okay";
+        };
+    };
+
     tim4: timer@40000800 {
         compatible = "wch,gptm";
-        reg = <0x40000800 0x400>;
+        reg = <0x40000800 0x400>; /* Endereço Base do TIM4  */
         clocks = <&rcc CH32V20X_V30X_CLOCK_TIM4>;
         interrupt-parent = <&pfic>;
-        interrupts = <46>;
+        interrupts = <46>; /* IRQ do TIM4  */
         channels = <4>;
         prescaler = <143>;
         status = "okay";
@@ -35,15 +87,21 @@
         };
     };
 
-    ready_pin: ready-pin {
-        compatible = "gpio-leds";
-        ready {
-            gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
-        };
-    };
 };
 
+/* ==================================================================== *
+ * REFERÊNCIAS AO HARDWARE EXISTENTE E PINCTRL                          *
+ * ==================================================================== */
+
 &pinctrl {
+
+    adc1_default: adc1_default {
+        group1 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>;
+        };
+    };
+
+
     usart1_default: usart1_default {
         group1 {
             pinmux = <USART1_TX_PA9_0>;
@@ -57,8 +115,17 @@
         };
     };
 
+    tim3_ch3_pb0: tim3_ch3_pb0 {
+        group1 {
+            /* PB0, TIM3, Remap=0 (Roteamento Padrão) */
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 0, TIM3, 0)>;
+            bias-pull-up; 
+        };
+    };
+
     tim4_ch1_default: tim4_ch1_default {
         group1 {
+            /* PB6, TIM4, Remap=0 */
             pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 6, TIM4, 0)>;
             drive-push-pull;
             slew-rate = "max-speed-50mhz";
@@ -119,6 +186,10 @@
 };
 
 &gpioe {
+    status = "okay";
+};
+
+&dma1 {
     status = "okay";
 };
 
