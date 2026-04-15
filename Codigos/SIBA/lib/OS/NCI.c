@@ -19,7 +19,11 @@ static bool is_network_connected = false;
  * NCI TX THREAD (Sleeper na Fila OSSI)
  * ------------------------------------------------------------- */
 void nci_tx_thread(void *p1, void *p2, void *p3) {
-    // ... (MANTENHA SUA IMPLEMENTAÇÃO TX EXATAMENTE COMO ESTAVA) ...
+
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+
     ossi_msg_t msg;
     int sock;
     struct sockaddr_in peer_addr;
@@ -58,7 +62,11 @@ void nci_tx_thread(void *p1, void *p2, void *p3) {
  * NCI RX THREAD (Sleeper no Socket)
  * ------------------------------------------------------------- */
 void nci_rx_thread(void *p1, void *p2, void *p3) {
-    // ... (MANTENHA SUA IMPLEMENTAÇÃO RX EXATAMENTE COMO ESTAVA) ...
+
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+
     int sock;
     struct sockaddr_in bind_addr;
     uint8_t rx_buffer[64]; 

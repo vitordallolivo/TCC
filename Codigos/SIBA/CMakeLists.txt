@@ -3,7 +3,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(SIBA)
 
 target_sources(app PRIVATE
-    src/main.c
+    src/Vcore.c
     lib/OS/OSSI.c
     lib/OS/TCKEC.c
     lib/OS/NCI.c
