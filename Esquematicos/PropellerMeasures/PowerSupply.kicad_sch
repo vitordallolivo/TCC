@@ -5125,8 +5125,8 @@
 				)
 			)
 		)
-		(property "Value" "Screw_Terminal_01x02"
-			(at 307.594 50.292 90)
+		(property "Value" "EXT_PSU"
+			(at 307.594 50.292 0)
 			(effects
 				(font
 					(size 1.27 1.27)
