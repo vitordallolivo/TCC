@@ -1,0 +1,14 @@
+#ifndef COMMANDS_H
+#define COMMANDS_H
+
+#include "Common_Types.h"
+#include <stdint.h>
+
+/* --- Auto-generated Struct: CMD --- */
+typedef struct __attribute__((packed)) {
+{% for field in structs.CMD %}
+    {{ field.type }} {{ field.name }};
+{% endfor %}
+} CMD;
+
+#endif // COMMANDS_H

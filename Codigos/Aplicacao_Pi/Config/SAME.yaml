@@ -1,0 +1,34 @@
+# ===============================================================
+# This file contains SAME board settings
+# ===============================================================
+
+motors:
+  A-5025-310KV:
+    physical_params:
+      pole_pairs: 14 # Mock value
+      resistance_ohm: 0.045 # Mock value
+      inductance_henry: 0.00012 # Mock value
+      kv_rating: 310 
+    smo_config:
+      ks1: 2000.0 # Mock value
+      ks2: 3500.0 # Mock value
+      bemf_lpf_hz: 40.0 # Mock value
+      torque_filter_hz: 2.0 # Mock value
+
+  4020-630KV:
+    physical_params:
+      pole_pairs: 7 # Mock value
+      resistance_ohm: 0.082 # Mock value
+      inductance_henry: 0.000095 # Mock value
+      kv_rating: 630 
+    smo_config:
+      ks1: 1200.0 # Mock value 
+      ks2: 2200.0 # Mock value
+      bemf_lpf_hz: 60.0 # Mock value
+      torque_filter_hz: 5.0
+
+
+system_defaults:
+  sampling_rate_hz: 10000    
+  pwm_frequency_hz: 20000    
+  deadtime_cycles: 48        

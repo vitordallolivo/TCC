@@ -8,7 +8,6 @@
 
 # Preprocessed / assembler output
 *.i
-*.s
 
 # Static & shared libraries
 *.a
@@ -34,10 +33,6 @@
 *.map
 
 # CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
 build/
 _build/
 out/

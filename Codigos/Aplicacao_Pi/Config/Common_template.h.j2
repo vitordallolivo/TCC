@@ -1,0 +1,14 @@
+#ifndef COMMON_TYPES_H
+#define COMMON_TYPES_H
+
+/* --- Auto-generated Enums (Shared) --- */
+{% for enum_name, enum_values in enums.items() %}
+typedef enum {
+{% for val in enum_values %}
+    {{ val }}{% if not loop.last %},{% endif %}
+{% endfor %}
+} {{ enum_name }};
+
+{% endfor %}
+
+#endif // COMMON_TYPES_H

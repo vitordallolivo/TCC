@@ -1,0 +1,14 @@
+#ifndef TELEMETRY_LOG_H
+#define TELEMETRY_LOG_H
+
+#include "Common_Types.h"
+#include <stdint.h>
+
+/* --- Auto-generated Struct: TELEMETRY_LOG --- */
+typedef struct __attribute__((packed)) {
+{% for field in structs.TELEMETRY_LOG %}
+    {{ field.type }} {{ field.name }};
+{% endfor %}
+} TELEMETRY_LOG;
+
+#endif // TELEMETRY_LOG_H
