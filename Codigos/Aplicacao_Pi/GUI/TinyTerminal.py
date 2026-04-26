@@ -23,6 +23,7 @@ import struct
 class TinyTerminal(QWidget):
     def __init__(self, config_dir, parent=None):
         super().__init__(parent)
+
         self.old_stdout = None
         self.setWindowTitle("Albatroz TinyTerminal")
         self.resize(800, 450)
@@ -61,6 +62,11 @@ class TinyTerminal(QWidget):
 
         self.old_stdout = sys.stdout
         sys.stdout = self
+
+        self.append_log("SYS", "===============================================================", "#ADFF2F")
+        self.append_log("SYS", "Esse é o Tiny Terminal ele não é um terminal shell é completamente auto contido, feito para facilitar mudanças de parametros online. \n Como ele funciona? Bem ele usa de arquivos .yaml para conseguir configurar as placas (SIBA e SAME) e o próprio terminal, ou seja os codigos são padronizados. \n Além disso ele conta com funções de MOCK, para testar features da própria. \n Para mais informações use o comando help", "#ADFF2F")
+        self.append_log("SYS", "===============================================================", "#ADFF2F")
+
 
     def _extract_targets_from_config(self, board_key):
         """Helper para mapear target_type para índices sem quebrar por KeyError."""
