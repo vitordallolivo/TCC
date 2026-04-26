@@ -1,10 +1,10 @@
 # Configuração e Geração de Protocolo (SIBA Board)
 
-Este diretório centraliza a **Single Source of Truth** para a interface de comunicação UDP entre a aplicação de controle (Python) e o firmware. A arquitetura utiliza um motor de templates para garantir a paridade binária rigorosa entre as estruturas de dados em ambas as pontas.
+Este diretório centraliza a **Single Source of Truth**, serve para geração de templates para C e python para o projeto inteiro
 
 ## Fluxo de Automação e Sincronização
 
-O pipeline de geração de código mitiga erros de *protocol drift* e garante que alterações na camada de aplicação sejam refletidas instantaneamente na camada de hardware.
+Convencionalmente é feito da seguinte forma, um arquivo .yaml, arquivos de template e o de geração
 
 1.  **`SIBA.yaml`**: Definição declarativa de Enums e Structs. A ordem dos campos dita o layout exato de memória.
 2.  **`generate.py`**: Script de automação que utiliza Jinja2 para parsing e renderização de headers.
