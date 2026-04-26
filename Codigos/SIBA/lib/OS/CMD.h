@@ -11,11 +11,11 @@ typedef struct __attribute__((packed)) {
 
     instruct_type instruction;
 
-    int target_id;
+    int8_t target_id;
 
     float value;
 
-    status_type status;
+    int8_t action_or_status;
 
 } CMD;
 

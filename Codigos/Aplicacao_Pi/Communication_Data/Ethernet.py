@@ -1,123 +1,145 @@
 import socket
-import struct
-import numpy as np
-from collections import deque
-from PySide6.QtCore import QThread, Signal
+import threading
+import subprocess
+import yaml
+import os
+import time
 
-# ==================================================================
-#   Protocolo UDP esperado:
-#   Header: 2 bytes  → 0xAA55
-#   ID:     2 bytes  → identifica a placa (0x01=SIBA, 0x02=SAME)
-#   Seq:    4 bytes  → número de sequência
-#   Payload: N amostras de CHANNELS * 4 bytes (float32 little endian)
-#
-#   Struct C equivalente por amostra:
-#   typedef struct {
-#       float Va, Vb, Vc;   // Tensões de fase [V]
-#       float ia, ib, ic;   // Correntes de fase [A]
-#       float rpm;           // Velocidade [RPM]
-#       float torque;        // Torque estimado [Nm]
-#   } InversorSample_t;
-# ==================================================================
-
-HEADER_MAGIC    = 0xAA55
-CHANNELS        = 8
-BYTES_PER_SAMPLE = CHANNELS * 4   # float32 × 8
-HEADER_SIZE     = 8               # 2 (magic) + 2 (id) + 4 (seq)
-MAX_POINTS      = 2000
-
-BOARD_SIBA = 0x01
-BOARD_SAME = 0x02
-
-CHANNEL_NAMES = ["Va", "Vb", "Vc", "ia", "ib", "ic", "RPM", "Torque"]
-
-
-class EthernetReceiver(QThread):
-    """
-    Thread UDP não-bloqueante.
-    Emite `data_ready` com dict {nome: valor} a cada pacote válido.
-    Emite `connection_changed` com (board_id, bool) ao detectar/perder placa.
-    """
-    data_ready         = Signal(int, dict)   # (board_id, {canal: valor})
-    connection_changed = Signal(int, bool)   # (board_id, conectado)
-
-    def __init__(self, ip: str = "0.0.0.0", port: int = 9999, parent=None):
-        super().__init__(parent)
-        self._ip   = ip
-        self._port = port
-        self._running = False
-
-        # Buffers acumulativos por canal
-        self.buffers: dict[int, dict[str, deque]] = {
-            BOARD_SIBA: {ch: deque(maxlen=MAX_POINTS) for ch in CHANNEL_NAMES},
-            BOARD_SAME: {ch: deque(maxlen=MAX_POINTS) for ch in CHANNEL_NAMES},
+class EthernetManager:
+    def __init__(self, siba_yaml, same_yaml, handle_callback=None):
+        """
+        Gerencia as conexões UDP para SIBA e SAME.
+        :param handle_callback: Função que receberá (origem, dados) para processamento.
+        """
+        self.running = False
+        self.threads = []
+        self.callback = handle_callback if handle_callback else self._default_handle_mock
+        
+        # Carregamento de Configurações
+        self.configs = {
+            "SIBA": self._load_yaml(siba_yaml),
+            "SAME": self._load_yaml(same_yaml)
         }
+        
+        # Atributos de Rede
+        self.ip_siba = self.configs["SIBA"].get("DEFAULT_IP_BOARD", "169.254.97.101")
+        self.port_siba = self.configs["SIBA"].get("DEFAULT_PORT", 5001)
+        
+        self.ip_same = self.configs["SAME"].get("DEFAULT_IP_BOARD", "169.254.97.100")
+        self.port_same = self.configs["SAME"].get("DEFAULT_PORT", 5000)
 
-        # Controle de timeout de conexão
-        self._last_seen: dict[int, int] = {BOARD_SIBA: 0, BOARD_SAME: 0}
-        self._connected: dict[int, bool] = {BOARD_SIBA: False, BOARD_SAME: False}
+    def _load_yaml(self, path):
+        if not os.path.exists(path):
+            print(f"[ERRO] Arquivo {path} não encontrado.")
+            return {}
+        with open(path, 'r') as f:
+            return yaml.safe_load(f)
 
-    # ------------------------------------------------------------------
-    def run(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((self._ip, self._port))
-        sock.setblocking(False)
-        sock.settimeout(0.05)
+    def check_connectivity(self, ip):
+        """
+        Rotina de pré-inicialização. 
+        Verifica se o hardware está presente no barramento.
+        """
+        print(f"[NET] Verificando link com {ip}...")
+        try:
+            # Ping rápido: 1 pacote, 1 segundo de timeout
+            res = subprocess.run(
+                ["ping", "-c", "1", "-W", "1", ip],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            return res.returncode == 0
+        except Exception as e:
+            print(f"[NET] Falha ao executar ping: {e}")
+            return False
 
-        self._running = True
-        timeout_ticks = 0
+    def start(self):
+        """Inicia os workers de escuta em threads separadas."""
+        if self.running:
+            return
 
-        while self._running:
-            try:
-                data, _ = sock.recvfrom(4096)
-                self._parse(data)
-                timeout_ticks = 0
-            except socket.timeout:
-                timeout_ticks += 1
-                # ~5s sem pacote → marca como desconectado
-                if timeout_ticks > 100:
-                    for board_id in [BOARD_SIBA, BOARD_SAME]:
-                        if self._connected[board_id]:
-                            self._connected[board_id] = False
-                            self.connection_changed.emit(board_id, False)
-                    timeout_ticks = 0
-            except Exception as e:
-                print(f"[Ethernet] Erro: {e}")
+        # Verificação inicial (estilo check-up de conexão)
+        siba_ok = self.check_connectivity(self.ip_siba)
+        same_ok = self.check_connectivity(self.ip_same)
+        
+        if not (siba_ok or same_ok):
+            print("[AVISO] Nenhuma placa respondeu ao teste de link. Verifique cabos/switch.")
 
-        sock.close()
+        self.running = True
+        
+        # Criando listeners para cada protocolo
+        t_siba = threading.Thread(target=self._listen_worker, 
+                                  args=("SIBA", self.port_siba), 
+                                  name="Thread_SIBA", daemon=True)
+        t_same = threading.Thread(target=self._listen_worker, 
+                                  args=("SAME", self.port_same), 
+                                  name="Thread_SAME", daemon=True)
+        
+        self.threads = [t_siba, t_same]
+        for t in self.threads:
+            t.start()
+            print(f"[NET] {t.name} iniciada na porta {self.port_siba if 'SIBA' in t.name else self.port_same}")
+
+    def _listen_worker(self, name, port):
+        """Loop de escuta UDP."""
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            # Permite reutilizar a porta se o app reiniciar rápido
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('', port))
+            sock.settimeout(1.0) # Timeout para permitir verificar self.running
+
+            while self.running:
+                try:
+                    data, addr = sock.recvfrom(2048)
+                    # Filtra se os dados vêm do IP esperado (opcional, mas recomendado)
+                    expected_ip = self.ip_siba if name == "SIBA" else self.ip_same
+                    
+                    if addr[0] == expected_ip:
+                        self.callback(name, data, addr)
+                    else:
+                        print(f"[NET] Dado ignorado de fonte desconhecida: {addr[0]}")
+                        
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    if self.running:
+                        print(f"[ERRO] Listener {name}: {e}")
+                    break
+
+    def _default_handle_mock(self, protocol, data, addr):
+        """Handle MOCK padrão (será substituído pela GUI futuramente)."""
+        print(f"--- [MOCK RECV] ---")
+        print(f"Protocolo: {protocol} | Fonte: {addr[0]}")
+        print(f"HEX: {data.hex(' ').upper()}")
+        print(f"-------------------")
 
     def stop(self):
-        self._running = False
-        self.wait()
+        """Finaliza as threads de rede de forma segura."""
+        self.running = False
+        for t in self.threads:
+            t.join(timeout=2.0)
+        print("[NET] Interface de rede encerrada.")
 
-    # ------------------------------------------------------------------
-    def _parse(self, data: bytes):
-        if len(data) < HEADER_SIZE:
-            return
-
-        magic, board_id, seq = struct.unpack_from(">HHI", data, 0)
-        if magic != HEADER_MAGIC:
-            return
-
-        if board_id not in (BOARD_SIBA, BOARD_SAME):
-            return
-
-        # Atualiza estado de conexão
-        if not self._connected[board_id]:
-            self._connected[board_id] = True
-            self.connection_changed.emit(board_id, True)
-
-        # Extrai amostras do payload
-        payload = data[HEADER_SIZE:]
-        num_samples = len(payload) // BYTES_PER_SAMPLE
-
-        latest = {}
-        for s in range(num_samples):
-            offset = s * BYTES_PER_SAMPLE
-            values = struct.unpack_from(f"<{CHANNELS}f", payload, offset)
-            for i, name in enumerate(CHANNEL_NAMES):
-                self.buffers[board_id][name].append(values[i])
-                latest[name] = values[i]
-
-        if latest:
-            self.data_ready.emit(board_id, latest)
+    def send_data(self, protocol, hex_payload):
+        """Método auxiliar para envio de comandos via UDP."""
+        target_ip = self.ip_same if protocol == "SAME" else self.ip_siba
+        target_port = self.port_same if protocol == "SAME" else self.port_siba
+        
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            try:
+                sock.sendto(bytes.fromhex(hex_payload.replace(" ", "")), (target_ip, target_port))
+            except Exception as e:
+                print(f"[ERRO] Falha ao enviar para {protocol}: {e}")
+    
+    def send_command(self, protocol, raw_bytes):
+        """Envia um payload de bytes diretamente para a placa alvo."""
+        target_ip = self.ip_same if protocol == "SAME" else self.ip_siba
+        target_port = self.port_same if protocol == "SAME" else self.port_siba
+        
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            try:
+                sock.sendto(raw_bytes, (target_ip, target_port))
+                return True
+            except Exception as e:
+                print(f"[ERRO] Falha ao enviar bytes para {protocol}: {e}")
+                return False

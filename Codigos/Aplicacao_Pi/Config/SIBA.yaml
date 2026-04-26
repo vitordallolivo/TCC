@@ -2,84 +2,101 @@
 #  This file contains setting of SIBA board 
 # ===================================================
 
+# CMD -> FUNCTION, INSTRUCTION, TARGET, VALUE, STATUS OR ACTION
+
+DEFAULT_IP_BOARD : "169.254.97.200"
+DEFAULT_PORT: 5555 
+
 enums:
   func_type:
     - FUNC_START
     - FUNC_STOP
     - FUNC_RESET
-    - FUNC_LOAD_CELL      # Load cell specific operations
-    - FUNC_PITOT          # Pitot tube configuration
-    - FUNC_CURRENT_SENSE  # Current sensor configuration
-    - FUNC_ESC            # ESC control (0-100%)
-    - FUNC_BATTERY        # Battery relay connection
+    - FUNC_SENSOR
+    # Needs to be separate because of safety priority
+    - FUNC_ESC            
+    - FUNC_BATTERY        
 
   instruct_type:
     - INSTR_READ
     - INSTR_WRITE
+    - INSTR_NONE
+    - INSTR_DEFAULT # Logic link: default_action / battery_action
+
+  target_type:
+    - TARGET_LOAD_CELL_0_enum
+    - TARGET_LOAD_CELL_1_enum
+    - TARGET_LOAD_CELL_2_enum
+    - TARGET_LOAD_CELL_3_enum
+    - TARGET_LOAD_CELL_4_enum
+    - TARGET_LOAD_CELL_5_enum
+    - TARGET_LOAD_CELL_6_enum
+    - TARGET_VOLTAGE_DIVIDOR
+    - TARGET_CURRENT_SENSOR
+    - TARGET_PITOT_TUBE
+    - TARGET_DEFAULT
 
   status_type:
     - STATUS_OK
     - STATUS_ERROR
+    - STATUS_NONE # Don't care
 
-  # Used within the 'value' field when func_type is FUNC_LOAD_CELL
-  load_cell_action:
-    - LC_ACTION_NONE
-    - LC_ACTION_TARE
-    - LC_ACTION_CALIBRATE
-    - LC_ACTION_RESET_DEFAULT
+  default_action:
+    - DEFAULT_ACTION_NONE # Does nothing
+    # Sensor typical actions y = LINEAR_COEFF *x + OFFSET_COEF
+    # Serves for sensor like current, voltage, ESC, pitot and Load Cells
+    # For load cells Linear coeff = Calibrate, and Offset coeff = Tare
+    - DEFAULT_ACTION_SENSE_LINEAR_COEF 
+    - DEFAULT_ACTION_SENSE_OFFSET_COEF 
+    - DEFAULT_ACTION_SENSE_RESET_DEFAULT
+
+  battery_action:
+    # Overwrites polynomial
+    - BAT_ACTION_P0_OVERWRITE
+    - BAT_ACTION_P1_OVERWRITE
+    - BAT_ACTION_P2_OVERWRITE
+    - BAT_ACTION_P3_OVERWRITE
+    - BAT_ACTION_P4_OVERWRITE
+    # Overwrites default Temperature limit
+    - BAT_ACTION_TEMP_LIMIT_OVERWRITE  
+    # Controls relay to turn on ESC
+    - BAT_ACTION_RELAY
 
   log_status:
     - LOG_VALID
     - LOG_INVALID
     - LOG_OVERFLOW
     - LOG_CRITICAL_ALARM
+    - LOG_DENIED_ACTION
 
 structs:
   CMD:
-    - name: function
-      type: func_type      # Main command category
-    - name: instruction
-      type: instruct_type   # Read or Write
-    - name: target_id
-      type: int            # Index (e.g., Load Cell ID 0-5)
-    - name: value
-      type: float          # Data (e.g., Gain, Offset, or Duty Cycle)
-    - name: status
-      type: status_type    # Command execution result
+    - { name: function, type: func_type }      # Main command category
+    - { name: instruction, type: instruct_type }   # Read or Write
+    - { name: target_id, type: int8_t }           
+    - { name: value, type: float }               # Data (e.g., Gain, Offset, or Duty Cycle)
+    - { name: action_or_status, type: int8_t }  # Overloaded: battery_action, default_action or status_type
 
   TELEMETRY_LOG:
-    - name: timestamp
-      type: uint32         # System uptime in milliseconds
-    - name: load_cell_0
-      type: float          # Force in N or kg
-    - name: load_cell_1
-      type: float
-    - name: load_cell_2
-      type: float
-    - name: load_cell_3
-      type: float
-    - name: load_cell_4
-      type: float
-    - name: load_cell_5
-      type: float
-    - name: v_batt
-      type: float          # Battery Voltage (V)
-    - name: i_batt
-      type: float          # Battery Current (A)
-    - name: soc
-      type: float          # State of Charge (0.0 - 100.0%)
-    - name: temperature
-      type: float          # Main system or motor temperature (°C)
-    - name: air_speed
-      type: float          # Pitot tube wind speed (m/s)
-    - name: rpm
-      type: float          # Motor revolutions per minute
-    - name: status
-      type: log_status     # Integrity of the telemetry frame
+    - { name: timestamp, type: uint32_t }          # System uptime in milliseconds
+    - { name: load_cell_0, type: float }           # Force (in N or kgf) or Torque
+    - { name: load_cell_1, type: float }
+    - { name: load_cell_2, type: float }
+    - { name: load_cell_3, type: float }
+    - { name: load_cell_4, type: float }
+    - { name: load_cell_5, type: float }
+    - { name: v_batt, type: float }                # Battery Voltage (V)
+    - { name: i_batt, type: float }                # Battery Current (A)
+    - { name: soc, type: float }                   # State of Charge (0.0 - 100.0%)
+    - { name: temperature_battery, type: float }
+    - { name: air_speed, type: float }             # Pitot tube wind speed (m/s)
+    - { name: rpm, type: float }                   # Motor revolutions per minute
+    - { name: status, type: log_status }         # Integrity of the telemetry frame
 
+# Data for Battery Management and SOC estimation
 Battery:
   - StandardVoltage: 4.2
-  - StandardMaxTemp: 80 # Degress
+  - StandardMaxTemp: 80 # Degrees
 
   - name: CHNL-6S-3300mAh-40C
     # Datasheet infos

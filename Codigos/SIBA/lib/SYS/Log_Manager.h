@@ -7,7 +7,7 @@
 /* --- Auto-generated Struct: TELEMETRY_LOG --- */
 typedef struct __attribute__((packed)) {
 
-    uint32 timestamp;
+    uint32_t timestamp;
 
     float load_cell_0;
 
@@ -27,7 +27,7 @@ typedef struct __attribute__((packed)) {
 
     float soc;
 
-    float temperature;
+    float temperature_battery;
 
     float air_speed;
 
