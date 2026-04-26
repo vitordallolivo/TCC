@@ -5,7 +5,7 @@
 LOG_MODULE_REGISTER(nci_core, LOG_LEVEL_DBG);
 
 /* Porta UDP que o PC estará escutando para telemetria */
-#define PEER_PORT 8080 
+#define PEER_PORT 5555 
 /* Porta UDP que a PLACA vai escutar para receber comandos do PC */
 #define LOCAL_PORT 5000 
 
@@ -37,7 +37,7 @@ void nci_tx_thread(void *p1, void *p2, void *p3) {
     }
 
     peer_addr.sin_family = AF_INET;
-    peer_addr.sin_port = htons(PEER_PORT);
+    peer_addr.sin_port = htons(PEER_PORT)5555
     zsock_inet_pton(AF_INET, CONFIG_NET_CONFIG_PEER_IPV4_ADDR, &peer_addr.sin_addr);
 
     while (1) {

@@ -1,4 +1,5 @@
 import ctypes
+from pathlib import Path
 import sys
 import os
 import time
@@ -18,24 +19,6 @@ from Communication_Data.Ethernet import EthernetManager
 
 import struct
 
-# Mapeamento conforme sua lógica de firmware
-FUNC_TYPES = {"SAME": 1, "SIBA": 2, "SYSTEM": 3}
-
-INSTRUCT_TYPES = {
-    "SET": 1, "GET": 2, "START": 3, "STOP": 4, "RESET": 5, "MOCK": 6
-}
-
-# IDs de Alvos (target_id) - Diferenciados por Board
-TARGET_IDS = {
-    "SAME": {
-        "MOTOR": 10, "RESISTANCE": 20, "INDUCTANCE": 21, 
-        "KS1": 22, "KS2": 23, "BEMF_LPF": 24
-    },
-    "SIBA": {
-        "BATTERY": 10, "RELAY": 11, "TEMP_LIMIT": 12,
-        "P0": 30, "P1": 31, "P2": 32, "P3": 33, "P4": 34
-    }
-}
 
 class TinyTerminal(QWidget):
     def __init__(self, config_dir, parent=None):
@@ -195,6 +178,12 @@ class TinyTerminal(QWidget):
             self._logic_sudo()
             self.input.clear() # Limpa e sai para não processar 'sudo' como comando YAML
             return
+        elif cmd_root == "restart":
+            self.append_log("SYS", "Reiniciando aplicação...", "#FFFF00")
+            # Força o processamento de eventos para o log aparecer antes de fechar
+            QApplication.processEvents()
+            self.restart_program(self.eth) 
+            return # O código para aqui pois o os.execv assume o controle
         elif cmd_root == "exit":
             # Checa o argumento 'all' sem depender da validação do YAML
             if len(parts) > 1 and parts[1].lower() == "all":
@@ -743,3 +732,39 @@ class TinyTerminal(QWidget):
 
         except Exception as e:
             return f"ERRO DECODE ({origin}): {e}"
+        
+    def restart_program(self, ethernet_manager=None):
+        """Fecha o programa e reinicia especificamente a mainApp.py na raiz."""
+        print("\n[SYS] Preparando reinicialização do sistema Albatroz...")
+        
+        # 1. Liberação de Hardware/Rede
+        if ethernet_manager:
+            try:
+                ethernet_manager.stop()
+                time.sleep(0.8) # Tempo para o Kernel liberar o bind das portas
+            except Exception as e:
+                print(f"[ERR] Falha ao parar rede: {e}")
+
+        # 2. Localização dinâmica da mainApp.py
+        # __file__ é o caminho do TinyTerminal.py (ex: .../Aplicacao_Pi/GUI/TinyTerminal.py)
+        # .parent pega a pasta GUI/
+        # .parent.parent pega a raiz Aplicacao_Pi/
+        current_file = Path(__file__).resolve()
+        root_dir = current_file.parent.parent # Sobe um nível para sair de GUI/
+        main_script = root_dir / "mainApp.py"
+
+        if not main_script.exists():
+            print(f"[ERR] mainApp.py não encontrada em: {main_script}")
+            # Tenta um fallback se estiver em outra estrutura
+            main_script = root_dir.parent / "mainApp.py"
+
+        python = sys.executable
+
+        print(f"[SYS] Executando: {python} {main_script}")
+        
+        # 3. Substituição do Processo
+        try:
+            # os.execv exige uma lista de strings
+            os.execv(python, [python, str(main_script)] + sys.argv[1:])
+        except Exception as e:
+            print(f"[ERR] Falha crítica no execv: {e}")

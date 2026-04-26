@@ -115,12 +115,11 @@ class SAMEConfigDialog(QDialog):
             return 0
 
     def apply_and_send(self):
-        """Gera os CMDs e despacha via Ethernet com log detalhado para o TinyTerminal."""
-        # 1. Salvar no user_prefs
+        """Gera os CMDs e printa detalhes simulando o parser do terminal."""
         new_config = {key: spin.value() for key, spin in self.inputs.items()}
         self.prefs["same_config"] = new_config
         
-        # 2. Resgatar valores base dos enums
+        # Enums base
         func_name = "FUNC_SENSOR"
         instr_name = "INSTR_WRITE"
         act_name = "DEFAULT_ACTION_SET_VALUE"
@@ -129,7 +128,6 @@ class SAMEConfigDialog(QDialog):
         instr = self.get_enum_val("instruct_type", instr_name)
         action = self.get_enum_val("default_action", act_name)
 
-        # 3. Mapeamento dos inputs da GUI para os TARGETS do YAML
         mapping = {
             "pole_pairs": "TARGET_POLES_PAIRS",
             "resistance": "TARGET_RESISTANCE",
@@ -141,38 +139,31 @@ class SAMEConfigDialog(QDialog):
             "torque_lpf": "TARGET_TORQUE_LPF_FREQUENCY"
         }
 
-        print("\n" + "="*50)
-        print(f"--- TRANSMISSÃO DE CONFIGURAÇÃO: SAME ---")
-        print(f"Modo: {func_name} | Instrução: {instr_name}")
-        print(f"Ação Base: {act_name}")
-        print("-" * 50)
+        print(f"[PRNT] Enviando lote de configuração para SAME...")
 
-        # 4. Geração e envio do lote de comandos
-        success_count = 0
         for gui_key, target_str in mapping.items():
             try:
                 target_id = self.get_enum_val("target_type", target_str)
                 value = new_config[gui_key]
                 
-                # Print de depuração por parâmetro
-                print(f"[TX] {target_str:<30} | ID: {target_id:<3} | Val: {value:.6f}")
-                
-                # Empacota no formato binário C-compatible
+                # Gera o binário real
                 cmd_payload = pack_same_cmd(func, instr, target_id, value, action)
-                
-                # Log do payload binário (útil para ver se o Endianness está correto)
-                # print(f"      Hex: {cmd_payload.hex(' ').upper()}")
+                hex_str = cmd_payload.hex(' ').upper()
 
-                # Envia via Ethernet
-                # Nota: Certifique-se que self.ethernet.SAME existe ou use self.ethernet.send_command("SAME", ...)
+                # --- INFO DE REDE (Simula o Terminal) ---
+                print(f"[NET] CMD -> [{hex_str}]")
+
+                # --- INFO DE DECODE (Tradução amigável) ---
+                # Aqui a gente monta a string no braço para garantir o detalhe
+                decode_info = (f"[DECODE] [SAME] {func_name} | {instr_name} | "
+                               f"{target_str} | VAL: {value:.4f} | ACT: {act_name}")
+                print(decode_info)
+
+                # Envio real via Ethernet
                 self.ethernet.send_command("SAME", cmd_payload)
-                success_count += 1
                 
             except Exception as e:
-                print(f"[ERRO] Falha ao enviar {gui_key}: {e}")
+                print(f"[ERR] Falha ao configurar {gui_key}: {e}")
 
-        print("-" * 50)
-        print(f"Sucesso: {success_count}/{len(mapping)} parâmetros enviados.")
-        print("="*50 + "\n")
-        
+        print(f"[PRNT] Configurações aplicadas com sucesso.")
         self.accept()

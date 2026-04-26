@@ -8,6 +8,9 @@ commands:
     help: "Conecta um IP qualquer"
     type: "string"
 
+  restart:
+    help: "Reinicia o sistema (Reroda a mainApp.py)"
+
   exit:
     help: "Fecha o terminal ou aplicacao se 'exit all' "
     type: "string"

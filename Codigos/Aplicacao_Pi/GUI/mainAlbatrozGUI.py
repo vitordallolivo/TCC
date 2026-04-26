@@ -125,6 +125,8 @@ class AlbatrozGUI(QMainWindow):
         self.ui_timer.start(50)
         print("Threads de telemetria e timer de UI prontos.")
 
+        # 8. Inicializa o terminal  
+        self.terminal.show()
 
     # --- Lógica de Inicialização ---
     def _load_config_file(self, path):
@@ -151,6 +153,7 @@ class AlbatrozGUI(QMainWindow):
             plot_widget = getattr(self.ui, name, None)
             if plot_widget:
                 self.plots[name] = plot_widget
+                plot_widget.setFixedSize(400, 300)
                 plot_widget.setClipToView(True)
                 plot_widget.setDownsampling(mode='peak')
                 self.curves[name] = plot_widget.plot(pen=pg.mkPen('#0055ff', width=1.5))
