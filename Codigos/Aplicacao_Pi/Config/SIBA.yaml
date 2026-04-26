@@ -76,3 +76,19 @@ structs:
       type: float          # Motor revolutions per minute
     - name: status
       type: log_status     # Integrity of the telemetry frame
+
+Battery:
+  - StandardVoltage: 4.2
+  - StandardMaxTemp: 80 # Degress
+
+  - name: CHNL-6S-3300mAh-40C
+    # Datasheet infos
+    cell: 6
+    capacity: 3300
+
+    # SOC polynomial (4th Degree) from experimental data
+    SOCp0: 0
+    SOCp1: 0
+    SOCp2: 0
+    SOCp3: 0
+    SOCp4: 0

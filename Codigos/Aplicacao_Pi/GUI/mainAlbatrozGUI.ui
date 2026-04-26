@@ -33,6 +33,44 @@
     <string notr="true"/>
    </property>
    <layout class="QGridLayout" name="gridLayout">
+    <item row="3" column="2">
+     <widget class="QPushButton" name="Motor_update">
+      <property name="font">
+       <font>
+        <stylestrategy>PreferAntialias</stylestrategy>
+       </font>
+      </property>
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="text">
+       <string>Atualizar (Motor)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QPushButton" name="Save_CSV">
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="text">
+       <string>Salvar</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <spacer name="horizontalSpacer">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>40</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
     <item row="0" column="0" colspan="3">
      <widget class="QScrollArea" name="Graficos_Scroll">
       <property name="mouseTracking">
@@ -253,16 +291,6 @@
       </widget>
      </widget>
     </item>
-    <item row="4" column="2">
-     <widget class="QPushButton" name="Motor_off">
-      <property name="styleSheet">
-       <string notr="true"/>
-      </property>
-      <property name="text">
-       <string>Desligar</string>
-      </property>
-     </widget>
-    </item>
     <item row="1" column="2">
      <widget class="QSlider" name="Motor_action">
       <property name="enabled">
@@ -299,43 +327,19 @@
       </property>
      </widget>
     </item>
-    <item row="3" column="2">
-     <widget class="QPushButton" name="Motor_update">
-      <property name="font">
-       <font>
-        <stylestrategy>PreferAntialias</stylestrategy>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string notr="true"/>
-      </property>
+    <item row="3" column="0">
+     <widget class="QPushButton" name="pushButton_2">
       <property name="text">
-       <string>Atualizar</string>
+       <string>Conectar</string>
       </property>
      </widget>
     </item>
-    <item row="3" column="1">
-     <widget class="QPushButton" name="Save_CSV">
-      <property name="styleSheet">
-       <string notr="true"/>
-      </property>
+    <item row="4" column="0">
+     <widget class="QPushButton" name="Tiny_Terminal">
       <property name="text">
-       <string>Salvar</string>
+       <string>TinyTerminal</string>
       </property>
      </widget>
-    </item>
-    <item row="1" column="1">
-     <spacer name="horizontalSpacer">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>40</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
     </item>
     <item row="1" column="0">
      <spacer name="horizontalSpacer_2">
@@ -350,10 +354,20 @@
       </property>
      </spacer>
     </item>
-    <item row="3" column="0">
+    <item row="4" column="1">
      <widget class="QPushButton" name="pushButton">
       <property name="text">
-       <string>TinyTerminal</string>
+       <string>Apagar Dados</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="2">
+     <widget class="QPushButton" name="Motor_off">
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="text">
+       <string>Desligar (Motor)</string>
       </property>
      </widget>
     </item>
@@ -372,34 +386,40 @@
     <property name="title">
      <string>Help</string>
     </property>
+    <widget class="QMenu" name="menuModoDaTela">
+     <property name="title">
+      <string>Modo da Tela</string>
+     </property>
+     <addaction name="actionClaro"/>
+     <addaction name="actionEscuro"/>
+    </widget>
     <addaction name="actionInfos"/>
-   </widget>
-   <widget class="QMenu" name="menuKit">
-    <property name="title">
-     <string>Plots</string>
-    </property>
-    <addaction name="actionSIBA"/>
-    <addaction name="actionSAME"/>
+    <addaction name="menuModoDaTela"/>
    </widget>
    <widget class="QMenu" name="menuConfig">
     <property name="title">
      <string>Config</string>
     </property>
-    <widget class="QMenu" name="menuLoad_Cells">
+    <widget class="QMenu" name="menuMotor">
      <property name="title">
-      <string>Load Cells</string>
+      <string>Motor</string>
      </property>
-     <addaction name="actionTare"/>
-     <addaction name="actionCalibrate"/>
-     <addaction name="actionReset"/>
+     <addaction name="actionLoad"/>
+     <addaction name="actionCreate"/>
+    </widget>
+    <widget class="QMenu" name="menuBattery">
+     <property name="title">
+      <string>Battery</string>
+     </property>
+     <addaction name="actionLoad_2"/>
+     <addaction name="actionCreate_2"/>
     </widget>
     <addaction name="separator"/>
-    <addaction name="menuLoad_Cells"/>
-    <addaction name="actionMotor_2"/>
-    <addaction name="actionBattery"/>
+    <addaction name="menuMotor"/>
+    <addaction name="menuBattery"/>
+    <addaction name="actionLoadCells"/>
    </widget>
    <addaction name="menuHelp"/>
-   <addaction name="menuKit"/>
    <addaction name="menuConfig"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
@@ -438,14 +458,39 @@
     <string>SetParameters</string>
    </property>
   </action>
-  <action name="actionMotor_2">
+  <action name="actionLoadCells">
    <property name="text">
-    <string>Motor</string>
+    <string>Load Cells</string>
    </property>
   </action>
-  <action name="actionBattery">
+  <action name="actionClaro">
    <property name="text">
-    <string>Battery</string>
+    <string>Claro</string>
+   </property>
+  </action>
+  <action name="actionEscuro">
+   <property name="text">
+    <string>Escuro</string>
+   </property>
+  </action>
+  <action name="actionLoad">
+   <property name="text">
+    <string>Load</string>
+   </property>
+  </action>
+  <action name="actionCreate">
+   <property name="text">
+    <string>Create</string>
+   </property>
+  </action>
+  <action name="actionLoad_2">
+   <property name="text">
+    <string>Load</string>
+   </property>
+  </action>
+  <action name="actionCreate_2">
+   <property name="text">
+    <string>Create</string>
    </property>
   </action>
  </widget>

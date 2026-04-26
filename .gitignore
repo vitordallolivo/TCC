@@ -166,6 +166,7 @@ $RECYCLE.BIN/
 *.pem
 *.key
 secrets.*
+user_prefs.yaml 
 
 # Zips e PDF do TCC
 Referencias Boas/

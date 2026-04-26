@@ -11,7 +11,8 @@ dependencies = [
     "pyqtgraph",
     "packaging>=24.0",
     "jinja2>=3.1",
-    "pyyaml>=6.0"
+    "pyyaml>=6.0",
+    "pandas>=2.2.0"
 ]
 
 
