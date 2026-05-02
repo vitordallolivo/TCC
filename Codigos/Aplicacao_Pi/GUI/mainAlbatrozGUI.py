@@ -334,7 +334,24 @@ class AlbatrozGUI(QMainWindow):
     @Slot()
     def on_load_motor(self):
         print("Solicitando lista de motores do SAME.yaml")
-        # Implementar similar ao on_load_battery se necessário
+        try:
+            with open(self.same_yaml_path, 'r') as f:
+                data = yaml.safe_load(f)
+            motores = list(data.get('motors', {}).keys())
+            choice, ok = QInputDialog.getItem(self, "Motor", "Selecione:", motores, 0, False)
+            if ok and choice:
+                self.prefs["last_motor_name"] = choice
+                self.apply_user_prefs()
+                self.save_user_prefs()
+
+                if self.eth.running: # Tries send configuration
+                    try:
+                        pass
+                    except Exception as e: QMessageBox.warning(self, "Erro", str(e))
+
+
+        except Exception as e: QMessageBox.warning(self, "Erro", str(e))
+
         
     @Slot()
     def open_same_config(self):

@@ -102,6 +102,9 @@ class EthernetManager:
 
     def send_command(self, protocol, raw_bytes):
         """Envia bytes diretamente para a porta TX da placa alvo."""
+        
+        print(f"[INF] Tentando enviar para {protocol}")
+        
         if protocol.upper() == "SAME":
             target = (self.ip_same, self.port_same_tx)
         else:

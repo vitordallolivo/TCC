@@ -7,7 +7,7 @@
 	(lib_symbols)
 	(text "Coisas que vão ter na placa:\n\nTração, Torque, RPM, velocidade do vento, pressão, \ntemperatura \ncontrolar o ESC\nPrecisa ter robustes na hora de ligar o ESC por meio de SSR DC"
 		(exclude_from_sim no)
-		(at 154.686 102.87 0)
+		(at 64.262 70.866 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -15,45 +15,85 @@
 		)
 		(uuid "3ee22f94-de24-4a5f-bb9a-d112b91a86b9")
 	)
-	(wire
-		(pts
-			(xy 143.51 181.61) (xy 143.51 135.89)
+	(text "Revisões necessarias:\n\n- Conector celulas de carga, ou usa um conector flat ou aquele DB25,\noutra opção é fazer uma board extra para celulas de carga ( usando \nplacas mais simples e um conector flat, isso tem algumas vantagens,\nque é reduzir o custo desta board)\n\n- Verificar se é realmente legal ter um cartão SD ( redução de custo)\n\n- Simular o HCRN201 com o modelo disposto para ver se os resistores \nestão dimensionados de acordo\n\n- Quantidade de capacitores ( tem talvez que o necessario)"
+		(exclude_from_sim no)
+		(at 271.78 58.166 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
 		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4a83288d-2e46-4946-9eaf-cf45c53a177c")
+		(uuid "8a195bf7-b2a6-4ea7-a0ca-b755d5bba482")
 	)
 	(wire
 		(pts
-			(xy 146.05 139.7) (xy 149.86 139.7)
+			(xy 166.37 156.21) (xy 166.37 170.18)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "4a9fe291-77e7-45ce-93cf-442d3191c6ec")
+		(uuid "23628821-f2db-460c-87eb-08627c60f3eb")
 	)
 	(wire
 		(pts
-			(xy 115.57 185.42) (xy 146.05 185.42)
+			(xy 171.45 156.21) (xy 171.45 170.18)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "5ab2ae0c-99fe-4dae-8a6d-961ff9cee6c2")
+		(uuid "2f136312-c1a5-42d6-8085-598c7d132308")
 	)
 	(wire
 		(pts
-			(xy 143.51 135.89) (xy 149.86 135.89)
+			(xy 95.25 151.13) (xy 95.25 170.18)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "9d32d6a8-1267-44e0-bb12-6d9e62c4d5f3")
+		(uuid "37358501-81ce-4dff-9e37-a4e6c5e89b9b")
+	)
+	(wire
+		(pts
+			(xy 115.57 133.35) (xy 149.86 133.35)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "45f08d23-5dfc-4e72-b9ca-eaa7fd6a6be2")
+	)
+	(wire
+		(pts
+			(xy 115.57 111.76) (xy 149.86 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4e7f6094-f985-4873-b4d8-f9210f895753")
+	)
+	(wire
+		(pts
+			(xy 97.79 151.13) (xy 97.79 170.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "708b256d-b887-4e0f-8e99-ab2e0870edd8")
+	)
+	(wire
+		(pts
+			(xy 115.57 137.16) (xy 149.86 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a2c36032-1d0c-4986-bce5-57c31246fdd7")
 	)
 	(wire
 		(pts
@@ -67,32 +107,31 @@
 	)
 	(wire
 		(pts
-			(xy 115.57 181.61) (xy 143.51 181.61)
+			(xy 175.26 156.21) (xy 175.26 170.18)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "d41314cc-a522-4c33-8470-bef5a5345cb4")
+		(uuid "e55e01c3-6690-4776-a431-22e4ac0d36fc")
 	)
 	(wire
 		(pts
-			(xy 146.05 185.42) (xy 146.05 139.7)
+			(xy 115.57 107.95) (xy 149.86 107.95)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ef3858f0-8043-415a-bd6f-917974c006c5")
+		(uuid "e5fd63a2-6681-4016-8d47-3233da3311c6")
 	)
 	(sheet
-		(at 74.93 158.75)
-		(size 40.64 36.83)
+		(at 74.93 170.18)
+		(size 110.49 13.97)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
 			(type solid)
@@ -102,7 +141,7 @@
 		)
 		(uuid "dec90e41-6e62-4945-8d43-af5f0a55ae34")
 		(property "Sheetname" "PowerSupply"
-			(at 74.93 158.0384 0)
+			(at 122.936 169.164 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -111,7 +150,7 @@
 			)
 		)
 		(property "Sheetfile" "PowerSupply.kicad_sch"
-			(at 74.93 196.1646 0)
+			(at 114.046 185.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -119,8 +158,8 @@
 				(justify left top)
 			)
 		)
-		(pin "Vbat" passive
-			(at 115.57 165.1 0)
+		(pin "Vbat" input
+			(at 95.25 170.18 90)
 			(uuid "3c7b8af9-e472-4723-8f31-35f10b95b77f")
 			(effects
 				(font
@@ -130,7 +169,7 @@
 			)
 		)
 		(pin "3.3Vbatt" output
-			(at 115.57 168.91 0)
+			(at 97.79 170.18 90)
 			(uuid "e7c1a21e-ab3b-45e5-bafe-8040018adde2")
 			(effects
 				(font
@@ -140,7 +179,7 @@
 			)
 		)
 		(pin "5V_PSU" output
-			(at 115.57 176.53 0)
+			(at 166.37 170.18 90)
 			(uuid "f21be6de-afc5-492e-8081-4eea642602c0")
 			(effects
 				(font
@@ -150,7 +189,7 @@
 			)
 		)
 		(pin "3.3VA_PSU" output
-			(at 115.57 185.42 0)
+			(at 175.26 170.18 90)
 			(uuid "f34f3f2e-487a-494e-baf5-f69fcffa914c")
 			(effects
 				(font
@@ -160,7 +199,7 @@
 			)
 		)
 		(pin "3.3V_PSU" output
-			(at 115.57 181.61 0)
+			(at 171.45 170.18 90)
 			(uuid "563c4735-39a9-494c-87c0-9c11ed4b2a57")
 			(effects
 				(font
@@ -178,13 +217,12 @@
 		)
 	)
 	(sheet
-		(at 149.86 120.65)
-		(size 38.1 35.56)
+		(at 149.86 99.06)
+		(size 38.1 57.15)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
 			(type solid)
@@ -194,7 +232,7 @@
 		)
 		(uuid "e39e1c0f-b6e8-40cf-87f2-6a84bf2ee755")
 		(property "Sheetname" "MicrocontrollerSch"
-			(at 149.86 119.9384 0)
+			(at 149.86 98.3484 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -203,7 +241,7 @@
 			)
 		)
 		(property "Sheetfile" "MicrocontrollerSch.kicad_sch"
-			(at 149.86 156.7946 0)
+			(at 190.754 140.462 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -221,9 +259,9 @@
 				(justify left)
 			)
 		)
-		(pin "VSS" passive
-			(at 149.86 135.89 180)
-			(uuid "7deadb05-ba21-451e-a210-3757fe92eb14")
+		(pin "VDD" input
+			(at 171.45 156.21 270)
+			(uuid "f8be5286-d8ed-4c3d-8c37-3039dd174eb5")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -231,9 +269,59 @@
 				(justify left)
 			)
 		)
-		(pin "VSSA" passive
-			(at 149.86 139.7 180)
-			(uuid "f439b81e-741a-43d9-9d3c-e98d84b47f66")
+		(pin "VDDA" input
+			(at 175.26 156.21 270)
+			(uuid "0e3ed0b0-4343-447b-be0c-62ed662bd0c4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "5V_bypass" passive
+			(at 166.37 156.21 270)
+			(uuid "bb7dc5f0-ff53-4228-8ab2-dc8baf5459d1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "BatCurrent" input
+			(at 149.86 137.16 180)
+			(uuid "8fa861ab-ed61-4939-9ff0-8b99f193eb66")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "BatVoltage" input
+			(at 149.86 133.35 180)
+			(uuid "507cbb3a-c620-4ba9-a895-9daa6af82e2f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "Rele_Ensaio_Corrente" input
+			(at 149.86 111.76 180)
+			(uuid "7d1a42ed-405a-47ae-9847-26079a4cc23b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "Ensaio_Bateria_DAC" passive
+			(at 149.86 107.95 180)
+			(uuid "83a34a85-98fe-4506-958e-351da096f93a")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -250,13 +338,12 @@
 		)
 	)
 	(sheet
-		(at 74.93 115.57)
-		(size 40.64 35.56)
+		(at 74.93 95.25)
+		(size 40.64 55.88)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(stroke
 			(width 0.1524)
 			(type solid)
@@ -266,7 +353,7 @@
 		)
 		(uuid "e5285866-2821-4f3e-b227-7641779c79c7")
 		(property "Sheetname" "BatterySide"
-			(at 74.93 114.8584 0)
+			(at 74.93 94.5384 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -275,7 +362,7 @@
 			)
 		)
 		(property "Sheetfile" "BatterysSide.kicad_sch"
-			(at 74.93 151.7146 0)
+			(at 72.898 146.812 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -284,13 +371,13 @@
 			)
 		)
 		(pin "Vbatt" passive
-			(at 115.57 144.78 0)
+			(at 95.25 151.13 270)
 			(uuid "daf2586f-916b-430b-8ff9-2de0802f683d")
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
+				(justify left)
 			)
 		)
 		(pin "ADC_Batt_Vout" output
@@ -316,6 +403,36 @@
 		(pin "MCU_SignalReady" input
 			(at 115.57 128.27 0)
 			(uuid "8a738a59-cfd9-4e88-b922-b7f1a8e930ed")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "3.3Vbat" passive
+			(at 97.79 151.13 270)
+			(uuid "c1bd061e-03f6-4fad-9d47-762c86caae9e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "Rele_Ensaio_Corrente" output
+			(at 115.57 111.76 0)
+			(uuid "0c7a72a2-3ede-404d-b2c4-0b7b2be9e1ce")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VrefCurrentMirror" passive
+			(at 115.57 107.95 0)
+			(uuid "99b3c71c-f388-48a5-af1a-fab08478521b")
 			(effects
 				(font
 					(size 1.27 1.27)

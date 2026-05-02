@@ -1,0 +1,6 @@
+o SAME config dialog esta usando ainda o metodo MOCK
+que não é igual o metodo de rede existendo (PQP)
+
+é preciso verificar se algo esta realmente enviando dados
+para a rede ou só fingindo (vsfd)
+
