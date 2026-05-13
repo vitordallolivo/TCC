@@ -123,7 +123,7 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0.0,
+        "min_clearance": 0.08,
         "min_connection": 0.0,
         "min_copper_edge_clearance": 0.5,
         "min_groove_width": 0.0,
@@ -137,8 +137,8 @@
         "min_text_thickness": 0.08,
         "min_through_hole_diameter": 0.3,
         "min_track_width": 0.0,
-        "min_via_annular_width": 0.1,
-        "min_via_diameter": 0.5,
+        "min_via_annular_width": 0.3,
+        "min_via_diameter": 0.4,
         "solder_mask_to_copper_clearance": 0.0,
         "use_height_for_length_calcs": true
       },
@@ -477,7 +477,7 @@
         "diff_pair_width": 0.2,
         "line_style": 0,
         "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
+        "microvia_drill": 0.3,
         "name": "Default",
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 2147483647,
@@ -486,13 +486,40 @@
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
+      },
+      {
+        "clearance": 0.2032,
+        "diff_pair_gap": 0.2032,
+        "diff_pair_width": 0.155448,
+        "microvia_diameter": 0.0,
+        "microvia_drill": 0.0,
+        "name": "ETH_90R",
+        "pcb_color": "rgb(112, 255, 26)",
+        "priority": 0,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3
       }
     ],
     "meta": {
       "version": 4
     },
     "net_colors": null,
-    "netclass_assignments": null,
+    "netclass_assignments": {
+      "/MicrocontrollerSch/RXN": [
+        "ETH_90R"
+      ],
+      "/MicrocontrollerSch/RXP": [
+        "ETH_90R"
+      ],
+      "/MicrocontrollerSch/TXN": [
+        "ETH_90R"
+      ],
+      "/MicrocontrollerSch/TXP": [
+        "ETH_90R"
+      ]
+    },
     "netclass_patterns": []
   },
   "pcbnew": {
@@ -668,6 +695,12 @@
           "group_by": false,
           "label": "Description_1",
           "name": "Description_1",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Sim.Type",
+          "name": "Sim.Type",
           "show": false
         }
       ],

@@ -4506,6 +4506,12 @@
 		(uuid "2f5deed3-620d-411b-bbd5-1950be31e438")
 	)
 	(junction
+		(at 55.88 80.01)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "2f929292-e621-437d-a0e8-66f059c5068b")
+	)
+	(junction
 		(at 203.2 69.85)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4636,12 +4642,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "d51c15a3-469b-41de-8a3e-d11a01e16354")
-	)
-	(junction
-		(at 85.09 80.01)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "df506aa7-292c-4200-841e-1aaac70f5fa9")
 	)
 	(junction
 		(at 90.17 142.24)
@@ -4845,7 +4845,7 @@
 	)
 	(wire
 		(pts
-			(xy 85.09 80.01) (xy 91.44 80.01)
+			(xy 77.47 80.01) (xy 91.44 80.01)
 		)
 		(stroke
 			(width 0)
@@ -5165,7 +5165,7 @@
 	)
 	(wire
 		(pts
-			(xy 49.53 80.01) (xy 64.77 80.01)
+			(xy 49.53 80.01) (xy 55.88 80.01)
 		)
 		(stroke
 			(width 0)
@@ -5365,16 +5365,6 @@
 	)
 	(wire
 		(pts
-			(xy 77.47 80.01) (xy 85.09 80.01)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "499ad2a4-7f7f-4ca2-970b-68ac9853fed2")
-	)
-	(wire
-		(pts
 			(xy 388.62 217.17) (xy 388.62 220.98)
 		)
 		(stroke
@@ -5422,6 +5412,16 @@
 			(type default)
 		)
 		(uuid "4e89f8cc-ead8-4ff6-ba46-13a470a87459")
+	)
+	(wire
+		(pts
+			(xy 55.88 80.01) (xy 64.77 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4ee96d82-b34d-4945-a79b-e4448a6ee6f6")
 	)
 	(wire
 		(pts
@@ -6315,6 +6315,16 @@
 	)
 	(wire
 		(pts
+			(xy 55.88 76.2) (xy 55.88 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cec83e35-cf64-47ea-b920-5d7093aa6abb")
+	)
+	(wire
+		(pts
 			(xy 336.55 209.55) (xy 345.44 209.55)
 		)
 		(stroke
@@ -6565,16 +6575,6 @@
 	)
 	(wire
 		(pts
-			(xy 85.09 76.2) (xy 85.09 80.01)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f82d9592-dd76-41d7-ae18-3f77bc9f00f6")
-	)
-	(wire
-		(pts
 			(xy 289.56 80.01) (xy 289.56 86.36)
 		)
 		(stroke
@@ -6613,16 +6613,6 @@
 		)
 		(uuid "ff1cd0d1-87a2-4a6e-98b8-cfac542f766e")
 	)
-	(label "Vbatt"
-		(at 85.09 78.74 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "0e5e3854-d2ff-42d2-affd-f22631bae451")
-	)
 	(label "OptoSig"
 		(at 78.74 224.79 180)
 		(effects
@@ -6642,6 +6632,16 @@
 			(justify left bottom)
 		)
 		(uuid "27b20a1c-a08e-4c59-8423-fa5b85707925")
+	)
+	(label "Vbatt"
+		(at 55.88 78.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "449b2a3a-feed-42a9-81d1-e350f47a7c25")
 	)
 	(label "Discharger_Battery"
 		(at 102.87 139.7 0)
@@ -6695,17 +6695,6 @@
 	)
 	(hierarchical_label "Vbatt"
 		(shape passive)
-		(at 85.09 76.2 90)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "2de61d1c-c191-4c41-a1df-988f8f9b7663")
-	)
-	(hierarchical_label "Vbatt"
-		(shape passive)
 		(at 100.33 161.29 270)
 		(effects
 			(font
@@ -6736,6 +6725,17 @@
 			(justify left)
 		)
 		(uuid "5a625a03-2420-4030-9abf-f6340e9f2664")
+	)
+	(hierarchical_label "Vbatt"
+		(shape passive)
+		(at 55.88 76.2 90)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "5fe40f73-1292-4f4c-8395-7d89cc57fe05")
 	)
 	(hierarchical_label "3.3Vbat"
 		(shape passive)
