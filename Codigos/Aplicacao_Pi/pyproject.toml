@@ -6,16 +6,22 @@ description = "GUI desenvolvida para visualização de dados de um conjunto moto
 requires-python = ">=3.11"
 
 dependencies = [
-    "numpy>=1.24",
+    "numpy>=2.4.4",
     "PySide6>=6.0",
     "pyqtgraph",
-    "packaging>=24.0",
+    "packaging>=26.2",
     "jinja2>=3.1",
     "pyyaml>=6.0",
-    "pandas>=2.2.0",
-    "psutil>=5.9.0"
+    "pandas>=3.0.3",
+    "psutil>=7.2.2"
 ]
 
 
 [project.scripts]
-tcc = "mainApp:main"    
+DesempenhoEnsaioGUI = "mainApp:main"    
+[tool.setuptools]
+packages = ["GUI", "Config", "Communication_Data"]
+py-modules = ["mainApp"]
+
+[tool.setuptools.package-data]
+"Config" = ["*.yaml"]
