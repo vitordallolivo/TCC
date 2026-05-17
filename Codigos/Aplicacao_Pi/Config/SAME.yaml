@@ -70,6 +70,7 @@ structs:
     - { name: action_or_status, type: int8_t }  # Overloaded field for default_action or status
 
   TELEMETRY_LOG:
+    - { name: timestamp, type: uint32_t }
     # Real measures from ADC/Shunts
     - { name: V_a, type: float }
     - { name: V_b, type: float }
@@ -82,8 +83,9 @@ structs:
     - { name: V_beta, type: float }
     - { name: i_alpha, type: float }
     - { name: i_beta, type: float }
-    - { name: rpm, type: float }
-    - { name: torque, type: float }
+    - { name: rpm_same, type: float }
+    - { name: torque_eletrico, type: float }
+    - { name: torque_helice, type: float }
     - { name: status, type: log_status }
 
 # Metadata for GUI and Simulation

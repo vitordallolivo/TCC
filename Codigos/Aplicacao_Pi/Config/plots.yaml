@@ -1,0 +1,95 @@
+# Mapeamento de variáveis de Telemetria (SIBA/SAME) para os Widgets da UI
+plots_mapping:
+  Plot_1:
+    title: "Forças"
+    ylabel: "Forças [N]"
+    xlabel: "Tempo [s]"
+    vars:
+      load_cell_0: "FX"
+      load_cell_1: "FY"
+      load_cell_2: "FZ"
+  
+  Plot_2:
+    title: "Momentos"
+    ylabel: "Momentos [Nm]"
+    xlabel: "Tempo [s]"
+    vars:
+      load_cell_3: "MX"
+      load_cell_4: "MY"
+      load_cell_5: "MZ"
+
+  Plot_3:
+    title: "Tensão Bateria"
+    ylabel: "Voltage [V]"
+    xlabel: "Tempo [s]"
+    vars:
+      v_batt: "" # Vazio para sem legenda
+
+  Plot_4:
+    title: "Corrente Bateria"
+    ylabel: "Current [A]"
+    xlabel: "Tempo [s]"
+    vars:
+      i_batt: ""
+
+  Plot_5:
+    title: "SOC Bateria"
+    ylabel: "SOC [%]"
+    xlabel: "Tempo [s]"
+    vars:
+      soc: ""
+
+  Plot_6:
+    title: "Temperatura Bateria"
+    ylabel: "Temperatura [ºC]"
+    xlabel: "Tempo [s]"
+    vars:
+      temperature_battery: ""
+
+  Plot_7:
+    title: "Velocidade do Vento"
+    ylabel: "Velocidade [m/s]"
+    xlabel: "Tempo [s]"
+    vars:
+      air_speed: ""
+
+  Plot_8:
+    title: "RPM (SIBA vs SAME)"
+    ylabel: "RPM"
+    xlabel: "Tempo [s]"
+    vars:
+      rpm: "RPM medido"
+      rpm_same: "RPM estimado"
+
+  Plot_9:
+    title: "Tensões Inversor"
+    ylabel: "Voltage [V]"
+    xlabel: "Tempo [s]"
+    vars:
+      V_a: "V_a"
+      V_b: "V_b"
+      V_c: "V_c"
+
+  Plot_10:
+    title: "Corrente de Fase"
+    ylabel: "Current [A]"
+    xlabel: "Tempo [s]"
+    vars:
+      i_a: "ia"
+      i_b: "ib"
+      i_c: "ic"
+
+  Plot_11:
+    title: "RPM Estimado"
+    ylabel: "RPM"
+    xlabel: "Tempo [s]"
+    vars:
+      rpm_same: "Estimado"
+
+  Plot_12:
+    title: "Torques Estimados"
+    ylabel: "Torque [Nm]"
+    xlabel: "Tempo [s]"
+    vars:
+      torque_eletrico: "Elétrico"
+      torque_helice: "Hélice"

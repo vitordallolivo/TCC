@@ -11,9 +11,9 @@ import psutil
 import yaml
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, 
                              QLineEdit, QPushButton, QGroupBox, QRadioButton, QCompleter, 
-                             QInputDialog) # <--- Adicione este cara
+                             QInputDialog)
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import QEvent, Slot, Qt
+from PySide6.QtCore import QEvent, Slot, Qt, Signal
 from Communication_Data.Ethernet import EthernetManager
 
 
@@ -21,6 +21,9 @@ import struct
 
 
 class TinyTerminal(QWidget):
+    # Sinal para permitir que threads enviem logs com segurança para a UI
+    log_signal = Signal(str, str, str)
+
     def __init__(self, config_dir, parent=None):
         super().__init__(parent)
 
@@ -35,8 +38,12 @@ class TinyTerminal(QWidget):
         
         self._setup_ui()
         
+        # Conecta o sinal de log à função que realmente escreve na tela
+        self.log_signal.connect(self._safe_append_log)
+
         self.history = []
         self.history_index = -1
+        self.quiet_mocks = set() # Armazena quais boards não devem logar BIN
         self.input.installEventFilter(self) 
 
         self.is_admin = self._check_os_permission()
@@ -52,9 +59,9 @@ class TinyTerminal(QWidget):
         yaml_siba = os.path.join(self.config_dir, "SIBA.yaml")
         yaml_same = os.path.join(self.config_dir, "SAME.yaml")
         
-        # 2. Inicialização do Gerente de Ethernet
-        self.eth = EthernetManager(yaml_siba, yaml_same, handle_callback=self._on_udp_receive)
-        self.eth.start()
+        # 2. USA O GERENCIADOR DA PARENT (GUI Principal) para evitar conflito de portas
+        self.eth = parent.eth if hasattr(parent, 'eth') else EthernetManager(yaml_siba, yaml_same, handle_callback=self._on_udp_receive)
+        if not hasattr(parent, 'eth'): self.eth.start()
 
         # 3. Mapeamento Dinâmico de Targets (Extração segura das configs carregadas)
         self.siba_targets = self._extract_targets_from_config("SIBA")
@@ -151,11 +158,17 @@ class TinyTerminal(QWidget):
 
     def write(self, text):
         """Captura prints do sistema para o terminal."""
-        if text.strip(): self.append_log("PRNT", text.strip(), "#FFD700")
+        if text.strip(): self.log_signal.emit("PRNT", text.strip(), "#FFD700")
     
     def flush(self): pass
 
     def append_log(self, pre, msg, col):
+        """Método público para ser usado por outras classes."""
+        self.log_signal.emit(pre, msg, col)
+
+    @Slot(str, str, str)
+    def _safe_append_log(self, pre, msg, col):
+        """Executado SEMPRE na thread principal do Qt."""
         self.output.appendHtml(f'<span style="color:{col};"><b>[{pre}]</b> {msg}</span>')
         self.output.moveCursor(QTextCursor.End)
 
@@ -171,151 +184,87 @@ class TinyTerminal(QWidget):
             self.history.insert(0, raw)
         self.history_index = -1
         
-        # 2. PROMPT DINÂMICO (CORREÇÃO AQUI)
-        # Usa self.current_prompt que é atualizado pelo _update_prompt()
+    def _handle_input(self):
+        raw = self.input.text().strip()
+        if not raw: return
+        if not self.history or raw != self.history[0]:
+            self.history.insert(0, raw)
+        self.history_index = -1
+        
         color = "#FF0000" if self.is_admin else "#00FFFF"
         self.append_log(self.current_prompt, raw, color)
         
         parts = raw.split()
         cmd_root = parts[0].lower()
         
-        # --- LÓGICA DE COMANDOS ---
-        if cmd_root == "sudo":
-            self._logic_sudo()
-            self.input.clear() # Limpa e sai para não processar 'sudo' como comando YAML
-            return
+        # --- Comandos do Sistema (Não-YAML ou Fixos) ---
+        if cmd_root == "sudo": self._logic_sudo()
         elif cmd_root == "restart":
-            self.append_log("SYS", "Reiniciando aplicação...", "#FFFF00")
-            # Força o processamento de eventos para o log aparecer antes de fechar
+            self.append_log("SYS", "Reiniciando...", "#FFFF00")
             QApplication.processEvents()
             self.restart_program(self.eth) 
-            return # O código para aqui pois o os.execv assume o controle
-        elif cmd_root == "exit":
-            # Checa o argumento 'all' sem depender da validação do YAML
-            if len(parts) > 1 and parts[1].lower() == "all":
-                self.append_log("SYS", "Encerrando sistema Albatroz...", "#FF4500")
-                QApplication.quit()
-            else:
-                self.close()
-            self.input.clear()
             return
-        
+        elif cmd_root == "exit":
+            if len(parts) > 1 and parts[1].lower() == "all": QApplication.quit()
+            else: self.close()
         elif cmd_root == "help":
-            target = parts[1].lower() if len(parts) > 1 else None
-            self._show_help(self.cmd_config, target=target)
-        elif cmd_root == "clear":
-            self.clear_shell()
-        elif cmd_root == "tcpdump":
-            # Agora ele passa pela checagem de admin_only automaticamente
-            if self.is_admin:
-                if len(parts) >= 3:
-                    self._execute_tcpdump(parts[1], int(parts[2]))
-                else:
-                    self.append_log("ERR", "Uso: tcpdump [IP] [tempo]", "#FF4500")
-            else:
-                self.append_log("ERR", "Este comando exige 'sudo'.", "#FF4500")
-        elif cmd_root in self.cmd_config:
-            if self._is_complete(parts, self.cmd_config):
-                self._execute_command(parts)
-            else:
-                self.append_log("ERR", f"Comando incompleto. Use 'help {cmd_root}'", "#FF4500")
+            self._show_help(self.cmd_config, target=parts[1].lower() if len(parts) > 1 else None)
+        elif cmd_root == "clear": self.clear_shell()
         else:
-            self.append_log("ERR", f"Comando '{cmd_root}' desconhecido.", "#FF4500")
+            # Despacho dinâmico para os demais comandos
+            self._execute_command(parts)
             
         self.input.clear()
 
+    def _execute_command(self, parts):
+        """Despacho dinâmico: busca métodos como _cmd_siba_start_mock."""
+        # Tenta do mais específico para o mais geral (ex: siba start mock -> siba start -> siba)
+        for i in range(len(parts), 0, -1):
+            method_name = "_cmd_" + "_".join(parts[:i]).lower()
+            if hasattr(self, method_name):
+                getattr(self, method_name)(parts[i:])
+                return
+
+        # Fallback para comandos de hardware ou validação via YAML
+        root = parts[0].lower()
+        if root in ["same", "siba"]:
+            if self._is_complete(parts, self.cmd_config):
+                self._handle_hardware_command(parts)
+            else: self.append_log("ERR", f"Comando incompleto. Use 'help {root}'", "#FF4500")
+        elif root in self.cmd_config:
+            if self._is_complete(parts, self.cmd_config):
+                self.append_log("ERR", f"Método Python para '{' '.join(parts)}' não implementado.", "#FF4500")
+            else: self.append_log("ERR", "Sintaxe inválida para o comando.", "#FF4500")
+        else: self.append_log("ERR", f"Comando '{root}' desconhecido.", "#FF4500")
+
+    def _handle_hardware_command(self, parts):
+        """Trata o envio de comandos reais (binários) para as placas."""
+        root = parts[0].upper()
+        cmd_struct = self._parse_to_cmd_struct(parts)
+        if cmd_struct:
+            hex_dump = cmd_struct.hex(' ').upper()
+            self.append_log("NET", f"CMD -> [{hex_dump}]", "#00FFFF")
+            traducao = self.decode_hex_to_cmd(
+                hex_dump, self.eth.configs["SAME"], self.eth.configs["SIBA"], origin=root
+            )
+            self.append_log("DECODE", traducao, "#DCDCDC")
+            if hasattr(self, 'eth'): self.eth.send_command(root, cmd_struct)
+
     def _is_complete(self, parts, config):
-        """Valida comandos baseados no YAML, permitindo argumentos no final (leaf nodes)."""
+        """Valida se o comando segue a estrutura do YAML."""
         current_level = config
-        
         for p in parts:
             if isinstance(current_level, dict) and p in current_level:
                 current_level = current_level[p]
             else:
-                # Chegamos em algo que não está no YAML (ex: o valor '15.5' ou o 'id' do sensor).
-                # Se o 'current_level' anterior era um "nó final" (só tem 'help', 'type', etc), é válido!
                 if isinstance(current_level, dict):
-                    # Filtra as chaves de metadados. Se sobrar algo, é porque faltou subcomando.
                     keys = set(current_level.keys()) - {'help', 'type', 'admin_only', 'args'}
-                    if len(keys) == 0:
-                        return True 
+                    if not keys: return True 
                 return False
-
-        # Se terminamos de ler todas as partes (ex: digitou 'same set ks1')
-        # Verifica se 'ks1' é um nó final ou se ainda exige mais coisas.
         if isinstance(current_level, dict):
             keys = set(current_level.keys()) - {'help', 'type', 'admin_only', 'args'}
-            if len(keys) > 0:
-                return False # O dicionário tem mais filhos, faltou digitar o resto
-            
+            if keys: return False
         return True
-
-    def _execute_command(self, parts):
-        """Executa a ação baseada no comando validado."""
-        root = parts[0].lower()
-        
-        # --- Lógica do Grupo GRAPH ---
-        if root == "graph":
-            action = parts[1].lower()
-            
-            if action == "clear":
-                # graph(0) clear(1) [all/1-24](2)
-                target = parts[2] if len(parts) > 2 else "all"
-                self.parent().clear_graph_buffers(target)
-                
-            elif action == "mock_data":
-                # graph(0) mock_data(1) [start/stop](2) [target](3)
-                sub_action = parts[2].lower() if len(parts) > 2 else ""
-                
-                if sub_action == "start":
-                    target = parts[3] if len(parts) > 3 else "all"
-                    self.parent().start_mock_with_target(target)
-                elif sub_action == "stop":
-                    self.parent().worker.stop()
-                    print("Mock Simulation parada.")
-            return
-        
-        if root == "connect":
-            ip = parts[1] if len(parts) > 1 else "127.0.0.1"
-            self._cmd_connect(ip)
-
-        elif root == "ping":
-            ip = parts[1] if len(parts) > 1 else None
-            self._cmd_ping(ip)
-
-        elif root == "ipconfig":
-            self._cmd_ipconfig()
-
-        elif root == "listing":
-            port = int(parts[1]) if len(parts) > 1 else 5555
-            self._cmd_listing(port)
-
-        elif root == "tcpdump":
-            if len(parts) >= 3:
-                self._execute_tcpdump(parts[1], int(parts[2]))
-            else:
-                self.append_log("ERR", "Uso: tcpdump [IP] [tempo]", "#FF4500")
-
-
-        if root in ["same", "siba"]:
-            cmd_struct = self._parse_to_cmd_struct(parts)
-            
-            if cmd_struct:
-                hex_dump = cmd_struct.hex(' ').upper()
-                self.append_log("NET", f"CMD -> [{hex_dump}]", "#00FFFF")
-
-                # --- MUDANÇA AQUI: Passamos 'root' explicitamente ---
-                traducao = self.decode_hex_to_cmd(
-                        hex_dump, 
-                        self.eth.configs["SAME"], 
-                        self.eth.configs["SIBA"],
-                        origin=root.upper() 
-                    )
-
-                self.append_log("DECODE", traducao, "#DCDCDC")
-                
-                if hasattr(self, 'eth'):
-                    self.eth.send_command(root.upper(), cmd_struct)
 
     def _show_help(self, config, target=None):
         """
@@ -358,10 +307,15 @@ class TinyTerminal(QWidget):
 
     def log_board_data(self, board, data, decoded=None):
         """Exibe dados de rede no console do terminal."""
+        # Se a board estiver no modo "quiet" (no-comment), ignoramos o log de BIN/LOG
+        if board in self.quiet_mocks:
+            return # Não loga nada se estiver no modo quiet
+
         if self.radio_hex.isChecked():
             msg = data.hex(' ').upper()
         else:
-            msg = str(decoded)
+            # Tradução simplificada para o terminal
+            msg = ", ".join([f"{k}: {v:.2f}" for k, v in decoded.items() if isinstance(v, float)])
         
         col = "#32CD32" if board == "SIBA" else "#1E90FF"
         self.append_log("LOG", f"({board}) {msg}", col)
@@ -369,47 +323,104 @@ class TinyTerminal(QWidget):
     def closeEvent(self, e):
         # Restaura o stdout original para evitar erros de I/O após fechar
         sys.stdout = self.old_stdout
+        # Garante que os mocks sejam desligados ao fechar o terminal
+        self.eth.set_mock_mode("SIBA", False)
+        self.eth.set_mock_mode("SAME", False)
         e.accept()
 
-    def _cmd_connect(self, ip):
-        self.append_log("SYS", f"Alterando alvo de conexão para: {ip}", "#FFFF00")
-        # Atualiza os IPs nos gerentes de rede da MainGUI
-        self.parent().eth.ip_siba = ip
-        self.parent().eth.ip_same = ip
-        print(f"IP de destino global definido como {ip}")
+    # --- Implementações de Comandos Específicos ---
 
-    def _cmd_ping(self, ip):
-        """Ping 'Lightweight' usando tentativa de conexão TCP (Porta 80 ou 7)."""
-        if not ip:
-            self.append_log("ERR", "Uso: ping [IP/URL]", "#FF4500")
-            return
-        
-        self.append_log("NET", f"Testando conectividade com {ip}...", "#00FF7F")
+    def _cmd_graph_clear(self, args):
+        # O clear_graph_buffers na GUI agora sempre limpa tudo
+        self.parent().clear_graph_buffers("all") 
+
+    def _cmd_graph_mock_data_start(self, args):
+        target = args[0] if args and not args[0].startswith("--") else "all"
+        quiet = "--no-comment" in args
+        self.parent().start_mock_with_target(target, quiet)
+
+    def _cmd_graph_mock_data_stop(self, args):
+        # Para o mock interno da UI (se existir) e os mocks de hardware
+        if hasattr(self.parent(), 'worker'): 
+            self.parent().worker.stop()
+        self.eth.set_mock_mode("SIBA", False)
+        self.eth.set_mock_mode("SAME", False)
+        print("Todas as simulações paradas.")
+
+    def _cmd_connect(self, args):
+        ip = args[0] if args else "127.0.0.1"
+        self.append_log("SYS", f"IP Global alterado: {ip}", "#FFFF00")
+        self.parent().eth.ip_siba = self.parent().eth.ip_same = ip
+
+    def _cmd_ping(self, args):
+        if not args: return self.append_log("ERR", "Uso: ping [IP]", "#FF4500")
+        ip = args[0]
+        self.append_log("NET", f"Pingando {ip}...", "#00FF7F")
         try:
-            # Tenta abrir um socket simples para verificar se o host responde
             socket.setdefaulttimeout(2)
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((ip, 80))
-            self.append_log("NET", f"Resposta de {ip}: Conexão TCP aceita.", "#32CD32")
-        except Exception as e:
-            self.append_log("ERR", f"Falha no ping: {e}", "#FF4500")
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s: s.connect((ip, 80))
+            self.append_log("NET", f"Link OK com {ip}", "#32CD32")
+        except Exception as e: self.append_log("ERR", f"Timeout link {ip}: {e}", "#FF4500")
 
-    def _cmd_ipconfig(self):
-        """Versão portátil do ipconfig usando psutil."""
-        self.append_log("SYS", "--- Interfaces de Rede Detectadas ---", "#ADFF2F")
-        interfaces = psutil.net_if_addrs()
-        for name, snics in interfaces.items():
+    def _cmd_ipconfig(self, args):
+        self.append_log("SYS", "--- Interfaces ---", "#ADFF2F")
+        for name, snics in psutil.net_if_addrs().items():
             for snic in snics:
-                if snic.family == socket.AF_INET: # Filtra apenas IPv4
-                    self.append_log("NET", f"{name}: {snic.address}", "#DCDCDC")
+                if snic.family == socket.AF_INET: self.append_log("NET", f"{name}: {snic.address}", "#DCDCDC")
 
-    def _cmd_listing(self, port):
-        """Verifica se uma porta local está ocupada ou livre."""
+    def _cmd_listing(self, args):
+        port = int(args[0]) if args else 5555
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            result = s.connect_ex(('127.0.0.1', port))
-            if result == 0:
-                self.append_log("NET", f"Porta {port}: OCUPADA (Listening)", "#FFD700")
-            else:
-                self.append_log("NET", f"Porta {port}: LIVRE", "#32CD32")
+            res = s.connect_ex(('127.0.0.1', port))
+            self.append_log("NET", f"Porta {port}: {'OCUPADA' if res == 0 else 'LIVRE'}", "#32CD32")
+
+    def _cmd_tcpdump(self, args):
+        if not self.is_admin: return self.append_log("ERR", "Requer 'sudo'", "#FF4500")
+        if len(args) >= 2: self._execute_tcpdump(args[0], int(args[1]))
+
+    def _cmd_siba_connect(self, args): self._hardware_connect_flow("SIBA")
+    def _cmd_same_connect(self, args): self._hardware_connect_flow("SAME")
+
+    def _hardware_connect_flow(self, board):
+        ip = self.eth.ip_siba if board == "SIBA" else self.eth.ip_same
+        self.append_log("NET", f"Tentando conectar com {board} ({ip})...", "#00BFFF")
+        
+        # 1. Verifica Subnet
+        ok, local_ip = self.eth.check_subnet(ip)
+        if not ok:
+            self.append_log("WARN", f"Seu IP ({local_ip}) parece estar em subrede diferente de {ip}!", "#FFA500")
+            self.append_log("SYS", "Dica: Configure seu IP fixo para 169.254.97.x", "#DCDCDC")
+        
+        # 2. Inicia o Worker
+        self.eth.start_worker(board)
+        
+        # 3. Ping de Teste
+        if self.eth.check_connectivity(ip):
+            self.append_log("NET", f"Link com {board} estabelecido com sucesso!", "#32CD32")
+        else:
+            self.append_log("ERR", f"Não foi possível pingar a board {board}. Verifique cabos.", "#FF4500")
+
+    def _cmd_siba_mock_start(self, args): self._mock_hardware_flow("SIBA", args)
+    def _cmd_siba_mock_stop(self, args): 
+        self.eth.set_mock_mode("SIBA", False)
+        self.quiet_mocks.discard("SIBA")
+
+    def _cmd_same_mock_start(self, args): self._mock_hardware_flow("SAME", args)
+    def _cmd_same_mock_stop(self, args): 
+        self.eth.set_mock_mode("SAME", False)
+        self.quiet_mocks.discard("SAME")
+
+    def _mock_hardware_flow(self, board, args):
+        """Ativa o modo MOCK no gerenciador de rede."""
+        if "--no-comment" in args:
+            self.quiet_mocks.add(board)
+            self.append_log("SYS", f"Logs de telemetria ocultados para {board}.", "#FFFF00")
+        else:
+            self.quiet_mocks.discard(board)
+
+        self.eth.set_mock_mode(board, True)
+        self.append_log("SYS", f"Modo MOCK para {board} ATIVADO.", "#ADFF2F")
+        self.append_log("SYS", "A placa agora responde em 127.0.0.1 e simula Telemetria.", "#DCDCDC")
 
     def eventFilter(self, obj, event):
         if obj == self.input and event.type() == QEvent.KeyPress:
@@ -588,15 +599,10 @@ class TinyTerminal(QWidget):
         Callback disparado pelas threads do EthernetManager.
         Decodifica o pacote e joga no terminal de forma segura.
         """
-        try:
-            # Tenta ler como texto (útil para logs de debug vindos da placa)
-            mensagem = data.decode('utf-8').strip()
-            self.append_log(f"RX-{board}", mensagem, "#00FF00")
-        except UnicodeDecodeError:
-            # Se não for texto (ex: pacote binário de telemetria bruta), mostra em HEX
-            hex_data = data.hex(' ').upper()
-            self.append_log(f"RX-{board}", f"BIN: {hex_data}", "#8A2BE2")
-
+        # Este callback é apenas para o EthernetManager passar os dados.
+        # O logging para o terminal é feito por mainAlbatrozGUI.process_network_data
+        # que chama self.terminal.log_board_data, que já respeita quiet_mocks.
+        pass 
     def _parse_to_cmd_struct(self, parts):
         """
         Parser Final: Mapeamento dinâmico SAME/SIBA baseado nos YAMLs.

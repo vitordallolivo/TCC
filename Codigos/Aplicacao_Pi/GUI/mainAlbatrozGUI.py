@@ -25,42 +25,6 @@ TYPE_MAP = {
     "uint8_t": "B"
 }
 
-class TelemetryMOCK(QThread):
-    data_ready = Signal(dict)
-
-    def __init__(self, freq_hz=20):
-        super().__init__()
-        self.freq_hz = freq_hz
-        self.running = True
-        self.start_time = time.time()
-
-    def run(self):
-        interval = 1.0 / self.freq_hz
-        while self.running:
-            loop_start = time.time()
-            current_ts = time.time() - self.start_time
-            
-            readings = {}
-            if self.target == "all":
-                readings = {f"Plot_{i}": (current_ts, np.sin(current_ts + i/2)*5 + i) for i in range(1, 25)}
-            else:
-                try:
-                    num = int(self.target)
-                    if 1 <= num <= 24:
-                        # Gera apenas para o selecionado, o resto fica estático ou NaN
-                        readings = {f"Plot_{i}": (current_ts, np.sin(current_ts)*5 if i == num else np.nan) for i in range(1, 25)}
-                except:
-                    pass
-            
-            if readings:
-                self.data_ready.emit(readings)
-            
-            time.sleep(max(0, interval - (time.time() - loop_start)))
-
-    def stop(self):
-        self.running = False
-        self.wait()
-
 class AlbatrozGUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -75,37 +39,42 @@ class AlbatrozGUI(QMainWindow):
         self.same_yaml_path = os.path.join(self.config_dir, "SAME.yaml")
         self.siba_yaml_path = os.path.join(self.config_dir, "SIBA.yaml")
 
-        # 2. Inicializa o Terminal primeiro para capturar logs de boot
-        self.terminal = TinyTerminal(self.config_dir, self)
-        print(f"--- Iniciando Sistema Albatroz ---")
-        print(f"Diretório Raiz: {self.root_dir}")
-
-        # 3. Carrega as Configurações das Placas
+        self.plots_yaml_path = os.path.join(self.config_dir, "plots.yaml")
+        
+        # 2. Carrega as Configurações das Placas (Necessário para EthernetManager e Buffers)
         self.configs = {
             "SIBA": self._load_config_file(self.siba_yaml_path),
             "SAME": self._load_config_file(self.same_yaml_path)
         }
+        self.plot_config = self._load_config_file(self.plots_yaml_path)
+
         print(f"Configs carregadas: SIBA({'OK' if self.configs['SIBA'] else 'Falha'}), SAME({'OK' if self.configs['SAME'] else 'Falha'})")
 
-        self._load_ui() 
-
-        # 4. Atributos de Memória e Swap
+        # 3. Atributos de Memória e Swap (Devem existir antes de qualquer dado chegar via rede)
         self.ptr = 0
         self.max_ram = 5000
         self.time_buffer = np.full(self.max_ram, np.nan, dtype=np.float32)
-        self.value_buffers = {f"Plot_{i}": np.full(self.max_ram, np.nan, dtype=np.float32) for i in range(1, 25)}
+        self.value_buffers = {} 
+        self.variable_order = [] # Mantém a ordem para o CSV/Swap
         
         self.temp_swap = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
         self.swap_path = self.temp_swap.name
         self.points_in_swap = 0
         print(f"Arquivo de Swap ativo: {self.swap_path}")
 
-        # 5. Inicializa Gerenciador de Rede
+        # 4. Inicializa Gerenciador de Rede (Agora com o callback central process_network_data)
         self.eth = EthernetManager(
             self.siba_yaml_path, 
             self.same_yaml_path, 
             handle_callback=self.process_network_data
         )
+
+        # 5. Inicializa o Terminal (Agora ele herdará self.eth corretamente do parent)
+        self.terminal = TinyTerminal(self.config_dir, self)
+        print(f"--- Iniciando Sistema Albatroz ---")
+        print(f"Diretório Raiz: {self.root_dir}")
+
+        self._load_ui() 
 
         self.plots = {}   
         self.curves = {}
@@ -116,18 +85,13 @@ class AlbatrozGUI(QMainWindow):
         self._setup_connections()
         self.apply_user_prefs()
 
-        # 7. Threads e Timers
-        self.worker = TelemetryMOCK(freq_hz=20)
-        self.worker.data_ready.connect(self.on_data_received)
-
+        # 7. Timer de UI
         self.ui_timer = QTimer()
         self.ui_timer.timeout.connect(self.update_plots_ui)
         self.ui_timer.start(50)
-        print("Threads de telemetria e timer de UI prontos.")
-
+        print("Sistema de atualização de gráficos e timer de UI prontos.")
         # 8. Inicializa o terminal  
         self.terminal.show()
-
     # --- Lógica de Inicialização ---
     def _load_config_file(self, path):
         if os.path.exists(path):
@@ -148,15 +112,31 @@ class AlbatrozGUI(QMainWindow):
         self.setCentralWidget(self.ui)
 
     def _setup_plots(self):
-        for i in range(1, 25):
-            name = f"Plot_{i}"
-            plot_widget = getattr(self.ui, name, None)
-            if plot_widget:
-                self.plots[name] = plot_widget
-                plot_widget.setFixedSize(400, 300)
-                plot_widget.setClipToView(True)
-                plot_widget.setDownsampling(mode='peak')
-                self.curves[name] = plot_widget.plot(pen=pg.mkPen('#0055ff', width=1.5))
+        """Configura os gráficos e curvas dinamicamente conforme o plots.yaml."""
+        mapping = self.plot_config.get('plots_mapping', {})
+        
+        for widget_id, info in mapping.items():
+            plot_widget = getattr(self.ui, widget_id, None)
+            if not plot_widget: continue
+            
+            self.plots[widget_id] = plot_widget
+            plot_widget.setTitle(info.get('title', ''))
+            plot_widget.setLabel('left', info.get('ylabel', ''))
+            plot_widget.setLabel('bottom', info.get('xlabel', ''))
+            plot_widget.addLegend()
+            
+            self.curves[widget_id] = []
+            for var_name, legend in info.get('vars', {}).items():
+                # Inicializa buffer para a variável se não existir
+                if var_name not in self.value_buffers:
+                    self.value_buffers[var_name] = np.full(self.max_ram, np.nan, dtype=np.float32)
+                    if var_name not in self.variable_order:
+                        self.variable_order.append(var_name)
+                
+                # Cria a curva com cor automática
+                pen = pg.mkPen(pg.intColor(len(self.curves[widget_id])), width=1.5)
+                curve = plot_widget.plot(pen=pen, name=legend if legend else None)
+                self.curves[widget_id].append((var_name, curve))
 
     def _setup_connections(self):
         self.ui.Save_CSV.clicked.connect(self.on_save_csv)
@@ -172,39 +152,30 @@ class AlbatrozGUI(QMainWindow):
         self.ui.actionClaro.triggered.connect(lambda: self.change_theme("claro"))
         self.ui.actionEscuro.triggered.connect(lambda: self.change_theme("escuro"))
 
-    # --- Slots e Eventos ---
-    @Slot(dict)
-    def on_data_received(self, readings):
-        """Recebe dados do MOCK Telemetry."""
-        idx = self.ptr % self.max_ram
-        self.time_buffer[idx] = readings["Plot_1"][0]
-        for i in range(1, 25):
-            self.value_buffers[f"Plot_{i}"][idx] = readings[f"Plot_{i}"][1]
-        
-        self.ptr += 1
-        if self.ptr > 0 and self.ptr % self.max_ram == 0:
-            self._flush_to_swap()
-
     @Slot(str, bytes, tuple)
     def process_network_data(self, protocol, data, addr):
         """Recebe pacotes reais da Ethernet."""
         try:
-            log_config = self.configs[protocol].get("TELEMETRY_LOG", [])
+            # Acessa a estrutura correta no YAML (structs -> TELEMETRY_LOG)
+            cfg = self.configs[protocol]
+            if protocol.lower() in cfg: cfg = cfg[protocol.lower()]
+            
+            log_config = cfg.get("structs", {}).get("TELEMETRY_LOG", [])
             if not log_config: return
 
             fmt = "<" + "".join(TYPE_MAP.get(f['type'], 'f') for f in log_config)
-            if len(data) != struct.calcsize(fmt): return
+            expected_size = struct.calcsize(fmt)
+            
+            if len(data) != expected_size:
+                # Silencioso para não inundar o terminal, mas evita o crash
+                return
 
             values = struct.unpack(fmt, data)
             decoded = {field['name']: val for field, val in zip(log_config, values)}
             
-            # Envia para o terminal (HEX ou Traduzido conforme escolha do usuário no terminal)
+            # Agora que o terminal é thread-safe, podemos chamar isso com segurança
             if hasattr(self, 'terminal'):
                 self.terminal.log_board_data(protocol, data, decoded)
-
-            if self.ptr == 0:
-                print(f"Dados recebidos de {protocol} ({addr}). Atualizando eixos.")
-                self._update_plot_titles(protocol, log_config)
 
             self._update_internal_buffers(decoded)
         except Exception as e:
@@ -212,19 +183,23 @@ class AlbatrozGUI(QMainWindow):
 
     def _update_internal_buffers(self, decoded_data):
         idx = self.ptr % self.max_ram
-        self.time_buffer[idx] = decoded_data.get('timestamp', time.time())
         
-        data_to_plot = {k: v for k, v in decoded_data.items() if k not in ['timestamp', 'status']}
-        for i, (name, val) in enumerate(data_to_plot.items(), 1):
-            if i > 24: break
-            self.value_buffers[f"Plot_{i}"][idx] = val
+        # Sincronização de Tempo: Converte ms da telemetria para Segundos
+        # Se o timestamp não estiver presente, o simulador ou placa não o enviou.
+        # O simulador agora garante que ele seja enviado.
+        ts = decoded_data.get('timestamp', 0) / 1000.0
+        self.time_buffer[idx] = ts
+        
+        for var_name, val in decoded_data.items():
+            if var_name in self.value_buffers:
+                self.value_buffers[var_name][idx] = val
         
         self.ptr += 1
         if self.ptr > 0 and self.ptr % self.max_ram == 0:
             self._flush_to_swap()
 
     def _flush_to_swap(self):
-        data_to_save = np.column_stack([self.time_buffer] + [self.value_buffers[f"Plot_{i}"] for i in range(1, 25)])
+        data_to_save = np.column_stack([self.time_buffer] + [self.value_buffers[v] for v in self.variable_order])
         with open(self.swap_path, "ab") as f:
             f.write(data_to_save.astype(np.float32).tobytes())
         self.points_in_swap += self.max_ram
@@ -232,31 +207,28 @@ class AlbatrozGUI(QMainWindow):
 
     def update_plots_ui(self):
         if self.ptr == 0: return
-        # Lógica de buffer circular para o scroll dos gráficos
-        if self.ptr < self.max_ram:
-            x = self.time_buffer[:self.ptr]
-            for name, curve in self.curves.items():
-                curve.setData(x, self.value_buffers[name][:self.ptr])
-        else:
+        
+        range_slice = slice(0, self.ptr) if self.ptr < self.max_ram else slice(None)
+        x = self.time_buffer[range_slice]
+        
+        if self.ptr >= self.max_ram:
             split = self.ptr % self.max_ram
             x = np.concatenate([self.time_buffer[split:], self.time_buffer[:split]])
-            for name, curve in self.curves.items():
-                y = np.concatenate([self.value_buffers[name][split:], self.value_buffers[name][:split]])
+
+        for widget_id, curve_data in self.curves.items():
+            for var_name, curve in curve_data:
+                y = self.value_buffers[var_name][range_slice]
+                if self.ptr >= self.max_ram:
+                    y = np.concatenate([self.value_buffers[var_name][split:], self.value_buffers[var_name][:split]])
                 curve.setData(x, y)
 
     @Slot()
     def on_toggle_network(self):
         if not self.eth.running:
-            print("Iniciando modo REDE...")
-            if self.worker.isRunning(): 
-                self.worker.stop()
-                print("Mock desativado.")
+            print("Iniciando workers de rede para SIBA e SAME...")
             self.on_clear_all()
             try:
                 self.eth.start()
-                if self.eth.running:
-                    self.ui.pushButton_2.setText("Desconectar")
-                    print("Escutando telemetria SIBA/SAME.")
             except Exception as e:
                 print(f"Erro de rede: {e}")
         else:
@@ -282,15 +254,16 @@ class AlbatrozGUI(QMainWindow):
         try:
             with open(path, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(["Timestamp"] + [f"S_{i}" for i in range(1, 25)])
+                writer.writerow(["Timestamp"] + self.variable_order)
                 # Lê o que está no swap
+                num_cols = len(self.variable_order) + 1
                 if os.path.exists(self.swap_path) and self.points_in_swap > 0:
-                    disk_data = np.fromfile(self.swap_path, dtype=np.float32).reshape(-1, 25)
+                    disk_data = np.fromfile(self.swap_path, dtype=np.float32).reshape(-1, num_cols)
                     writer.writerows(disk_data)
                 # Adiciona o resto da RAM
                 ram_idx = self.ptr % self.max_ram
                 if ram_idx > 0:
-                    current_ram = np.column_stack([self.time_buffer[:ram_idx]] + [self.value_buffers[f"Plot_{i}"][:ram_idx] for i in range(1, 25)])
+                    current_ram = np.column_stack([self.time_buffer[:ram_idx]] + [self.value_buffers[v][:ram_idx] for v in self.variable_order])
                     writer.writerows(current_ram)
             print("Exportação CSV concluída com sucesso.")
         except Exception as e:
@@ -324,7 +297,8 @@ class AlbatrozGUI(QMainWindow):
 
     def closeEvent(self, event):
         print("Finalizando recursos e removendo swap...")
-        self.worker.stop()
+        if hasattr(self, 'eth'):
+            self.eth.stop()
         if os.path.exists(self.swap_path):
             try: os.remove(self.swap_path)
             except: pass
@@ -383,28 +357,16 @@ class AlbatrozGUI(QMainWindow):
         print(f"Slider alterado: {val}%")
         self.save_user_prefs()
 
-    def start_mock_with_target(self, target):
+    def start_mock_with_target(self, target, quiet=False):
         """Configura e inicia o mock baseado no argumento do terminal."""
-        if not self.worker.isRunning():
-            self.worker.start()
-            print(f"Mock Thread iniciada via terminal.")
+        args = ["--no-comment"] if quiet else []
         
-        # Armazenamos o alvo no worker (precisamos ajustar a classe TelemetryMOCK)
-        self.worker.target = target 
-        print(f"Mock agora focado em: {target}")
+        # Ativa os mocks de hardware através do terminal
+        if target == "all" or "siba" in target.lower():
+            self.terminal._cmd_siba_mock_start(args)
+        if target == "all" or "same" in target.lower():
+            self.terminal._cmd_same_mock_start(args)
 
-    def clear_graph_buffers(self, target):
-        """Limpa buffers de memória baseado no alvo do terminal."""
-        if target == "all" or target == "all":
-            self.on_clear_all() # Chama sua função existente
-        else:
-            try:
-                num = int(target)
-                if 1 <= num <= 24:
-                    plot_key = f"Plot_{num}"
-                    self.value_buffers[plot_key].fill(np.nan)
-                    # Opcional: limpar apenas este gráfico na tela imediatamente
-                    self.curves[plot_key].setData([], [])
-                    print(f"Buffer do Gráfico {num} resetado.")
-            except ValueError:
-                print(f"Erro: Alvo de limpeza '{target}' inválido.")
+    def clear_graph_buffers(self, target_str):
+        """Limpa buffers de memória para um gráfico específico ou todos."""
+        self.on_clear_all() # Por simplicidade, clear all sempre

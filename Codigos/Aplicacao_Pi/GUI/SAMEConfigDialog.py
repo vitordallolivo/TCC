@@ -1,9 +1,11 @@
+import struct
+
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QGroupBox, 
                                QDoubleSpinBox, QPushButton, QHBoxLayout, QMessageBox)
 import yaml
 import os
 
-from Communication_Data.MOCK_Ethernet import pack_same_cmd
+# from Communication_Data.MOCK_Ethernet import pack_same_cmd
 
 class SAMEConfigDialog(QDialog):
     def __init__(self, prefs, config_dir, ethernet_mgr, parent=None):
@@ -146,8 +148,8 @@ class SAMEConfigDialog(QDialog):
                 target_id = self.get_enum_val("target_type", target_str)
                 value = new_config[gui_key]
                 
-                # Gera o binário real
-                cmd_payload = pack_same_cmd(func, instr, target_id, value, action)
+                # Pack direto usando struct padrão do projeto
+                cmd_payload = struct.pack('<BBBfb', func, instr, target_id, value, action)
                 hex_str = cmd_payload.hex(' ').upper()
 
                 # --- INFO DE REDE (Simula o Terminal) ---
