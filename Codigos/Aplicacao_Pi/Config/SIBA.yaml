@@ -69,7 +69,17 @@ enums:
     - LOG_CRITICAL_ALARM
     - LOG_DENIED_ACTION
 
-structs:
+structs:  
+
+  SENSORS: # Configuration of sensors
+    - { name: SensorTarget, type: target_type }
+    - { name: Linear_Coeff, type: float }
+    - { name: Offset_Coeff, type: float }
+    - { name: Max_Valid_Value, type: float }
+    - { name: Minimum_Valid_Value, type: float }
+    - { name: Linear_Coeff_Reset_Default, type: float}
+    - { name: Offset_Coeff_Reset_Default, type: float}
+
   CMD:
     - { name: function, type: func_type }      # Main command category
     - { name: instruction, type: instruct_type }   # Read or Write
@@ -92,20 +102,3 @@ structs:
     - { name: air_speed, type: float }             # Pitot tube wind speed (m/s)
     - { name: rpm, type: float }                   # Motor revolutions per minute
     - { name: status, type: log_status }         # Integrity of the telemetry frame
-
-# Data for Battery Management and SOC estimation
-Battery:
-  - StandardVoltage: 4.2
-  - StandardMaxTemp: 80 # Degrees
-
-  - name: CHNL-6S-3300mAh-40C
-    # Datasheet infos
-    cell: 6
-    capacity: 3300
-
-    # SOC polynomial (4th Degree) from experimental data
-    SOCp0: 0
-    SOCp1: 0
-    SOCp2: 0
-    SOCp3: 0
-    SOCp4: 0

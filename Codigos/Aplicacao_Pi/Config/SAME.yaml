@@ -19,13 +19,12 @@ enums:
     - INSTR_DEFAULT # Logic link: default_action
 
   target_type:
-    # There's not a ic because -> ia+ib+ic = 0
     - TARGET_CURRENT_A
     - TARGET_CURRENT_B
+    - TARGET_CURRENT_C
     # These are terminal voltages
-    - TARGET_VOLTAGE_A
-    - TARGET_VOLTAGE_B
-    - TARGET_VOLTAGE_C
+    - TARGET_VOLTAGE_AB
+    - TARGET_VOLTAGE_BC
     # MOTOR PARAMETERS
     - TARGET_POLES_PAIRS 
     - TARGET_RESISTANCE
@@ -62,6 +61,16 @@ enums:
     - STATUS_NONE # Don't care
 
 structs:
+
+  SENSORS:
+    - { name: SensorTarget, type: target_type }
+    - { name: Linear_Coeff, type: float }
+    - { name: Offset_Coeff, type: float }
+    - { name: Max_Valid_Value, type: float }
+    - { name: Minimum_Valid_Value, type: float }
+    - { name: Linear_Coeff_Reset_Default, type: float}
+    - { name: Offset_Coeff_Reset_Default, type: float}
+
   CMD:
     - { name: function, type: func_type }      # Main command category
     - { name: instruction, type: instruct_type }   # Read or Write
@@ -87,34 +96,3 @@ structs:
     - { name: torque_eletrico, type: float }
     - { name: torque_helice, type: float }
     - { name: status, type: log_status }
-
-# Metadata for GUI and Simulation
-motors:
-  A-5025-310KV:
-    physical_params:
-      pole_pairs: 14
-      resistance_ohm: 0.045
-      inductance_henry: 0.00012
-      kv_rating: 310 
-    smo_config:
-      ks1: 2000.0
-      ks2: 3500.0
-      bemf_lpf_hz: 40.0
-      torque_filter_hz: 2.0
-
-  4020-630KV:
-    physical_params:
-      pole_pairs: 7
-      resistance_ohm: 0.082
-      inductance_henry: 0.000095
-      kv_rating: 630 
-    smo_config:
-      ks1: 1200.0
-      ks2: 2200.0
-      bemf_lpf_hz: 60.0
-      torque_filter_hz: 5.0
-
-system_defaults:
-  sampling_rate_hz: 10000    
-  pwm_frequency_hz: 20000    
-  deadtime_cycles: 48
