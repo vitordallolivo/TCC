@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 CONFIG_PLOT_SMO = True
-CONFIG_PLOT_PROPELLER_COEFFICIENT = True
+CONFIG_PLOT_PROPELLER_COEFFICIENT = False
 
 # ============================================================================
 # 1. PARÂMETROS DO MOTOR, CARGA E BATERIA
@@ -13,7 +13,7 @@ P = 24              # Polos
 p = P / 2           # Pares de polos
 Kv = 310.0          # RPM/V
 J = 0.001           # kg.m^2
-k_load = 5e-5       # N.m / (rad/s)^2
+k_load = 0.5e-3       # N.m / (rad/s)^2
 V_bus = 25.2        # 6S LiPo
 
 # Constantes de FEM
@@ -113,7 +113,7 @@ torque_est_lpf = np.zeros(N)
 # Ganhos de Base
 Ks1 = 80000.0   
 Kt  = 05000.0      # Amortecimento para evitar drift DC
-Ks2_min, Ks2_max = 200.0, 1000000.0
+Ks2_min, Ks2_max = 30_000.0, 100_000.0
 w_nom = 3000.0 * p * (np.pi/30)
 
 # Discretização
@@ -123,7 +123,7 @@ Gamma_s1 = Ks1 * Ts
 Phi_e    = 1.0 - Kt * Ts
 
 # Filtros
-alpha_w = (2 * np.pi * 40.0) * Ts
+alpha_w = (2 * np.pi * 10.0) * Ts
 alpha_bemf = 0.05        
 alpha_lpf_tq = 0.05      
 
@@ -158,6 +158,10 @@ for k in range(1, N):
     th_est = np.arctan2(e_hat_filt[0, k], -e_hat_filt[1, k])
     theta_est[k] = np.mod(th_est, 2*np.pi)
     
+    atraso_rad = omega_est[k-1]*(Ts/ alpha_bemf)
+    theta_est[k] = np.mod(th_est + atraso_rad, 2*np.pi)
+
+    
     dth = th_est - th_est_prev
     if dth > np.pi: dth -= 2*np.pi
     elif dth < -np.pi: dth += 2*np.pi
@@ -168,7 +172,10 @@ for k in range(1, N):
     
     # 4.6. Torque Estimado (Usando Potência Instantânea 1.5 * p / omega_e)
     w_safe = abs(omega_est[k]) if abs(omega_est[k]) > 10.0 else 10.0 
-    t_inst = (1.5 * p / w_safe) * (e_hat_filt[0, k] * i_hat[0, k] + e_hat_filt[1, k] * i_hat[1, k])
+
+    fa, fb = f_alpha(theta_est[k]), f_beta(theta_est[k])
+
+    t_inst = Ke* p * (fa * i_hat[0, k] + fb * i_hat[1, k])
     
     # O sinal pode vir invertido dependendo do referencial do arctan2
     # Se o Te real for positivo e o est for negativo, multiplique por -1
