@@ -323,9 +323,11 @@ class TinyTerminal(QWidget):
     def closeEvent(self, e):
         # Restaura o stdout original para evitar erros de I/O após fechar
         sys.stdout = self.old_stdout
-        # Garante que os mocks sejam desligados ao fechar o terminal
+        # Garante que os mocks/processos native_sim sejam desligados ao fechar o terminal
         self.eth.set_mock_mode("SIBA", False)
         self.eth.set_mock_mode("SAME", False)
+        self.eth.stop_native_sim("SIBA")
+        self.eth.stop_native_sim("SAME")
         e.accept()
 
     # --- Implementações de Comandos Específicos ---
@@ -406,9 +408,55 @@ class TinyTerminal(QWidget):
         self.quiet_mocks.discard("SIBA")
 
     def _cmd_same_mock_start(self, args): self._mock_hardware_flow("SAME", args)
-    def _cmd_same_mock_stop(self, args): 
+    def _cmd_same_mock_stop(self, args):
         self.eth.set_mock_mode("SAME", False)
         self.quiet_mocks.discard("SAME")
+
+    def _cmd_siba_native_start(self, args): self._native_sim_flow("SIBA")
+    def _cmd_siba_native_stop(self, args): self.eth.stop_native_sim("SIBA")
+    def _cmd_same_native_start(self, args): self._native_sim_flow("SAME")
+    def _cmd_same_native_stop(self, args): self.eth.stop_native_sim("SAME")
+
+    def _native_sim_flow(self, board):
+        """Sobe o binário REAL do firmware (`make native_sim` na pasta da
+        placa, gera `build_native_sim/zephyr/zephyr.exe`) como processo no
+        host e conversa com ele via UDP/loopback (127.0.0.1) — mesmas portas
+        do hardware físico. Diferente de 'mock', aqui não é um fake Python:
+        é o firmware de verdade (System_Manager/CMD_Core/NCI reais), útil
+        para validar o link UDP fim-a-fim sem placa/W-Link. Ver
+        SIBA/CLAUDE.md "Modo Mock (native_sim)" e Aplicacao_Pi/CLAUDE.md."""
+        # config_dir = .../Aplicacao_Pi/Config -> sobe 2 níveis para chegar em
+        # Codigos/, onde SIBA/ e SAME/ são pastas irmãs de Aplicacao_Pi/
+        board_dir = os.path.normpath(os.path.join(self.config_dir, "..", "..", board))
+        exe_path = os.path.normpath(os.path.join(board_dir, "build_native_sim", "zephyr", "zephyr.exe"))
+
+        self.append_log("SYS", f"Procurando binário native_sim de {board} em {exe_path}...", "#00BFFF")
+        if not os.path.exists(exe_path):
+            self.append_log("ERR", f"Binário não encontrado. Rode 'make native_sim' em {board}/.", "#FF4500")
+            return
+
+        if self.eth.start_native_sim(board, exe_path):
+            self.append_log("SYS", f"Firmware {board} (native_sim) rodando em 127.0.0.1.", "#ADFF2F")
+            self.append_log("SYS", "Esse é o FIRMWARE DE VERDADE (não um fake) — testa TX/RX UDP reais.", "#DCDCDC")
+        else:
+            self.append_log("ERR", f"Falha ao iniciar native_sim para {board} (ver console).", "#FF4500")
+
+    def _cmd_siba_test_io(self, args): self._test_io_flow("SIBA")
+    def _cmd_same_test_io(self, args): self._test_io_flow("SAME")
+
+    def _test_io_flow(self, board):
+        """Testa RX e TX da placa de forma isolada — envia um CMD neutro e
+        verifica se o socket conseguiu transmitir (TX) e se chegou algum
+        pacote de telemetria dentro do timeout (RX). Funciona com mock,
+        native_sim ou hardware real (eth.test_io só observa contadores do
+        BoardWorker)."""
+        self.append_log("SYS", f"Testando RX/TX de {board} (aguarde ~2s)...", "#00BFFF")
+        result = self.eth.test_io(board, timeout=2.0)
+        tx_color = "#32CD32" if result["tx_ok"] else "#FF4500"
+        rx_color = "#32CD32" if result["rx_ok"] else "#FF4500"
+        self.append_log("TEST", f"TX (PC -> {board}): {'OK' if result['tx_ok'] else 'FALHOU'}", tx_color)
+        self.append_log("TEST", f"RX ({board} -> PC): {'OK' if result['rx_ok'] else 'FALHOU'} "
+                                 f"({result['rx_packets']} pacote(s))", rx_color)
 
     def _mock_hardware_flow(self, board, args):
         """Ativa o modo MOCK no gerenciador de rede."""

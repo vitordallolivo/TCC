@@ -18,20 +18,8 @@ void Log_Manager_Init(void)
     current_log.status = LOG_VALID;
     k_mutex_unlock(&log_mutex);
 
-    /* Registra thread no TCKEC */
-    ossi_msg_t req = {
-        .target   = TARGET_TCKEC,
-        .req_type = REQ_TYPE_TCKEC_CREATE_THREAD,
-    };
-    req.payload.tckec_req.thread_id   = LOG_MANAGER_THREAD_ID;
-    req.payload.tckec_req.entry_point = Log_Manager_thread_fn;
-    req.payload.tckec_req.priority    = LOG_MANAGER_PRIO;
-    req.payload.tckec_req.p1 = NULL;
-    req.payload.tckec_req.p2 = NULL;
-    req.payload.tckec_req.p3 = NULL;
-    OSSI_Send(&req);
-
-    LOG_INF("Log_Manager inicializado");
+    LOG_INF("Log_Manager inicializado (TX a cada %d ms via System_Manager)",
+            LOG_MANAGER_PERIOD_MS);
 }
 
 void Log_Manager_Update(uint32_t sensor_id, float value)
@@ -67,34 +55,27 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
 }
 
 /*
- * Log_Manager_thread_fn
- * Acorda a cada LOG_MANAGER_PERIOD_MS, monta o pacote e envia via OSSI→NCI.
- * O NCI TX vai serializar o raw[] diretamente para UDP.
+ * Log_Manager_Transmit
+ * Monta o pacote TELEMETRY_LOG e envia via OSSI→NCI (UDP). Chamada
+ * periodicamente (a cada LOG_MANAGER_PERIOD_MS) pela thread única do
+ * System_Manager — ver System_Manager_thread_fn.
  */
-void Log_Manager_thread_fn(void *p1, void *p2, void *p3)
+void Log_Manager_Transmit(void)
 {
-    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
-
-    LOG_INF("Log_Manager thread iniciada (%d ms)", LOG_MANAGER_PERIOD_MS);
-
     _Static_assert(sizeof(TELEMETRY_LOG) <= 128,
                    "TELEMETRY_LOG excede payload do OSSI");
 
-    while (1) {
-        k_sleep(K_MSEC(LOG_MANAGER_PERIOD_MS));
+    ossi_msg_t msg = {
+        .target   = TARGET_NETWORK,
+        .req_type = REQ_TYPE_NET_SEND_TELEMETRY,
+    };
 
-        ossi_msg_t msg = {
-            .target   = TARGET_NETWORK,
-            .req_type = REQ_TYPE_NET_SEND_TELEMETRY,
-        };
+    k_mutex_lock(&log_mutex, K_FOREVER);
+    current_log.timestamp = k_uptime_get_32();
+    memcpy(msg.payload.raw, &current_log, sizeof(TELEMETRY_LOG));
+    k_mutex_unlock(&log_mutex);
 
-        k_mutex_lock(&log_mutex, K_FOREVER);
-        current_log.timestamp = k_uptime_get_32();
-        memcpy(msg.payload.raw, &current_log, sizeof(TELEMETRY_LOG));
-        k_mutex_unlock(&log_mutex);
-
-        if (OSSI_Send(&msg) != 0) {
-            LOG_WRN("Log_Manager: fila NCI cheia, frame descartado");
-        }
+    if (OSSI_Send(&msg) != 0) {
+        LOG_WRN("Log_Manager: fila NCI cheia, frame descartado");
     }
 }

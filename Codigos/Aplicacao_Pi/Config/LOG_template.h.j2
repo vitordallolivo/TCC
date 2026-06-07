@@ -50,6 +50,10 @@ void Log_Manager_thread_fn(void *p1, void *p2, void *p3);
 /* Retorna cópia thread-safe do último log */
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
 
+/* Serializa e envia o snapshot atual via OSSI→NCI (chamado por
+ * System_Manager_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
+void Log_Manager_Transmit(void);
+
 #define LOG_MANAGER_THREAD_ID   40
 #define LOG_MANAGER_PRIO         6
 #define LOG_MANAGER_PERIOD_MS  100   /* 10 Hz */

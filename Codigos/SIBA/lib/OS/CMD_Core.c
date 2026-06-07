@@ -2,6 +2,7 @@
 #include "CMD.h"
 #include "HAL.h"
 #include "Battery_Manager.h"
+#include "Propeller_Manager.h"
 #include "Security_Manager.h"
 #include "Log_Manager.h"
 #include <zephyr/kernel.h>
@@ -16,7 +17,7 @@ static SENSORS sensor_cfg[11];  /* índice = target_id */
 static void handle_func_start(const CMD *cmd)
 {
     switch (cmd->target_id) {
-        case TARGET_LOAD_CELL_0_enum ... TARGET_LOAD_CELL_6_enum:
+        case TARGET_LOAD_CELL_0_enum ... TARGET_LOAD_CELL_5_enum:
             /* Células de carga iniciam automaticamente via HX711 thread */
             LOG_INF("CMD: START load_cell[%d] — já ativo", cmd->target_id);
             break;
@@ -35,14 +36,12 @@ static void handle_func_stop(const CMD *cmd)
 
 static void handle_func_esc(const CMD *cmd)
 {
-    /* value = throttle 0.0-100.0% */
+    /* value = throttle 0.0-100.0%
+     * O pedido passa pelo Propeller_Manager (em vez de chamar o HAL
+     * diretamente): ele arma o ESC se preciso e sobrescreve/reduz o PWM
+     * sempre que a corrente do motor ultrapassar o limite configurado. */
     if (cmd->instruction == INSTR_WRITE) {
-        int r = HAL_ESC_Set_Throttle(cmd->value);
-        if (r == -EPERM) {
-            LOG_WRN("CMD ESC: ESC não armado, armando agora...");
-            HAL_ESC_Arm();
-            HAL_ESC_Set_Throttle(cmd->value);
-        }
+        Propeller_Manager_Request_Throttle(cmd->value);
     }
 }
 
@@ -64,6 +63,31 @@ static void handle_func_battery(const CMD *cmd)
     }
 }
 
+/* Aplica Linear_Coeff/Offset_Coeff ao hardware do sensor `tid`, de forma
+ * genérica — célula de carga (HX711) ou sensor analógico (ADC). `sensor_cfg[]`
+ * (struct SENSORS, Common_Types.h/Log_Manager.h) é a fonte única de verdade
+ * para os coeficientes; aqui só decidimos para qual driver empurrá-los.
+ * SENSOR_ID_SOC não tem hardware próprio (calculado via polinômio pelo
+ * Battery_Manager) — não recebe calibração linear/offset. */
+static void apply_sensor_calib(int8_t tid, float linear, float offset)
+{
+    switch (tid) {
+        case SENSOR_ID_LOAD_CELL_0 ... SENSOR_ID_LOAD_CELL_5:
+            HAL_HX711_Set_Calib((uint8_t)tid, linear, offset);
+            break;
+
+        case SENSOR_ID_V_BATT:
+        case SENSOR_ID_I_BATT:
+        case SENSOR_ID_TEMPERATURE_BATTERY:
+        case SENSOR_ID_AIR_SPEED:
+            HAL_ADC_Set_Calib((uint8_t)tid, linear, offset);
+            break;
+
+        default:
+            break;
+    }
+}
+
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
@@ -78,26 +102,21 @@ static void handle_func_sensor(const CMD *cmd)
     switch (act) {
         case DEFAULT_ACTION_SENSE_LINEAR_COEF:
             s->Linear_Coeff = cmd->value;
-            /* Aplica no HX711 se for célula de carga */
-            if (tid <= 5) {
-                HAL_HX711_Set_Calib((uint8_t)tid, s->Linear_Coeff, s->Offset_Coeff);
-            }
+            apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
             LOG_INF("CMD SENSOR[%d]: linear=%.4f", tid, (double)cmd->value);
             break;
 
         case DEFAULT_ACTION_SENSE_OFFSET_COEF:
             s->Offset_Coeff = cmd->value;
-            if (tid <= 5) {
-                HAL_HX711_Set_Calib((uint8_t)tid, s->Linear_Coeff, s->Offset_Coeff);
-            }
+            apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
             LOG_INF("CMD SENSOR[%d]: offset=%.4f", tid, (double)cmd->value);
             break;
 
         case DEFAULT_ACTION_SENSE_RESET_DEFAULT:
             s->Linear_Coeff = s->Linear_Coeff_Reset_Default;
             s->Offset_Coeff = s->Offset_Coeff_Reset_Default;
+            apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
             if (tid <= 5) {
-                HAL_HX711_Set_Calib((uint8_t)tid, s->Linear_Coeff, s->Offset_Coeff);
                 HAL_HX711_Tare((uint8_t)tid);
             }
             LOG_INF("CMD SENSOR[%d]: reset default", tid);

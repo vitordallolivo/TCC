@@ -51,6 +51,17 @@ commands:
       start: { help: "Inicia simulação interna de motor" }
       stop: { help: "Retorna para leitura de sensores reais" }
 
+    # Firmware real via native_sim — placeholder: SAME ainda não tem alvo
+    # native_sim equivalente ao da SIBA (ver TODO "SAME board" no
+    # SIBA/CLAUDE.md); o comando existe para quando essa estrutura for criada.
+    native:
+      help: "Firmware real via native_sim: same native [start|stop] (ainda não disponível p/ SAME)"
+      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
+      stop:  { help: "Encerra o processo do firmware native_sim" }
+
+    test_io:
+      help: "Testa RX/TX da SAME isoladamente (envia CMD neutro, espera telemetria)"
+
     # Calibração e Parâmetros
     set:
       help: "Ajuste de parâmetros: same set [target] [action] [value]"
@@ -88,6 +99,16 @@ commands:
       help: "Simulação: siba mock [start|stop]"
       start: { help: "Inicia geração de dados randômicos" }
       stop: { help: "Retorna para leitura de sensores físicos" }
+
+    # Firmware real rodando como processo (native_sim) — ver SIBA/CLAUDE.md
+    # "Modo Mock (native_sim)" e Aplicacao_Pi/CLAUDE.md
+    native:
+      help: "Firmware real via native_sim: siba native [start|stop] (requer 'make native_sim' em SIBA/)"
+      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
+      stop:  { help: "Encerra o processo do firmware native_sim" }
+
+    test_io:
+      help: "Testa RX/TX da SIBA isoladamente (envia CMD neutro, espera telemetria)"
 
     # Calibração e Parâmetros (Padrão SAME)
     set:

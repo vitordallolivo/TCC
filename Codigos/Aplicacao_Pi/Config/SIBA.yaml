@@ -23,18 +23,24 @@ enums:
     - INSTR_NONE
     - INSTR_DEFAULT # Logic link: default_action / battery_action
 
+  # ATENÇÃO: a ordem/índice aqui precisa bater 1:1 com SENSOR_ID_* em
+  # Log_Manager.h (gerado a partir de SENSORS abaixo) — CMD_Core.c usa
+  # cmd->target_id diretamente como índice de sensor_cfg[]/adc_calib[]
+  # (ver apply_sensor_calib em CMD_Core.c). Qualquer descompasso aqui faz
+  # a calibração ser aplicada ao sensor errado silenciosamente.
   target_type:
-    - TARGET_LOAD_CELL_0_enum
-    - TARGET_LOAD_CELL_1_enum
-    - TARGET_LOAD_CELL_2_enum
-    - TARGET_LOAD_CELL_3_enum
-    - TARGET_LOAD_CELL_4_enum
-    - TARGET_LOAD_CELL_5_enum
-    - TARGET_LOAD_CELL_6_enum
-    - TARGET_VOLTAGE_DIVIDOR
-    - TARGET_CURRENT_SENSOR
-    - TARGET_PITOT_TUBE
-    - TARGET_DEFAULT
+    - TARGET_LOAD_CELL_0_enum     # 0  -> SENSOR_ID_LOAD_CELL_0
+    - TARGET_LOAD_CELL_1_enum     # 1  -> SENSOR_ID_LOAD_CELL_1
+    - TARGET_LOAD_CELL_2_enum     # 2  -> SENSOR_ID_LOAD_CELL_2
+    - TARGET_LOAD_CELL_3_enum     # 3  -> SENSOR_ID_LOAD_CELL_3
+    - TARGET_LOAD_CELL_4_enum     # 4  -> SENSOR_ID_LOAD_CELL_4
+    - TARGET_LOAD_CELL_5_enum     # 5  -> SENSOR_ID_LOAD_CELL_5
+    - TARGET_VOLTAGE_DIVIDOR      # 6  -> SENSOR_ID_V_BATT
+    - TARGET_CURRENT_SENSOR       # 7  -> SENSOR_ID_I_BATT
+    - TARGET_BATTERY_SOC          # 8  -> SENSOR_ID_SOC (sem hardware/calibração própria — placeholder de alinhamento)
+    - TARGET_TEMPERATURE_SENSOR   # 9  -> SENSOR_ID_TEMPERATURE_BATTERY
+    - TARGET_PITOT_TUBE           # 10 -> SENSOR_ID_AIR_SPEED
+    - TARGET_DEFAULT              # 11 -> alvo genérico (START/STOP/RESET)
 
   status_type:
     - STATUS_OK

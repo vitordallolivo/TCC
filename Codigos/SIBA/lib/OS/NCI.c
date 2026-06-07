@@ -45,9 +45,9 @@ void nci_tx_thread(void *p1, void *p2, void *p3)
                                     (struct sockaddr *)&peer,
                                     sizeof(peer));
         if (sent < 0) {
-            LOG_ERR("NCI TX: sendto falhou %d", errno);
+            // LOG_ERR("NCI TX: sendto falhou %d", errno);
         } else {
-            LOG_DBG("NCI TX: %d bytes enviados", (int)sent);
+            // LOG_DBG("NCI TX: %d bytes enviados", (int)sent);
         }
     }
 }
@@ -100,7 +100,7 @@ void nci_rx_thread(void *p1, void *p2, void *p3)
         rx_msg.payload.cmd_req.len = copy;
 
         if (OSSI_Send(&rx_msg) != 0) {
-            LOG_ERR("NCI RX: OSSI cheio, CMD descartado");
+            // LOG_ERR("NCI RX: OSSI cheio, CMD descartado");
         }
     }
 }

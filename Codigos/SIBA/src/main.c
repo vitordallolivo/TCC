@@ -11,8 +11,11 @@
 /* SYS */
 #include "System_Manager.h"
 #include "Battery_Manager.h"
+#include "Propeller_Manager.h"
 #include "Security_Manager.h"
 #include "Log_Manager.h"
+/* Test_Shell.c registra comandos no Zephyr Shell estaticamente — basta estar
+ * linkado (ver lib/SYS/Test_Shell.c), nenhum include/init aqui é necessário */
 
 LOG_MODULE_REGISTER(siba_main, LOG_LEVEL_INF);
 
@@ -26,6 +29,7 @@ int main(void)
     /* 2. SYS — inicializa subsistemas antes de receber dados */
     Security_Manager_Init();
     Battery_Manager_Init();
+    Propeller_Manager_Init();
 
     /* 3. Log_Manager — registra thread via TCKEC */
     Log_Manager_Init();

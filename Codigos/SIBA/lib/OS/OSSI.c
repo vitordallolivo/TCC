@@ -52,7 +52,7 @@ int OSSI_Send(ossi_msg_t *msg) {
     }
 
     if (ret == 0) {
-        LOG_DBG("Msg roteada com sucesso para target %d", msg->target);
+        // LOG_DBG("Msg roteada com sucesso para target %d", msg->target);
     }
 
     return ret;

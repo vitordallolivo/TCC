@@ -31,6 +31,14 @@
         };
     };
 
+    /* Canais analógicos extras do ADC1 — leitura em scan circular via DMA
+     * (mesmo canal/DMA do adc1, ver adc_ch32v307.c). IMPORTANTE: o periférico
+     * ADC1 do CH32V307 só enxerga os canais 0-7, fisicamente ligados aos
+     * pinos PA0-PA7 (canais 8+ — PB0/PB1/PC0-PC5 — pertencem ao mux do ADC2,
+     * que este driver custom não suporta). Por isso o HX711 foi remapeado
+     * para a Porta E (ver hx711_sck_pins/hx711_dout_pins), liberando
+     * PA1-PA7 inteiramente para o ADC1. Pinagem ainda placeholder — confirmar
+     * no esquemático e atualizar junto de HAL.c::adc_ch_cfg / HW.md. */
     adc1: adc@40012400 {
         compatible = "wch,adc";
         reg = <0x40012400 0x400>; 
@@ -87,16 +95,19 @@
         pwms = <&pwm4 1 PWM_USEC(20000) PWM_POLARITY_NORMAL>;
     };
 
-    /* HX711 x6 — bit-bang GPIO. Pinagem placeholder (ver tabela em CLAUDE.md);
+    /* HX711 x6 — bit-bang GPIO (sem função alternada — qualquer GPIO serve).
+     * Remapeado para a Porta E (estava em PA1-PA6/PB1-PB5/PC0) para liberar
+     * PA1-PA7 inteiramente para o ADC1 (canais 0-7 — ver comentário no nó
+     * adc1). Pinagem ainda placeholder (ver tabela em CLAUDE.md/HW.md);
      * confirmar no esquemático e atualizar junto de HAL.c::hx711_sck/hx711_dout. */
     hx711_sck_pins: hx711-sck-pins {
         compatible = "siba,gpio-array";
-        gpios = <&gpioa 1 GPIO_ACTIVE_HIGH>,   /* HX711[0] PA1 */
-                <&gpioa 3 GPIO_ACTIVE_HIGH>,   /* HX711[1] PA3 */
-                <&gpioa 5 GPIO_ACTIVE_HIGH>,   /* HX711[2] PA5 */
-                <&gpiob 1 GPIO_ACTIVE_HIGH>,   /* HX711[3] PB1 */
-                <&gpiob 3 GPIO_ACTIVE_HIGH>,   /* HX711[4] PB3 */
-                <&gpiob 5 GPIO_ACTIVE_HIGH>;   /* HX711[5] PB5 */
+        gpios = <&gpioe 2 GPIO_ACTIVE_HIGH>,   /* HX711[0] PE2 */
+                <&gpioe 3 GPIO_ACTIVE_HIGH>,   /* HX711[1] PE3 */
+                <&gpioe 4 GPIO_ACTIVE_HIGH>,   /* HX711[2] PE4 */
+                <&gpioe 5 GPIO_ACTIVE_HIGH>,   /* HX711[3] PE5 */
+                <&gpioe 6 GPIO_ACTIVE_HIGH>,   /* HX711[4] PE6 */
+                <&gpioe 7 GPIO_ACTIVE_HIGH>;   /* HX711[5] PE7 */
     };
 
     /* RPM — TIM3 CH3 / PB0 (sem remap). Configurado como entrada flutuante;
@@ -110,12 +121,12 @@
 
     hx711_dout_pins: hx711-dout-pins {
         compatible = "siba,gpio-array";
-        gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>,   /* HX711[0] PA2 */
-                <&gpioa 4 GPIO_ACTIVE_HIGH>,   /* HX711[1] PA4 */
-                <&gpioa 6 GPIO_ACTIVE_HIGH>,   /* HX711[2] PA6 */
-                <&gpiob 2 GPIO_ACTIVE_HIGH>,   /* HX711[3] PB2 */
-                <&gpiob 4 GPIO_ACTIVE_HIGH>,   /* HX711[4] PB4 */
-                <&gpioc 0 GPIO_ACTIVE_HIGH>;   /* HX711[5] PC0 */
+        gpios = <&gpioe 8 GPIO_ACTIVE_HIGH>,   /* HX711[0] PE8 */
+                <&gpioe 9 GPIO_ACTIVE_HIGH>,   /* HX711[1] PE9 */
+                <&gpioe 10 GPIO_ACTIVE_HIGH>,  /* HX711[2] PE10 */
+                <&gpioe 11 GPIO_ACTIVE_HIGH>,  /* HX711[3] PE11 */
+                <&gpioe 12 GPIO_ACTIVE_HIGH>,  /* HX711[4] PE12 */
+                <&gpioe 13 GPIO_ACTIVE_HIGH>;  /* HX711[5] PE13 */
     };
 
 };
@@ -128,7 +139,22 @@
 
     adc1_default: adc1_default {
         group1 {
-            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>;
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>;   /* CH0 — expansão (genérico) */
+        };
+        /* Canais extras — todos em PA1-PA4 (canais 1-4), dentro do range
+         * físico do ADC1 (CH0-CH7 = PA0-PA7). Pinagem placeholder — ver
+         * comentário no nó adc1. PA5-PA7 (CH5-CH7) seguem livres p/ expansão. */
+        group2 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>;   /* CH1 — v_batt (divisor de tensão) */
+        };
+        group3 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 2, ADC1, 0)>;   /* CH2 — i_batt (ACS758) */
+        };
+        group4 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC1, 0)>;   /* CH3 — temperature_battery (termistor NTC) */
+        };
+        group5 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 4, ADC1, 0)>;   /* CH4 — air_speed (MPXV7002DP) */
         };
     };
 

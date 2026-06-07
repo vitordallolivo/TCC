@@ -154,6 +154,12 @@ class BoardWorker(threading.Thread):
         self.callback = callback
         self.tx_queue = queue.Queue() # Buffer de comandos TX
         self.running = True
+        # Contadores simples de RX/TX — usados por EthernetManager.test_io()
+        # para validar cada via (recepção/transmissão) isoladamente, sem
+        # depender do callback/parsing da GUI.
+        self.rx_count = 0
+        self.tx_count = 0
+        self.last_rx_time = 0.0
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -169,8 +175,10 @@ class BoardWorker(threading.Thread):
                 # 1. RX Logic (Recebe Telemetria)
                 try:
                     data, addr = sock.recvfrom(2048)
-                    # No modo Mock, aceita de localhost. No real, filtra pelo IP.
+                    # No modo Mock/native_sim, aceita de localhost. No real, filtra pelo IP.
                     if addr[0] == self.ip or addr[0] == '127.0.0.1':
+                        self.rx_count += 1
+                        self.last_rx_time = time.time()
                         self.callback(self.name_board, data, addr)
                 except (socket.timeout, OSError):
                     pass
@@ -182,6 +190,7 @@ class BoardWorker(threading.Thread):
                         # Se o IP for localhost, manda localmente
                         target_ip = '127.0.0.1' if self.ip == '127.0.0.1' else self.ip
                         sock.sendto(payload, (target_ip, self.tx_port))
+                        self.tx_count += 1
                 except Exception as e:
                     print(f"[ERRO] Falha TX {self.name_board}: {e}")
 
@@ -195,6 +204,14 @@ class EthernetManager:
         self.workers = {}
         self.simulators = {}
         self.mock_enabled = {"SIBA": False, "SAME": False}
+        # Processos reais de firmware rodando via `native_sim` (zephyr.exe),
+        # ver set_native_sim_mode/start_native_sim — alternativa ao
+        # BoardSimulator (fake em Python) que conversa com o FIRMWARE DE
+        # VERDADE compilado para POSIX, em loopback (127.0.0.1), pelas
+        # mesmas portas do hardware real (ver Aplicacao_Pi/CLAUDE.md).
+        self.native_procs = {}
+        self.native_log_threads = {}
+        self.native_enabled = {"SIBA": False, "SAME": False}
         self.callback = handle_callback
         # Carregamento de Configurações
         self.configs = {
@@ -295,6 +312,125 @@ class EthernetManager:
             # Restaura o IP real no worker
             worker.ip = getattr(worker, 'original_ip', worker.ip)
 
+    def start_native_sim(self, board, exe_path):
+        """Sobe o binário REAL do firmware (compilado para `native_sim`,
+        ver SIBA/Makefile `make native_sim` -> build_native_sim/zephyr/zephyr.exe)
+        como subprocesso e aponta o worker da placa para ele em loopback.
+
+        Diferente de set_mock_mode (que sobe um BoardSimulator — um fake em
+        Python que apenas finge telemetria), aqui é o FIRMWARE DE VERDADE
+        rodando como processo no host: as mesmas threads/filas OSSI/
+        System_Manager/CMD_Core/NCI reais trocam pacotes UDP de verdade
+        com o PC via NSOS (ver SIBA/CLAUDE.md "Modo Mock (native_sim)").
+        Hoje só a SIBA tem esse alvo (SAME ainda não — ver TODO "SAME board"
+        no CLAUDE.md da SIBA); a função é genérica para quando existir.
+        """
+        board = board.upper()
+        if board not in ["SIBA", "SAME"]:
+            return False
+        if board in self.native_procs:
+            print(f"[NATIVE_SIM] {board} já está rodando (PID {self.native_procs[board].pid}).")
+            return False
+        if not os.path.exists(exe_path):
+            print(f"[NATIVE_SIM] Binário não encontrado: {exe_path}")
+            print(f"[NATIVE_SIM] Compile com 'make native_sim' no diretório do firmware.")
+            return False
+
+        if board not in self.workers:
+            self.start_worker(board)
+        worker = self.workers[board]
+        worker.original_ip = worker.ip
+        worker.ip = '127.0.0.1'
+
+        try:
+            proc = subprocess.Popen(
+                [exe_path],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1
+            )
+        except Exception as e:
+            print(f"[NATIVE_SIM] Falha ao iniciar {board}: {e}")
+            worker.ip = getattr(worker, 'original_ip', worker.ip)
+            return False
+
+        self.native_procs[board] = proc
+        self.native_enabled[board] = True
+
+        def _relay_log():
+            for line in proc.stdout:
+                print(f"[{board}-native_sim] {line.rstrip()}")
+
+        t = threading.Thread(target=_relay_log, name=f"NativeSimLog_{board}", daemon=True)
+        t.start()
+        self.native_log_threads[board] = t
+
+        print(f"[NATIVE_SIM] {board} rodando como processo nativo (PID {proc.pid}) "
+              f"— comunicação real via 127.0.0.1, TX(PC->placa):{worker.tx_port} "
+              f"RX(placa->PC):{worker.rx_port}")
+        return True
+
+    def stop_native_sim(self, board):
+        """Encerra o processo do firmware nativo e restaura o IP do worker."""
+        board = board.upper()
+        proc = self.native_procs.pop(board, None)
+        self.native_enabled[board] = False
+        if proc is not None:
+            print(f"[NATIVE_SIM] Encerrando {board} (PID {proc.pid})...")
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        self.native_log_threads.pop(board, None)
+
+        if board in self.workers:
+            worker = self.workers[board]
+            worker.ip = getattr(worker, 'original_ip', worker.ip)
+
+    def test_io(self, board, timeout=2.0):
+        """Testa RX e TX de uma placa de forma isolada (independente da GUI).
+
+        TX: envia um CMD inofensivo (FUNC_START / INSTR_NONE / TARGET_DEFAULT)
+        e confirma que o worker conseguiu transmitir o pacote pelo socket.
+        RX: aguarda até `timeout` segundos por QUALQUER pacote recebido pelo
+        worker (ex.: TELEMETRY_LOG da placa) — útil para confirmar que o
+        link está vivo na direção placa->PC.
+
+        Funciona tanto com BoardSimulator (set_mock_mode) quanto com o
+        firmware real via native_sim (start_native_sim) ou hardware físico,
+        já que só observa os contadores do BoardWorker (ver rx_count/tx_count).
+        Retorna um dict {"tx_ok", "rx_ok", "rx_packets"}.
+        """
+        board = board.upper()
+        if board not in self.workers:
+            self.start_worker(board)
+        worker = self.workers[board]
+
+        rx_before = worker.rx_count
+        tx_before = worker.tx_count
+
+        # FUNC_START(0) / INSTR_NONE / TARGET_DEFAULT / value=0.0 / status=NONE
+        # — comando neutro, qualquer placa aceita sem efeito colateral.
+        test_cmd = struct.pack('<BBBfb', 0, 2, 10, 0.0, 2)
+        sent = self.send_command(board, test_cmd)
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if worker.tx_count > tx_before and worker.rx_count > rx_before:
+                break
+            time.sleep(0.05)
+
+        result = {
+            "tx_ok": bool(sent and worker.tx_count > tx_before),
+            "rx_ok": worker.rx_count > rx_before,
+            "rx_packets": worker.rx_count - rx_before,
+        }
+        print(f"[TEST_IO] {board}: TX {'OK' if result['tx_ok'] else 'FALHOU'}, "
+              f"RX {'OK' if result['rx_ok'] else 'FALHOU'} "
+              f"({result['rx_packets']} pacote(s) em {timeout:.1f}s)")
+        return result
+
     def start(self):
         """Inicia os workers de escuta em threads separadas."""
         if self.running: return
@@ -310,6 +446,8 @@ class EthernetManager:
 
     def stop(self):
         self.running = False
+        for board in list(self.native_procs.keys()):
+            self.stop_native_sim(board)
         for w in self.workers.values():
             w.running = False
             w.join(timeout=1.0)
