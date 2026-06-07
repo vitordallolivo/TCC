@@ -7,8 +7,8 @@ LOG_MODULE_REGISTER(tckec_core, LOG_LEVEL_DBG);
  * CONFIGURAÇÕES DO THREAD POOL
  * Define quantas threads dinâmicas o TCKEC pode gerenciar simultaneamente.
  * ------------------------------------------------------------- */
-#define MAX_MANAGED_THREADS 5
-#define MANAGED_THREAD_STACK_SIZE 1024
+#define MAX_MANAGED_THREADS 10
+#define MANAGED_THREAD_STACK_SIZE 2048
 
 /* Array de Stacks alocadas estaticamente na RAM (Seguro para RTOS) */
 K_THREAD_STACK_ARRAY_DEFINE(managed_stacks, MAX_MANAGED_THREADS, MANAGED_THREAD_STACK_SIZE);

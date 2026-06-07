@@ -60,12 +60,6 @@
         status = "okay";
         prescaler = <0>;
         
-        counter3: counter {
-            compatible = "wch,gptm-counter";
-            pinctrl-0 = <&tim3_ch3_pb0>;
-            pinctrl-names = "default";
-            status = "okay";
-        };
     };
 
     tim4: timer@40000800 {
@@ -85,6 +79,43 @@
             pinctrl-names = "default";
             status = "okay";
         };
+    };
+
+    /* ESC — TIM4 CH1 (PB6), 50Hz / período 20ms (ver HAL_ESC_*) */
+    esc_motor: esc-motor {
+        compatible = "siba,pwm-consumer";
+        pwms = <&pwm4 1 PWM_USEC(20000) PWM_POLARITY_NORMAL>;
+    };
+
+    /* HX711 x6 — bit-bang GPIO. Pinagem placeholder (ver tabela em CLAUDE.md);
+     * confirmar no esquemático e atualizar junto de HAL.c::hx711_sck/hx711_dout. */
+    hx711_sck_pins: hx711-sck-pins {
+        compatible = "siba,gpio-array";
+        gpios = <&gpioa 1 GPIO_ACTIVE_HIGH>,   /* HX711[0] PA1 */
+                <&gpioa 3 GPIO_ACTIVE_HIGH>,   /* HX711[1] PA3 */
+                <&gpioa 5 GPIO_ACTIVE_HIGH>,   /* HX711[2] PA5 */
+                <&gpiob 1 GPIO_ACTIVE_HIGH>,   /* HX711[3] PB1 */
+                <&gpiob 3 GPIO_ACTIVE_HIGH>,   /* HX711[4] PB3 */
+                <&gpiob 5 GPIO_ACTIVE_HIGH>;   /* HX711[5] PB5 */
+    };
+
+    /* RPM — TIM3 CH3 / PB0 (sem remap). Configurado como entrada flutuante;
+     * o periférico TIM3 lê o pino diretamente em modo input capture (não
+     * requer função alternada de GPIO, apenas que o pino esteja em modo
+     * entrada — ver HAL_RPM_Init em HAL.c). */
+    rpm_capture_pin: rpm-capture-pin {
+        compatible = "siba,gpio-array";
+        gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>;   /* TIM3_CH3 PB0 */
+    };
+
+    hx711_dout_pins: hx711-dout-pins {
+        compatible = "siba,gpio-array";
+        gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>,   /* HX711[0] PA2 */
+                <&gpioa 4 GPIO_ACTIVE_HIGH>,   /* HX711[1] PA4 */
+                <&gpioa 6 GPIO_ACTIVE_HIGH>,   /* HX711[2] PA6 */
+                <&gpiob 2 GPIO_ACTIVE_HIGH>,   /* HX711[3] PB2 */
+                <&gpiob 4 GPIO_ACTIVE_HIGH>,   /* HX711[4] PB4 */
+                <&gpioc 0 GPIO_ACTIVE_HIGH>;   /* HX711[5] PC0 */
     };
 
 };

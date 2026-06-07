@@ -1,10 +1,11 @@
-#ifndef COMMANDS_H
-#define COMMANDS_H
+#ifndef CMD_H
+#define CMD_H
 
 #include "Common_Types.h"
 #include <stdint.h>
 
-/* --- Auto-generated Struct: CMD --- */
+/* Auto-generated — edite SIBA.yaml, não este arquivo */
+
 typedef struct __attribute__((packed)) {
 
     func_type function;
@@ -19,4 +20,4 @@ typedef struct __attribute__((packed)) {
 
 } CMD;
 
-#endif // COMMANDS_H
+#endif /* CMD_H */
