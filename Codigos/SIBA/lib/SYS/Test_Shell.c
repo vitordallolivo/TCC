@@ -10,50 +10,28 @@
  * pela rede UDP — útil para validar HX711/ESC/RPM/Battery/Propeller sem
  * depender do link com o PC.
  *
- * A maioria dos comandos monta uma struct CMD e injeta em fila_cmd via OSSI
- * (mesmo caminho que NCI_RX usa ao receber um pacote — ver NCI.c), reusando
- * o CMD_Core como dispatcher único. Ações sem equivalente em CMD.h (tara
- * avulsa de célula, contagem de células, limite de corrente do motor) chamam
- * o HAL/managers diretamente.
+ * IMPORTANTE — camadas: o shell é Application e fala diretamente com a
+ * camada Sys (managers) ou, quando inevitável, com o HAL — NUNCA injeta
+ * CMD em fila_cmd/CMD_Core. CMD existe só para o protocolo de rede com o
+ * PC (ver CLAUDE.md "Application -> Sys -> OS"); reusar esse caminho aqui
+ * exporia o OS para a Application e duplicaria/desalinharia a lógica dos
+ * managers (ex.: taração de célula é decisão do Sys, não do HAL).
  *
  * Digite "siba" + TAB no terminal serial para ver a lista de subcomandos.
  */
 
 #include "Test_Shell.h"
-#include "OSSI.h"
-#include "CMD.h"
 #include "HAL.h"
 #include "Battery_Manager.h"
 #include "Propeller_Manager.h"
+#include "Security_Manager.h"
 #include "Log_Manager.h"
 #include <zephyr/kernel.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/shell/shell.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-
-/* ===========================================================
- * Injeta um CMD em fila_cmd via OSSI — mesmo caminho do NCI_RX
- * (ver lib/OS/NCI.c), reaproveitando o dispatcher do CMD_Core.
- * =========================================================== */
-static void shell_send_cmd(func_type func, instruct_type instr, int8_t target_id,
-                           float value, int8_t action)
-{
-    CMD cmd = {
-        .function         = func,
-        .instruction      = instr,
-        .target_id        = target_id,
-        .value            = value,
-        .action_or_status = action,
-    };
-
-    ossi_msg_t msg = { .target = TARGET_CMD, .req_type = REQ_TYPE_CMD_PARSE };
-
-    memcpy(msg.payload.cmd_req.buffer, &cmd, sizeof(cmd));
-    msg.payload.cmd_req.len = sizeof(cmd);
-
-    OSSI_Send(&msg);
-}
 
 static int cmd_read(const struct shell *sh, size_t argc, char **argv)
 {
@@ -62,7 +40,8 @@ static int cmd_read(const struct shell *sh, size_t argc, char **argv)
 
     TELEMETRY_LOG snap = Log_Manager_Get_Snapshot();
 
-    shell_print(sh, "t=%u ms  status=%d", snap.timestamp, (int)snap.status);
+    shell_print(sh, "t=%u ms  status=%d  error_code=0x%08X",
+                snap.timestamp, (int)snap.status, snap.error_code);
     shell_print(sh, "  load_cell[0..5] = %.2f %.2f %.2f %.2f %.2f %.2f",
                 (double)snap.load_cell_0, (double)snap.load_cell_1, (double)snap.load_cell_2,
                 (double)snap.load_cell_3, (double)snap.load_cell_4, (double)snap.load_cell_5);
@@ -71,6 +50,92 @@ static int cmd_read(const struct shell *sh, size_t argc, char **argv)
                 (double)snap.temperature_battery);
     shell_print(sh, "  air_speed=%.2f m/s   rpm=%.1f", (double)snap.air_speed, (double)snap.rpm);
 
+    return 0;
+}
+
+/* ===========================================================
+ * siba sensors — lista verbosa de TODOS os sensores: valor
+ * convertido (mesmo dado que vai pro TELEMETRY_LOG) + leitura
+ * bruta direto do HAL, útil para diagnosticar hardware vs.
+ * conversão/calibração.
+ * =========================================================== */
+static int cmd_sensors(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+
+    shell_print(sh, "=== Celulas de carga (HX711, bruto / convertido em gramas) ===");
+    for (uint8_t i = 0; i < 6; i++) {
+        shell_print(sh, "  [%u] raw=%d  grams=%.2f", i,
+                    HAL_HX711_Get_Raw(i), (double)HAL_HX711_Get_Grams(i));
+    }
+
+    shell_print(sh, "=== ADC (bruto 12 bits / valor fisico convertido) ===");
+    shell_print(sh, "  v_batt           raw=%u  -> %.2f V",
+                HAL_ADC_Get(HAL_ADC_IDX_V_BATT),    (double)HAL_ADC_Get_VBatt());
+    shell_print(sh, "  i_batt           raw=%u  -> %.2f A",
+                HAL_ADC_Get(HAL_ADC_IDX_I_BATT),    (double)HAL_ADC_Get_IBatt());
+    shell_print(sh, "  temperature_batt raw=%u  -> %.1f C",
+                HAL_ADC_Get(HAL_ADC_IDX_TEMP_BATT), (double)HAL_ADC_Get_Temperature_Batt());
+    shell_print(sh, "  air_speed        raw=%u  -> %.2f m/s",
+                HAL_ADC_Get(HAL_ADC_IDX_AIR_SPEED), (double)HAL_ADC_Get_Air_Speed());
+
+    shell_print(sh, "=== Outros ===");
+    shell_print(sh, "  soc   = %.1f %% (cell_count=%u)",
+                (double)Log_Manager_Get_Snapshot().soc, Battery_Manager_Get_Cell_Count());
+    shell_print(sh, "  rpm   = %.1f", (double)HAL_RPM_Get());
+    shell_print(sh, "  rele  = %s (comandado)", Battery_Manager_Get_Relay() ? "ligado" : "desligado");
+
+    return 0;
+}
+
+/* ===========================================================
+ * siba error — mostra o uint32_t agregado pelo Security_Manager
+ * (mesmo campo TELEMETRY_LOG.error_code, em HEX) já decodificado
+ * bit a bit — ver Security_Manager.h "siba_error_bit_t".
+ * =========================================================== */
+struct error_bit_info {
+    uint32_t            bit;
+    const char         *name;
+    const char         *descr;
+};
+
+static const struct error_bit_info error_bits[] = {
+    { ERROR_BATT_LOW_SOC,                "BATT_LOW_SOC",                "SOC abaixo do limite de alerta" },
+    { ERROR_BATT_POLY_MISCONFIGURED,     "BATT_POLY_MISCONFIGURED",     "polinomio SOC produz valores absurdos" },
+    { ERROR_BATT_LOW_VOLTAGE,            "BATT_LOW_VOLTAGE",            "tensao por celula proxima do limite" },
+    { ERROR_BATT_RELAY_MISMATCH,         "BATT_RELAY_MISMATCH",         "corrente flui com o role desligado" },
+    { ERROR_BATT_OVER_TEMPERATURE,       "BATT_OVER_TEMPERATURE",       "temperatura da bateria acima do limite" },
+    { ERROR_PROP_LOAD_CELL_NOT_CONFIGURED, "PROP_LOAD_CELL_NOT_CONFIGURED", "celula(s) sem calibracao valida" },
+    { ERROR_PROP_LOAD_CELL_NOT_CONNECTED,  "PROP_LOAD_CELL_NOT_CONNECTED",  "HX711 nao responde (leitura ~0xFF)" },
+    { ERROR_PROP_OVERCURRENT,            "PROP_OVERCURRENT",            "corrente do motor acima do limite" },
+    { ERROR_SEC_VOLTAGE_OUT_OF_RANGE,    "SEC_VOLTAGE_OUT_OF_RANGE",    "v_batt fora dos limites operacionais" },
+    { ERROR_SEC_CURRENT_EXCESSIVE,       "SEC_CURRENT_EXCESSIVE",       "i_batt acima do limite de seguranca" },
+    { ERROR_SEC_RPM_EXCESSIVE,           "SEC_RPM_EXCESSIVE",           "rpm acima do limite de seguranca" },
+    { ERROR_SEC_EMERGENCY_ACTIVE,        "SEC_EMERGENCY_ACTIVE",        "emergency stop disparado" },
+    { ERROR_OS_GPIO_INIT_FAILED,         "OS_GPIO_INIT_FAILED",         "algum modulo GPIO nao inicializou" },
+};
+
+static int cmd_error(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+
+    uint32_t code = Security_Manager_Get_Error_Code();
+    shell_print(sh, "error_code = 0x%08X", code);
+
+    if (code == 0U) {
+        shell_print(sh, "  (nenhuma condicao de erro ativa)");
+        return 0;
+    }
+
+    for (size_t i = 0; i < ARRAY_SIZE(error_bits); i++) {
+        if (code & error_bits[i].bit) {
+            shell_print(sh, "  [bit %2u] %-30s — %s",
+                        (unsigned)(31u - __builtin_clz(error_bits[i].bit)),
+                        error_bits[i].name, error_bits[i].descr);
+        }
+    }
     return 0;
 }
 
@@ -121,8 +186,10 @@ static int cmd_start(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    shell_send_cmd(FUNC_START, INSTR_NONE,
-                   (int8_t)(TARGET_LOAD_CELL_0_enum + id), 0.0f, 0);
+    /* Não há ação real a tomar: as células de carga já rodam
+     * automaticamente via thread HX711 desde o boot — mesmo
+     * comportamento de FUNC_START em CMD_Core (ver CLAUDE.md). */
+    shell_print(sh, "Celula[%d]: ja ativa (thread HX711 roda desde o boot)", id);
     return 0;
 }
 
@@ -131,7 +198,8 @@ static int cmd_stop(const struct shell *sh, size_t argc, char **argv)
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    shell_send_cmd(FUNC_STOP, INSTR_NONE, TARGET_DEFAULT, 0.0f, 0);
+    shell_warn(sh, "STOP: corte de emergencia");
+    Security_Manager_Trigger_Emergency();
     return 0;
 }
 
@@ -140,7 +208,8 @@ static int cmd_reset(const struct shell *sh, size_t argc, char **argv)
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    shell_send_cmd(FUNC_RESET, INSTR_NONE, TARGET_DEFAULT, 0.0f, 0);
+    shell_warn(sh, "RESET: reiniciando sistema...");
+    sys_reboot(SYS_REBOOT_COLD);
     return 0;
 }
 
@@ -153,26 +222,68 @@ static int cmd_tare(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    HAL_HX711_Tare((uint8_t)id);
+    Propeller_Manager_Tare_Cell((uint8_t)id);
     shell_print(sh, "Celula[%d]: tarada", id);
     return 0;
+}
+
+/* ===========================================================
+ * siba sensor <id> linear|offset <val> | <id> reset
+ *
+ * Calibração é decisão do Sys, nunca do HAL puro: células de carga
+ * (id 0-5) passam por Propeller_Manager_Set_Cell_Calib (que também
+ * marca a célula como configurada — ver ERROR_PROP_LOAD_CELL_NOT_CONFIGURED);
+ * sensores analógicos (id 6/7/9/10 — v_batt/i_batt/temp/air_speed) vão
+ * direto para HAL_ADC_Set_Calib (ADC não tem lógica de Sys própria).
+ * SENSOR_ID_SOC (8) e SENSOR_ID_RPM (11) não têm calibração linear/offset
+ * (SOC é um polinômio — ver "siba batt poly"; RPM é contagem de pulsos).
+ * =========================================================== */
+static bool sensor_id_is_load_cell(int id)
+{
+    return (id >= SENSOR_ID_LOAD_CELL_0 && id <= SENSOR_ID_LOAD_CELL_5);
+}
+
+static bool sensor_id_is_adc(int id)
+{
+    return (id == SENSOR_ID_V_BATT || id == SENSOR_ID_I_BATT ||
+            id == SENSOR_ID_TEMPERATURE_BATTERY || id == SENSOR_ID_AIR_SPEED);
 }
 
 static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
 {
     int id = atoi(argv[1]);
 
+    if (!sensor_id_is_load_cell(id) && !sensor_id_is_adc(id)) {
+        shell_error(sh, "sensor: id deve ser 0-7,9,10 (celulas 0-5 ou ADC v_batt/i_batt/temp/air_speed)");
+        return -EINVAL;
+    }
+
     if (!strcmp(argv[2], "linear") && argc == 4) {
-        shell_send_cmd(FUNC_SENSOR, INSTR_WRITE, (int8_t)id, strtof(argv[3], NULL),
-                       DEFAULT_ACTION_SENSE_LINEAR_COEF);
+        float val = strtof(argv[3], NULL);
+        if (sensor_id_is_load_cell(id)) {
+            Propeller_Manager_Set_Cell_Calib((uint8_t)id, val, HAL_HX711_Get_Grams((uint8_t)id));
+        } else {
+            HAL_ADC_Set_Calib((uint8_t)id, val, 0.0f);
+        }
+        shell_print(sh, "sensor[%d]: linear=%.4f", id, (double)val);
 
     } else if (!strcmp(argv[2], "offset") && argc == 4) {
-        shell_send_cmd(FUNC_SENSOR, INSTR_WRITE, (int8_t)id, strtof(argv[3], NULL),
-                       DEFAULT_ACTION_SENSE_OFFSET_COEF);
+        float val = strtof(argv[3], NULL);
+        if (sensor_id_is_load_cell(id)) {
+            Propeller_Manager_Set_Cell_Calib((uint8_t)id, 1.0f, val);
+        } else {
+            HAL_ADC_Set_Calib((uint8_t)id, 1.0f, val);
+        }
+        shell_print(sh, "sensor[%d]: offset=%.4f", id, (double)val);
 
     } else if (!strcmp(argv[2], "reset") && argc == 3) {
-        shell_send_cmd(FUNC_SENSOR, INSTR_WRITE, (int8_t)id, 0.0f,
-                       DEFAULT_ACTION_SENSE_RESET_DEFAULT);
+        if (sensor_id_is_load_cell(id)) {
+            Propeller_Manager_Set_Cell_Calib((uint8_t)id, 1.0f, 0.0f);
+            Propeller_Manager_Tare_Cell((uint8_t)id);
+        } else {
+            HAL_ADC_Set_Calib((uint8_t)id, 1.0f, 0.0f);
+        }
+        shell_print(sh, "sensor[%d]: calibracao restaurada (linear=1.0 offset=0.0)", id);
 
     } else {
         shell_error(sh, "uso: sensor <id> linear|offset <val> | sensor <id> reset");
@@ -192,8 +303,8 @@ static int cmd_batt_poly(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    shell_send_cmd(FUNC_BATTERY, INSTR_WRITE, 0, val,
-                   (int8_t)(BAT_ACTION_P0_OVERWRITE + idx));
+    Battery_Manager_Set_Poly((uint8_t)idx, val);
+    shell_print(sh, "Battery: P%d = %.6f", idx, (double)val);
     return 0;
 }
 
@@ -203,7 +314,7 @@ static int cmd_batt_templimit(const struct shell *sh, size_t argc, char **argv)
 
     float val = strtof(argv[1], NULL);
 
-    shell_send_cmd(FUNC_BATTERY, INSTR_WRITE, 0, val, BAT_ACTION_TEMP_LIMIT_OVERWRITE);
+    Battery_Manager_Set_Temp_Limit(val);
     shell_print(sh, "Battery: limite de temperatura = %.1f", (double)val);
     return 0;
 }
@@ -214,7 +325,7 @@ static int cmd_batt_relay(const struct shell *sh, size_t argc, char **argv)
 
     bool on = !strcmp(argv[1], "on");
 
-    shell_send_cmd(FUNC_BATTERY, INSTR_WRITE, 0, on ? 1.0f : 0.0f, BAT_ACTION_RELAY);
+    Battery_Manager_Set_Relay(on);
     shell_print(sh, "Rele de potencia: %s", on ? "ligado" : "desligado");
     return 0;
 }
@@ -251,52 +362,58 @@ static int cmd_prop_maxcurrent(const struct shell *sh, size_t argc, char **argv)
  * =========================================================== */
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_batt,
     SHELL_CMD_ARG(poly, NULL,
-                  "<0-4> <val> — sobrescreve coef. P<n> do polinomio SOC",
+                  "<0-4> <val> — sobrescreve coef. P<n> do polinomio SOC (Battery_Manager direto)",
                   cmd_batt_poly, 3, 0),
     SHELL_CMD_ARG(templimit, NULL,
-                  "<val> — sobrescreve limite de temperatura da bateria",
+                  "<val> — sobrescreve limite de temperatura da bateria (Battery_Manager direto)",
                   cmd_batt_templimit, 2, 0),
     SHELL_CMD_ARG(relay, NULL,
-                  "on|off — liga/desliga rele de potencia",
+                  "on|off — liga/desliga rele de potencia (Battery_Manager direto)",
                   cmd_batt_relay, 2, 0),
     SHELL_CMD_ARG(cells, NULL,
-                  "<n> — fixa contagem de celulas (0 = auto)",
+                  "<n> — fixa contagem de celulas, 0 = auto (Battery_Manager direto)",
                   cmd_batt_cells, 2, 0),
     SHELL_SUBCMD_SET_END
 );
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_prop,
     SHELL_CMD_ARG(maxcurrent, NULL,
-                  "<amps> — sobrescreve limite de corrente do motor",
+                  "<amps> — sobrescreve limite de corrente do motor (Propeller_Manager direto)",
                   cmd_prop_maxcurrent, 2, 0),
     SHELL_SUBCMD_SET_END
 );
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_siba,
     SHELL_CMD_ARG(read, NULL,
-                  "snapshot do TELEMETRY_LOG", cmd_read, 1, 0),
+                  "snapshot do TELEMETRY_LOG (Log_Manager)", cmd_read, 1, 0),
+    SHELL_CMD_ARG(sensors, NULL,
+                  "lista verbosa: valor bruto + convertido de cada sensor (HAL direto)",
+                  cmd_sensors, 1, 0),
+    SHELL_CMD_ARG(error, NULL,
+                  "mostra error_code agregado (Security_Manager) decodificado bit a bit",
+                  cmd_error, 1, 0),
     SHELL_CMD_ARG(rpm, NULL,
-                  "RPM atual (HAL_RPM_Get)", cmd_rpm, 1, 0),
+                  "RPM atual (HAL direto)", cmd_rpm, 1, 0),
     SHELL_CMD_ARG(esc, NULL,
-                  "<0-100> — throttle do ESC %% (Propeller_Manager)", cmd_esc, 2, 0),
+                  "<0-100> — throttle do ESC %% (Propeller_Manager direto)", cmd_esc, 2, 0),
     SHELL_CMD_ARG(arm, NULL,
                   "arma o ESC (HAL direto)", cmd_arm, 1, 0),
     SHELL_CMD_ARG(disarm, NULL,
                   "desarma o ESC (HAL direto)", cmd_disarm, 1, 0),
     SHELL_CMD_ARG(start, NULL,
-                  "<0-5> — FUNC_START da celula N (via CMD_Core)", cmd_start, 2, 0),
+                  "<0-5> — celula de carga N (informativo: ja roda automaticamente)", cmd_start, 2, 0),
     SHELL_CMD_ARG(stop, NULL,
-                  "FUNC_STOP / emergency stop (via CMD_Core)", cmd_stop, 1, 0),
+                  "emergency stop (Security_Manager direto)", cmd_stop, 1, 0),
     SHELL_CMD_ARG(reset, NULL,
-                  "FUNC_RESET — reboot do board (via CMD_Core)", cmd_reset, 1, 0),
+                  "reboot do board (sys_reboot direto)", cmd_reset, 1, 0),
     SHELL_CMD_ARG(tare, NULL,
-                  "<0-5> — tara a celula de carga N (HAL direto)", cmd_tare, 2, 0),
+                  "<0-5> — tara a celula de carga N (Propeller_Manager direto)", cmd_tare, 2, 0),
     SHELL_CMD_ARG(sensor, NULL,
-                  "<id> linear|offset <val> | <id> reset — calibracao (FUNC_SENSOR)",
+                  "<id> linear|offset <val> | <id> reset — calibracao (Propeller/HAL_ADC direto)",
                   cmd_sensor, 3, 1),
-    SHELL_CMD(batt, &sub_batt, "comandos da bateria (FUNC_BATTERY)", NULL),
+    SHELL_CMD(batt, &sub_batt, "comandos da bateria (Battery_Manager direto)", NULL),
     SHELL_CMD(prop, &sub_prop, "comandos do Propeller_Manager", NULL),
     SHELL_SUBCMD_SET_END
 );
 
-SHELL_CMD_REGISTER(siba, &sub_siba, "Comandos de teste do SIBA — ver HAL/CMD_Core", NULL);
+SHELL_CMD_REGISTER(siba, &sub_siba, "Comandos de teste do SIBA — Application -> Sys/HAL direto", NULL);

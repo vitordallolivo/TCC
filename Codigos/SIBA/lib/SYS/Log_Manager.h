@@ -9,7 +9,7 @@
 /* ===========================================================
  * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
  * Gerado a partir da ordem dos campos em TELEMETRY_LOG
- * (exclui timestamp e status, que não são sensores).
+ * (exclui timestamp, status e error_code, que não são sensores).
  * =========================================================== */
 #define SENSOR_ID_LOAD_CELL_0 0U
 #define SENSOR_ID_LOAD_CELL_1 1U
@@ -75,6 +75,8 @@ typedef struct __attribute__((packed)) {
 
     log_status status;
 
+    uint32_t error_code;
+
 } TELEMETRY_LOG;
 
 /* ===========================================================
@@ -94,7 +96,7 @@ void Log_Manager_thread_fn(void *p1, void *p2, void *p3);
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
 
 /* Serializa e envia o snapshot atual via OSSI→NCI (chamado por
- * System_Manager_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
+ * Sys_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
 void Log_Manager_Transmit(void);
 
 #define LOG_MANAGER_THREAD_ID   40

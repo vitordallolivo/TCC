@@ -6,6 +6,17 @@
 
 MCU: **CH32V307VTC6** (RISC-V, 144 MHz) — Zephyr board `siba_board`.
 
+> ⚠ **Pinagem atualizada pelo usuário em 2026-06-07 (a partir do esquemático
+> real) — ainda NÃO aplicada ao `.dts`/`HAL.c`/`HAL.h`.** A tabela "geral" e
+> a seção ADC1 logo abaixo ainda refletem o mapeamento **placeholder antigo**
+> (PA1-PA4 = v_batt/i_batt/temp/air_speed). O novo mapeamento — bem
+> diferente — está descrito em **"Pinagem real (atualização 2026-06-07)"**
+> mais abaixo. Ele introduz periféricos que ainda não existem em nenhum
+> lugar do firmware (DAC, I2C remapeado, relés PB11-PB15, sinal PD2 de
+> "iniciar ensaio", canais extras "Ensaio_Bateria_*"). **Antes de migrar,
+> reconciliar com `.dts`/`HAL.c`/`HAL.h`/`SIBA.yaml` — ver TODO no fim desta
+> seção.**
+
 ---
 
 ## Tabela geral de pinos usados
@@ -48,6 +59,71 @@ MCU: **CH32V307VTC6** (RISC-V, 144 MHz) — Zephyr board `siba_board`.
 > `adc_ch32v307` (único suportado, ver seção ADC1 abaixo) não acessa. Por
 > isso o HX711 foi remapeado de PA1-PA6/PB1-PB5/PC0 para a **Porta E**
 > (PE2-PE13), liberando PA1-PA7 inteiramente para canais analógicos.
+
+---
+
+## Pinagem real (atualização 2026-06-07 — substitui o placeholder acima)
+
+Repassada pelo usuário a partir do esquemático (KiCad) real da placa.
+**Ainda não refletida no `.dts`/`HAL.c`/`HAL.h`** — ver checklist no fim do
+arquivo antes de migrar. Use esta tabela como a referência atual de "o que
+está fisicamente ligado a quê"; a tabela "geral" e a seção ADC1 logo acima
+descrevem o estado **anterior** (placeholder) ainda implementado em código.
+
+| Pino      | Função real (esquemático)                          | Observações |
+|-----------|----------------------------------------------------|-------------|
+| PA0       | Tensão da bateria (`v_batt`)                       | ADC1 CH0 |
+| PA1       | Corrente da bateria (`i_batt`)                     | ADC1 CH1 |
+| PA2       | Tubo de Pitot (`air_speed`)                        | ADC1 CH2 |
+| PA3       | Ensaio_Bateria_Voltage                             | ADC1 CH3 — canal de bancada de ensaio de bateria (não confundir com `v_batt`/PA0) |
+| PA4       | Ensaio_Bateria_DAC                                 | ADC1 CH4 |
+| PA5       | DAC (saída analógica)                              | periférico DAC do CH32V307 — sem uso em `HAL.c` ainda |
+| PA6       | Ensaio_Bateria_Termistor_1                         | ADC1 CH6 |
+| PA7       | Ensaio_Bateria_Termistor_2                         | ADC1 CH7 |
+| PA8       | Ensaio_Bateria_Corrente                            | ⚠ **fora do range PA0-PA7 do ADC1** (ver nota abaixo — confirmar no datasheet se é ADC2 ou outra função) |
+| PA9       | USART1 TX (console/shell)                          | mantido — já é o padrão |
+| PA10      | USART1 RX (console/shell)                          | mantido — já é o padrão |
+| PB6       | PWM do ESC (TIM4 CH1)                              | mantido |
+| PB8       | I2C (SCL?) — barramento remapeado                  | ⚠ pino remapeado (não é a função alternada padrão) → **precisa de driver próprio** (ver datasheet de remapeamento). Sem implementação no HAL ainda — preparar driver e expor comando no shell |
+| PB9       | I2C (SDA?) — barramento remapeado                  | idem PB8 |
+| PB11-PB14 | Relés (genéricos)                                  | GPIO saída — função/uso individual ainda não detalhado |
+| PB15      | Relé da bateria (`relay0`)                         | GPIO saída — **este é o pino que `Battery_Manager_Set_Relay()`/`DT_ALIAS(relay0)` deve usar** assim que o alias for criado no `.dts` |
+| PD2       | Comando "iniciar ensaio"                           | usuário aperta um botão físico → sinal PD2 entra numa porta lógica AND física (junto com outros sinais de segurança) → habilita o SSR de 100A DC da bateria. Ver hierarchical_label `MCU_Sig_Ready` no esquemático — sugere que o **MCU também sinaliza "pronto"** de volta para essa lógica AND |
+| PC6-PC9   | Ethernet (MAC interno) — RXP/RXN/TXP/TXN           | **mantido, sem alteração** (ver seção Ethernet abaixo) |
+
+> ⚠ **Conflito aparente em PA8**: a seção ADC1 (acima, e `CLAUDE.md`) afirma
+> que o ADC1 do CH32V307 só alcança canais 0-7 = pinos **PA0-PA7**; canais 8+
+> (incluindo um possível `i_batt` de bancada em PA8) pertenceriam ao mux do
+> **ADC2** (PB0/PB1/PC0-PC5) — que não inclui PA8. Ou **PA8 não é uma entrada
+> ADC1/ADC2 válida** (seria outra função, ex.: TIM1_CH1/MCO/GPIO) e
+> "Ensaio_Bateria_Corrente" usa outro periférico, **ou** o CH32V307 tem um
+> mapeamento de canal diferente do STM32F1-like assumido aqui. **Confirmar no
+> datasheet do CH32V307 antes de tocar no `.dts`.**
+>
+> **Nomenclatura "Ensaio_Bateria_*"**: parecem ser canais de uma **bancada de
+> ensaio de bateria** (testes de carga/descarga controlados), distintos dos
+> sensores de voo (`v_batt`/`i_batt`/`temperature_battery`/`air_speed` do
+> `TELEMETRY_LOG`). Não há ainda mapeamento `SENSOR_ID_*`/campo
+> `TELEMETRY_LOG` para eles — precisa de decisão de design (novos campos no
+> `SIBA.yaml`? sensor à parte só acessível via shell/I2C?).
+
+### TODO de migração (antes de aplicar esta pinagem ao código)
+- [ ] Confirmar no datasheet do CH32V307 a que periférico/canal PA8 pertence
+      (ADC1? ADC2? outra função?) e resolver o conflito acima
+- [ ] Decidir onde os canais "Ensaio_Bateria_*" se encaixam (novos
+      `SENSOR_ID_*`/campos `TELEMETRY_LOG` via `SIBA.yaml`, ou subsistema à
+      parte só para a bancada de ensaio?)
+- [ ] Atualizar `adc1_default`/`adc2_default` (pinctrl) no `.dts` e
+      `adc_ch_cfg[]`/`HAL_ADC_IDX_*`/`ADC_CH_*` em `HAL.c`/`HAL.h`
+- [ ] Adicionar `aliases { relay0 = &<nó-PB15>; }` no `.dts` (desbloqueia
+      `Battery_Manager_Set_Relay()`) + nós GPIO para os demais relés PB11-PB14
+- [ ] Criar binding/driver para o I2C remapeado em PB8/PB9 (CH32V307 precisa
+      de remapeamento de função alternada — ver datasheet) e expor leitura
+      básica via comando no shell (sem uso real no HAL ainda)
+- [ ] Adicionar nó GPIO para PD2 ("iniciar ensaio") e decidir o papel do MCU
+      nessa lógica AND física (parece que o MCU também realimenta um sinal
+      de "pronto" — `MCU_Sig_Ready` no esquemático)
+- [ ] Avaliar uso do DAC (PA5) — hoje nenhum código do firmware o usa
 
 ---
 
@@ -192,11 +268,30 @@ CLAUDE.md "Modo Mock (native_sim)" para o fluxo completo).
 
 Nesse modo **os periféricos físicos desta página não existem de verdade** —
 `native_sim` não tem CH32V307, ADC, GPIO bit-bang, PWM/TIM4, TIM3 ou MAC
-Ethernet físico. O `CMakeLists.txt` troca `HAL.c`+driver `adc_ch32v307` por
-**`lib/OS/HAL_mock.c`** (selecionado via `CONFIG_ARCH_POSIX`), que implementa
-a mesma API pública gerando dados sintéticos — então o resto do firmware
-(System_Manager, Battery/Propeller/Security/Log_Manager, CMD_Core,
-Test_Shell) roda inalterado.
+Ethernet físico. Em vez de manter um `HAL` paralelo (abordagem antiga,
+`HAL_mock.c` — removido), **`HAL.c` roda nos dois alvos sem duplicação**:
+- **ADC** — substituído por driver: o emulador in-tree `zephyr,adc-emul`
+  (`CONFIG_ADC_EMUL`) é instanciado sob o MESMO nodelabel `adc1`
+  (`boards/native_sim.overlay`), então `HAL.c` enxerga "um adc1" pela API
+  genérica do Zephyr (`adc_channel_setup`/`adc_read_async`) sem alteração —
+  uma thread `hal_adc_stimulus_thread_fn` (só registrada em native_sim)
+  alimenta o emulador com valores em mV, invertendo as mesmas fórmulas
+  físicas que `HAL_ADC_Get_*` usa, então o pipeline ADC bruto → conversão →
+  calibração roda de verdade.
+- **ESC PWM / RPM / HX711** — sem substituto in-tree viável em firmware de
+  produção (`zephyr,fake-pwm` depende do framework de teste FFF —
+  `subsys/testsuite/include/zephyr/fff.h`, inexistente fora de builds
+  Twister/ztest; RPM usa MMIO bruto em endereço físico fixo 0x40000400; o
+  HX711 referencia nós DT que não existem em `native_sim`). Esses três
+  ganham, **dentro do próprio `HAL.c`**, pequenos blocos isolados
+  `#ifdef CONFIG_ARCH_POSIX` com modelos synthetic equivalentes ao do antigo
+  `HAL_mock.c` (RPM persegue o throttle do ESC; corrente/empuxo seguem RPM)
+  — só essas três peças realmente não têm como rodar "sem mudança nenhuma"
+  em POSIX.
+
+O resto do firmware (System_Manager/Sys, Battery/Propeller/Security/
+Log_Manager, CMD_Core, Test_Shell) roda **inalterado e idêntico** nos dois
+alvos — esse é o objetivo do "driver-mock": zero código duplicado.
 
 `NCI.c`, por outro lado, **não é trocado** — `boards/native_sim.conf` liga
 os "Offloaded sockets" do Native Simulator (NSOS), que repassam
@@ -206,16 +301,24 @@ host Linux. Ou seja, **a rede UDP é real**: o binário escuta `CMD` em
 protocolo e portas da placa física, só que em loopback. Ver CLAUDE.md
 "Modo Mock (native_sim)" e `Aplicacao_Pi/CLAUDE.md`.
 
-Tabela de equivalência "o que vira o quê" no modo mock:
+Tabela de equivalência "o que vira o quê" no modo native_sim — `HAL.c` é o
+MESMO arquivo nos dois alvos; só o que muda é descrito abaixo:
 
-| Real (`HW.md`)                          | Mock (`HAL_mock.c` + `NCI.c`/NSOS)                        |
+| Real (`HW.md`)                          | native_sim (driver-mock — dentro do mesmo `HAL.c`)        |
 |------------------------------------------|-----------------------------------------------------------|
-| ADC1 — v_batt/i_batt/temp/air_speed (PA1-4, MMIO+DMA) | modelo sintético: corrente ∝ throttle², tensão drena por Coulomb count, temperatura segue corrente, air_speed ∝ RPM (todos com ruído + `adc_calib[]`/`hal_adc_apply_calib` reais) |
-| HX711 x6 (bit-bang GPIO, Porta E)        | "leituras" raw sintéticas com modelo de empuxo ∝ RPM² + variação por célula; usa o mesmo `hx711_state[]{raw,tare,scale,offset}`/fórmula `Get_Grams` reais — `tare`/`Set_Calib` funcionam de verdade |
-| ESC PWM — TIM4 CH1 (PB6)                 | `esc_armed`/`esc_throttle_pct` em RAM — sem PWM real; o RPM simulado persegue esse throttle |
-| RPM Counter — TIM3 CH3 (PB0)             | RPM sintético: persegue o throttle do ESC com resposta de 1ª ordem + ruído |
+| ADC1 — driver custom `adc_ch32v307` (MMIO+DMA) | `zephyr,adc-emul` sob nodelabel `adc1` (`native_sim.overlay`) — `HAL.c` usa a API genérica `adc_channel_setup`/`adc_read_async` sem mudança; `hal_adc_stimulus_thread_fn` alimenta o emulador invertendo as fórmulas físicas (corrente ∝ throttle², tensão drena por Coulomb count, temperatura segue corrente, air_speed ∝ RPM — todos com ruído + `adc_calib[]`/`hal_adc_apply_calib` reais) |
+| HX711 x6 (bit-bang GPIO, Porta E)        | `#ifdef CONFIG_ARCH_POSIX` em `hx711_read_one`: sintetiza o "raw" 24 bits direto (modelo de empuxo ∝ RPM² + ruído) — `HAL_thread_HX711_fn`/`HAL_HX711_Get_*`/`Set_Calib`/`Tare` continuam os mesmos, só a leitura do transdutor muda |
+| ESC PWM — TIM4 CH1 (PB6)                 | `#ifdef CONFIG_ARCH_POSIX` em `HAL_ESC_*`: throttle armazenado em `hal_sim_throttle_x100` (RAM) — sem PWM real; o RPM sintético persegue esse throttle |
+| RPM Counter — TIM3 CH3 (PB0)             | `#ifdef CONFIG_ARCH_POSIX` em `HAL_RPM_*`/`HAL_thread_RPM_fn`: RPM sintético persegue o throttle do ESC com resposta de 1ª ordem + ruído |
 | Ethernet (MAC interno, IP link-local 169.254.x.x) | rede REAL via NSOS em loopback (`127.0.0.1:5000`/`:5555`) — mesmo `NCI.c`, mesmo protocolo `CMD`/`TELEMETRY_LOG`; só o endereço muda (link-local físico → loopback do host). `Aplicacao_Pi` se conecta normalmente |
 | Relé de potência (`relay0` — ainda não existe no `.dts` real) | mesmo estado: alias `relay0` também não existe no `.dts` do `native_sim` → `Battery_Manager` cai no mesmo fallback "relé GPIO não disponível" |
+
+> Por que essa divisão e não um `HAL_mock.c` paralelo: ADC tem um emulador
+> in-tree genérico e utilizável em firmware de produção (`adc_emul`) — então
+> vira troca de **driver**, zero duplicação de lógica. PWM/Counter/HX711 não
+> têm equivalente in-tree viável (ver motivos na tabela), então ganham um
+> "miolo" sintético mínimo isolado por `#ifdef`, mantendo a API pública e o
+> fluxo OSSI idênticos — o oposto de reescrever o HAL inteiro.
 | LED `ready_pin`/`led0`                   | `CONFIG_GPIO`/`gpio_emul` ligados, mas sem alias `led0` no `.dts` do `native_sim` — sem efeito visível |
 | USART1 console/shell                     | console/shell do `native_sim` rodam sobre um pseudo-TTY do host (`uart connected to pseudotty: /dev/pts/N`) — os comandos `siba ...` funcionam normalmente |
 

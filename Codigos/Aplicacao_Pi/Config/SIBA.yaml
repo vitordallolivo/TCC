@@ -108,3 +108,4 @@ structs:
     - { name: air_speed, type: float }             # Pitot tube wind speed (m/s)
     - { name: rpm, type: float }                   # Motor revolutions per minute
     - { name: status, type: log_status }         # Integrity of the telemetry frame
+    - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver CLAUDE.md "Error_Detect/Error_Erase"

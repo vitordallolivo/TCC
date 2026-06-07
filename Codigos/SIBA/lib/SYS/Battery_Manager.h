@@ -25,4 +25,8 @@ void Battery_Manager_Set_Temp_Limit(float limit_c);
 /* Liga/desliga relé de potência */
 void Battery_Manager_Set_Relay(bool on);
 
+/* Estado comandado do relé (independe de o GPIO físico existir — usado
+ * por Error_Detect(ERROR_BATT_RELAY_MISMATCH) para comparar com i_batt) */
+bool Battery_Manager_Get_Relay(void);
+
 #endif /* BATTERY_MANAGER_H */

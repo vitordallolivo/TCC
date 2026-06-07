@@ -1,5 +1,6 @@
 #include "Log_Manager.h"
 #include "OSSI.h"
+#include "Security_Manager.h"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
@@ -18,7 +19,7 @@ void Log_Manager_Init(void)
     current_log.status = LOG_VALID;
     k_mutex_unlock(&log_mutex);
 
-    LOG_INF("Log_Manager inicializado (TX a cada %d ms via System_Manager)",
+    LOG_INF("Log_Manager inicializado (TX a cada %d ms via Sys)",
             LOG_MANAGER_PERIOD_MS);
 }
 
@@ -58,7 +59,7 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
  * Log_Manager_Transmit
  * Monta o pacote TELEMETRY_LOG e envia via OSSI→NCI (UDP). Chamada
  * periodicamente (a cada LOG_MANAGER_PERIOD_MS) pela thread única do
- * System_Manager — ver System_Manager_thread_fn.
+ * Sys — ver Sys_thread_fn.
  */
 void Log_Manager_Transmit(void)
 {
@@ -71,7 +72,8 @@ void Log_Manager_Transmit(void)
     };
 
     k_mutex_lock(&log_mutex, K_FOREVER);
-    current_log.timestamp = k_uptime_get_32();
+    current_log.timestamp  = k_uptime_get_32();
+    current_log.error_code = Security_Manager_Get_Error_Code();
     memcpy(msg.payload.raw, &current_log, sizeof(TELEMETRY_LOG));
     k_mutex_unlock(&log_mutex);
 

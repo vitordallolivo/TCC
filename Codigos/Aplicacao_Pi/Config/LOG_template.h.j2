@@ -9,11 +9,11 @@
 /* ===========================================================
  * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
  * Gerado a partir da ordem dos campos em TELEMETRY_LOG
- * (exclui timestamp e status, que não são sensores).
+ * (exclui timestamp, status e error_code, que não são sensores).
  * =========================================================== */
 {%- set ns = namespace(idx = 0) %}
 {%- for field in structs.TELEMETRY_LOG %}
-{%- if field.name not in ['timestamp', 'status'] %}
+{%- if field.name not in ['timestamp', 'status', 'error_code'] %}
 #define SENSOR_ID_{{ field.name | upper }} {{ ns.idx }}U
 {%- set ns.idx = ns.idx + 1 %}
 {%- endif %}
@@ -51,7 +51,7 @@ void Log_Manager_thread_fn(void *p1, void *p2, void *p3);
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
 
 /* Serializa e envia o snapshot atual via OSSI→NCI (chamado por
- * System_Manager_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
+ * Sys_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
 void Log_Manager_Transmit(void);
 
 #define LOG_MANAGER_THREAD_ID   40

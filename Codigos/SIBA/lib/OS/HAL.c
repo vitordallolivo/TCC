@@ -441,6 +441,7 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
  *   4. Resultado é complemento de dois de 24 bits com sinal
  * =========================================================== */
 
+#ifndef CONFIG_ARCH_POSIX
 /* Mapeamento de pinos — ajuste conforme esquemático */
 #define HX711_SCK_NODE  DT_NODELABEL(hx711_sck_pins)
 #define HX711_DOUT_NODE DT_NODELABEL(hx711_dout_pins)
@@ -462,6 +463,7 @@ static const struct gpio_dt_spec hx711_dout[HX711_COUNT] = {
     GPIO_DT_SPEC_GET_BY_IDX(HX711_DOUT_NODE, gpios, 4),  /* PE12 */
     GPIO_DT_SPEC_GET_BY_IDX(HX711_DOUT_NODE, gpios, 5),  /* PE13 */
 };
+#endif /* !CONFIG_ARCH_POSIX */
 
 /* Estado interno de cada célula */
 static struct {
@@ -475,6 +477,7 @@ static struct {
 /* Mutex para acesso thread-safe ao estado */
 static struct k_mutex hx711_mutex;
 
+#ifndef CONFIG_ARCH_POSIX
 /* Pulso de clock em torno de 1µs @ 144MHz */
 static inline void hx711_clock_pulse(const struct gpio_dt_spec *sck)
 {
@@ -525,11 +528,38 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 
     return true;
 }
+#endif /* !CONFIG_ARCH_POSIX */
+
+#ifdef CONFIG_ARCH_POSIX
+/* native_sim: sem GPIO bit-bang (DT_NODELABEL(hx711_sck/dout_pins) não
+ * existem no devicetree do native_sim) — sintetiza o valor "raw" 24 bits
+ * direto, modelo de empuxo proporcional ao quadrado do RPM, mesmo padrão
+ * synthetic do antigo HAL_mock.c, mas publicado pelo MESMO
+ * HAL_thread_HX711_fn / HAL_HX711_Get_.. / Set_Calib / Tare reais — só a
+ * leitura do transdutor muda.
+ */
+#define HAL_SIM_HX711_BASE_RAW      8000000L
+#define HAL_SIM_HX711_GAIN_PER_RPM2     0.06f
+#define HAL_SIM_HX711_NOISE_RAW          400L
+
+static bool hx711_read_one(uint8_t idx, int32_t *out)
+{
+    ARG_UNUSED(idx);
+    float rpm = HAL_RPM_Get();
+    int32_t noise = (int32_t)(sys_rand32_get() % (2 * HAL_SIM_HX711_NOISE_RAW + 1))
+                    - HAL_SIM_HX711_NOISE_RAW;
+    *out = HAL_SIM_HX711_BASE_RAW
+           + (int32_t)(HAL_SIM_HX711_GAIN_PER_RPM2 * rpm * rpm)
+           + noise;
+    return true;
+}
+#endif /* CONFIG_ARCH_POSIX */
 
 int HAL_HX711_Init(void)
 {
     k_mutex_init(&hx711_mutex);
 
+#ifndef CONFIG_ARCH_POSIX
     for (int i = 0; i < HX711_COUNT; i++) {
         if (!gpio_is_ready_dt(&hx711_sck[i]) ||
             !gpio_is_ready_dt(&hx711_dout[i])) {
@@ -546,6 +576,16 @@ int HAL_HX711_Init(void)
         hx711_state[i].offset = 0.0f;
         hx711_state[i].ready  = false;
     }
+#else
+    LOG_INF("HAL HX711: modo synthetic (native_sim) — sem GPIO bit-bang");
+    for (int i = 0; i < HX711_COUNT; i++) {
+        hx711_state[i].raw    = 0;
+        hx711_state[i].tare   = 0;
+        hx711_state[i].scale  = 1.0f;
+        hx711_state[i].offset = 0.0f;
+        hx711_state[i].ready  = false;
+    }
+#endif
 
     LOG_INF("HAL HX711: %d células configuradas", HX711_COUNT);
     return 0;

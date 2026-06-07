@@ -46,7 +46,7 @@ SIBA/
 │   │   ├── CMD.h               # AUTO-GERADO por generate.py
 │   │   └── Common_Types.h      # AUTO-GERADO por generate.py
 │   └── SYS/                    # Camada System (acima do OS)
-│       ├── System_Manager.c/h  # Roteador: consome fila_sys
+│       ├── Sys.c/h               # Roteador: consome fila_sys
 │       ├── Battery_Manager.c/h # SOC polinomial, contagem de células (auto-detect via lookup table), relé, limites
 │       ├── Propeller_Manager.c/h # Protege motor/ESC: nunca deixa i_batt > limite, sobrescreve/reduz throttle
 │       ├── Security_Manager.c/h# Limites operacionais, emergency stop
@@ -68,7 +68,7 @@ SIBA/
 ```
 APP  ←  main.c
  ↓
-SYS  ←  System_Manager, Battery_Manager, Propeller_Manager, Security_Manager, Log_Manager
+SYS  ←  Sys, Battery_Manager, Propeller_Manager, Security_Manager, Log_Manager
  ↓
  OS  ←  OSSI (barramento), TCKEC (threads), NCI (rede), HAL (hw), CMD_Core
  ↓
@@ -93,21 +93,21 @@ Security_Manager_Init()
 Battery_Manager_Init()
 Propeller_Manager_Init()
 Log_Manager_Init()
-System_Manager_Init()
+Sys_Init()
 CMD_Core_Init()
 NCI_Init()
 HAL_Init()                       → registra threads ADC/HX711/RPM
 NCI_Set_Connection_Status(true)  → habilita tráfego de rede
 ```
-A `main()` depois entra num loop de heartbeat (`k_sleep` + `LOG_INF` a cada 10s);
-o Zephyr scheduler assume o controle a partir daí.
+A `main()` então retorna — sem heartbeat nem loop residual; as threads
+registradas no TCKEC seguem rodando sob o scheduler do Zephyr.
 
 ### Fluxo de dados completo
 ```
-HX711[0..5]      → HAL_thread_HX711_fn → OSSI→SYS → System_Manager
-ADC (5 canais)   → HAL_thread_ADC_fn   → OSSI→SYS → System_Manager   → Log_Manager → OSSI→NCI → UDP TX → PC
+HX711[0..5]      → HAL_thread_HX711_fn → OSSI→SYS → Sys
+ADC (5 canais)   → HAL_thread_ADC_fn   → OSSI→SYS → Sys   → Log_Manager → OSSI→NCI → UDP TX → PC
   (v_batt/i_batt/temperature_battery/air_speed já convertidos — ver tabela de sensores)         ↗
-RPM/TIM3         → HAL_thread_RPM_fn   → OSSI→SYS → System_Manager   ↗
+RPM/TIM3         → HAL_thread_RPM_fn   → OSSI→SYS → Sys   ↗
                                                    → Battery_Manager   → SOC (poly + nº células) → OSSI→SYS → Log_Manager
                                                    → Propeller_Manager → limita corrente do motor (sobrescreve PWM do ESC)
 UDP RX → NCI_RX → OSSI→CMD → CMD_Core → HAL / Battery / Propeller / Security
@@ -239,12 +239,12 @@ Resumo de alto nível (status pode ter mudado, `HW.md` é atualizado primeiro):
 | 30 | HAL ADC                     | 7          |
 | 31 | HAL HX711                   | 6          |
 | 32 | HAL RPM                     | 6          |
-| 50 | System_Manager              | 5          |
+| 50 | Sys                         | 5          |
 | 60 | CMD_Core                    | 4          |
 
 7 threads ativas, pool TCKEC com 10 slots — folga de 3 para futuras expansões.
 
-> **Toda a camada SYS roda em uma única thread** (`System_Manager_thread_fn`,
+> **Toda a camada SYS roda em uma única thread** (`Sys_thread_fn`,
 > ID 50): Battery_Manager, Propeller_Manager, Security_Manager e Log_Manager
 > não têm threads próprias — são chamados diretamente a partir do dispatch de
 > `fila_sys` (ou, no caso do Log_Manager, via `Log_Manager_Transmit()`
@@ -298,7 +298,7 @@ Quando não há acesso ao hardware (placa/W-Link), dá para compilar e rodar o
 firmware como um **binário POSIX comum no host** usando a board `native_sim`
 do Zephyr — sem QEMU, sem emulação de CPU, basicamente "Zephyr rodando como
 processo Linux". Serve para achar bugs de **thread/lógica** (filas OSSI,
-TCKEC, System_Manager, Battery/Propeller/Security/Log_Manager, CMD_Core,
+TCKEC, Sys, Battery/Propeller/Security/Log_Manager, CMD_Core,
 Test_Shell) — bugs de hardware (pinagem, timing de periférico, DMA, etc.)
 continuam exigindo a placa real.
 
@@ -367,7 +367,7 @@ nos dois alvos** — ver abaixo por quê. O `CMakeLists.txt` detecta
 > DTS/pinagem, ou do MAC Ethernet/driver de rede físico é exercitado nesse
 > modo (a rede em si — protocolo UDP/sockets — É real, via NSOS). Só a
 > lógica das camadas OS (acima do HAL)/SYS/CMD/rede é exercitada. Bugs
-> encontrados aqui são "bugs de verdade" (a mesma `System_Manager_thread_fn`,
+> encontrados aqui são "bugs de verdade" (a mesma `Sys_thread_fn`,
 > `CMD_Core`, `NCI.c`, `Battery_Manager` etc. rodam), mas a ausência de bug
 > aqui não significa que o firmware vai funcionar na placa.
 
@@ -491,7 +491,7 @@ TCKEC.c         ←── depende de OSSI.h
 NCI.c           ←── depende de OSSI.h, NCI.h, Log_Manager.h
 HAL.c           ←── depende de HAL.h, OSSI.h, Log_Manager.h (sensor_id), drivers/adc, gpio, pwm — pinos: ver HW.md + .dts
 CMD_Core.c      ←── depende de CMD.h, HAL.h, Battery_Manager.h, Propeller_Manager.h, Security_Manager.h, Log_Manager.h
-System_Manager.c←── depende de OSSI.h, Log_Manager.h, Battery_Manager.h, Propeller_Manager.h, Security_Manager.h
+Sys.c←──────────── depende de OSSI.h, Log_Manager.h, Battery_Manager.h, Propeller_Manager.h, Security_Manager.h
 Battery_Manager.c←─ depende de Log_Manager.h, OSSI.h, Security_Manager.h, gpio (relay0 — ver HW.md)
 Propeller_Manager.c←depende de HAL.h (HAL_ESC_*), Log_Manager.h (SENSOR_ID_I_BATT), OSSI.h
 Security_Manager.c←─depende de HAL.h, Log_Manager.h

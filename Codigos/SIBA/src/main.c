@@ -9,7 +9,7 @@
 #include "CMD_Core.h"
 
 /* SYS */
-#include "System_Manager.h"
+#include "Sys.h"
 #include "Battery_Manager.h"
 #include "Propeller_Manager.h"
 #include "Security_Manager.h"
@@ -35,7 +35,7 @@ int main(void)
     Log_Manager_Init();
 
     /* 4. System_Manager — consome fila_sys e despacha */
-    System_Manager_Init();
+    Sys_Init();
 
     /* 5. CMD_Core — interpreta comandos da rede */
     CMD_Core_Init();

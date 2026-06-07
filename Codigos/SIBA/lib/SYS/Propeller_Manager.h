@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 
-/* Limite de corrente do motor — ajustar conforme o ESC/motor real.
- * Mantido abaixo de LIMIT_I_BATT_MAX (Security_Manager.c) para que o
- * Propeller_Manager reduza o throttle ANTES de uma parada de emergência. */
-#define PROPELLER_DEFAULT_MAX_CURRENT_A   55.0f
+/* Limite de corrente do motor — padrão definido em 90A, próximo do teto
+ * de 100A do sensor de corrente (margem de segurança). Ajustável via
+ * CMD/shell (Propeller_Manager_Set_Max_Current). */
+#define PROPELLER_DEFAULT_MAX_CURRENT_A   90.0f
 
 /* Passo de variação do throttle ao reduzir/restaurar (% por atualização) */
 #define PROPELLER_THROTTLE_STEP_PCT        2.0f
@@ -25,6 +25,16 @@ int Propeller_Manager_Request_Throttle(float percent);
 
 /* Sobrescreve o limite máximo de corrente do motor via CMD */
 void Propeller_Manager_Set_Max_Current(float amps);
+
+/* ---------------------------------------------------------------------
+ * Células de carga (HX711 x6) — taração e calibração são decisões da
+ * camada Sys (este manager), não do HAL: o HAL só executa a operação
+ * de hardware e expõe leitura bruta/config. Ponto de entrada único para
+ * CMD_Core/Test_Shell — evita que outras camadas chamem HAL_HX711_*
+ * diretamente (ver CLAUDE.md "o HAL é apenas questões de configuração").
+ * --------------------------------------------------------------------- */
+void Propeller_Manager_Tare_Cell(uint8_t idx);
+void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float linear, float offset);
 
 /* TODO: Propeller_Manager_thread_fn / cálculo de Ct/Cp a partir de
  * força (load cells) + RPM — ver lib/SYS/Propeller_Manager.h no CLAUDE.md */

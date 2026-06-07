@@ -73,7 +73,10 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
 {
     switch (tid) {
         case SENSOR_ID_LOAD_CELL_0 ... SENSOR_ID_LOAD_CELL_5:
-            HAL_HX711_Set_Calib((uint8_t)tid, linear, offset);
+            /* Taração/calibração de célula é decisão do Sys, não do HAL —
+             * Propeller_Manager decide e só então aciona o hardware
+             * (ver CLAUDE.md "o HAL é apenas questões de configuração"). */
+            Propeller_Manager_Set_Cell_Calib((uint8_t)tid, linear, offset);
             break;
 
         case SENSOR_ID_V_BATT:
@@ -117,7 +120,7 @@ static void handle_func_sensor(const CMD *cmd)
             s->Offset_Coeff = s->Offset_Coeff_Reset_Default;
             apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
             if (tid <= 5) {
-                HAL_HX711_Tare((uint8_t)tid);
+                Propeller_Manager_Tare_Cell((uint8_t)tid);
             }
             LOG_INF("CMD SENSOR[%d]: reset default", tid);
             break;
