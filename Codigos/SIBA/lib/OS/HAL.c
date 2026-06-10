@@ -29,6 +29,7 @@
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pwm.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/irq.h>
 #ifdef CONFIG_ARCH_POSIX
 #include <zephyr/random/random.h>
@@ -46,53 +47,48 @@ static atomic_t hal_sim_throttle_x100;
 #endif
 
 /* ===========================================================
- * ADC — scan circular único (DMA) com 5 canais (ver HAL_ADC_IDX_* em HAL.h).
+ * ADC — scan circular único (DMA) com 4 canais (ver HAL_ADC_IDX_* em HAL.h).
  *
  * IMPORTANTE: o periférico ADC1 do CH32V307 (único suportado pelo driver
  * custom adc_ch32v307 — daí essa pasta existir em vez de usar o driver ADC
  * genérico do Zephyr) só enxerga os canais 0-7, ligados fisicamente aos
  * pinos PA0-PA7. Canais 8+ (PB0/PB1/PC0-PC5) pertencem ao mux do ADC2 e NÃO
- * são alcançáveis por este driver — por isso todos os canais abaixo vivem em
- * PA0-PA7 (o HX711 foi remapeado para a Porta E para abrir espaço):
- *   idx 0 = CH0 (PA0)  expansão genérica
- *   idx 1 = CH1 (PA1)  v_batt           — divisor de tensão
- *   idx 2 = CH2 (PA2)  i_batt           — ACS758 (Hall, analógico)
- *   idx 3 = CH3 (PA3)  temperature_batt — termistor NTC (lookup table)
- *   idx 4 = CH4 (PA4)  air_speed        — MPXV7002DP (pressão diferencial)
- * (PA5-PA7 / CH5-CH7 seguem livres para expansão futura)
+ * são alcançáveis por este driver. Pinagem REAL aplicada (ver HW.md):
+ *   idx 0 = CH0 (PA0)  v_batt
+ *   idx 1 = CH1 (PA1)  i_batt
+ *   idx 2 = CH2 (PA2)  air_speed (Pitot)
+ *   idx 3 = CH6 (PA6)  temperature_battery (uso duplo c/ Ensaio_Termistor_1)
+ * PA3/PA4/PA7 (Ensaio_Bateria_*) não entram nesse scan — ver siba_board.dts.
  * =========================================================== */
 #define ADC_NODE DT_NODELABEL(adc1)
 static const struct device *adc_dev = DEVICE_DT_GET(ADC_NODE);
 
-#define ADC_NUM_CHANNELS  5
+#define ADC_NUM_CHANNELS  4
 #define ADC_RESOLUTION    12
 #define ADC_OVERSAMPLE    8
 
-#define ADC_CH_EXPANSION   0
-#define ADC_CH_V_BATT      1
-#define ADC_CH_I_BATT      2
-#define ADC_CH_TEMP_BATT   3
-#define ADC_CH_AIR_SPEED   4
+#define ADC_CH_V_BATT      0
+#define ADC_CH_I_BATT      1
+#define ADC_CH_AIR_SPEED   2
+#define ADC_CH_TEMP_BATT   6
 
 static uint16_t adc_seq_buf[ADC_NUM_CHANNELS];
 static atomic_t adc_raw[ADC_NUM_CHANNELS];
 
 static const struct adc_channel_cfg adc_ch_cfg[ADC_NUM_CHANNELS] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_EXPANSION },  /* PA0 */
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_V_BATT },     /* PA0 */
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_V_BATT },     /* PA1 */
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_I_BATT },     /* PA1 */
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_I_BATT },     /* PA2 */
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_AIR_SPEED },  /* PA2 */
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_TEMP_BATT },  /* PA3 */
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_AIR_SPEED },  /* PA4 */
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = ADC_CH_TEMP_BATT },  /* PA6 */
 };
 
 static struct adc_sequence adc_seq = {
-    .channels    = BIT(ADC_CH_EXPANSION) | BIT(ADC_CH_V_BATT) | BIT(ADC_CH_I_BATT) |
-                   BIT(ADC_CH_TEMP_BATT) | BIT(ADC_CH_AIR_SPEED),
+    .channels    = BIT(ADC_CH_V_BATT) | BIT(ADC_CH_I_BATT) |
+                   BIT(ADC_CH_AIR_SPEED) | BIT(ADC_CH_TEMP_BATT),
     .buffer      = adc_seq_buf,
     .buffer_size = sizeof(adc_seq_buf),
     .resolution  = ADC_RESOLUTION,
@@ -104,56 +100,16 @@ static inline float adc_raw_to_mv(uint16_t raw)
     return (float)raw * (float)HAL_ADC_VREF_MV / (float)HAL_ADC_FULL_SCALE;
 }
 
-/* sqrt via Newton-Raphson — evita depender de libm (projeto usa minimal libc) */
-static inline float hal_sqrtf(float x)
-{
-    if (x <= 0.0f) return 0.0f;
-
-    float guess = x;
-    for (int i = 0; i < 8; i++) {
-        guess = 0.5f * (guess + x / guess);
-    }
-    return guess;
-}
-
-/* ---- Lookup table do termistor NTC: tensão no divisor (mV) → temperatura (°C)
- * Montagem: Vcc -- R_pullup -- nó_ADC -- NTC -- GND (NTC esfria = Vadc sobe).
- * Tabela calculada para NTC 10k @ 25°C, B=3950, pull-up 10k @ 3.3V — AJUSTAR
- * para o termistor real do esquemático (ou regenerar com a equação de Steinhart-Hart).
- * Ordenada de forma crescente em mV para permitir interpolação linear. */
-struct hal_lut_entry { int32_t x_mv; float y; };
-
-static const struct hal_lut_entry hal_ntc_lut[] = {
-    {  216, 100.0f },
-    {  428,  75.0f },
-    {  872,  50.0f },
-    { 1650,  25.0f },
-    { 2543,   0.0f },
-    { 3014, -20.0f },
-};
-
-/* Interpolação linear genérica sobre uma lookup table ordenada por x crescente.
- * Fora da faixa: satura no extremo mais próximo (clamp). */
-static float hal_lut_interp(const struct hal_lut_entry *lut, size_t n, int32_t x)
-{
-    if (x <= lut[0].x_mv)     return lut[0].y;
-    if (x >= lut[n - 1].x_mv) return lut[n - 1].y;
-
-    for (size_t i = 0; i < n - 1; i++) {
-        if (x >= lut[i].x_mv && x <= lut[i + 1].x_mv) {
-            float frac = (float)(x - lut[i].x_mv) /
-                         (float)(lut[i + 1].x_mv - lut[i].x_mv);
-            return lut[i].y + frac * (lut[i + 1].y - lut[i].y);
-        }
-    }
-    return lut[n - 1].y;
-}
-
-/* ---- Calibração dos sensores baseados em ADC (v_batt/i_batt/temperatura/
- * air_speed), aplicada por cima da conversão física: y = linear * x + offset
- * — mesmo padrão do HX711 (HAL_HX711_Set_Calib). Indexado por SENSOR_ID_*
- * (Log_Manager.h); só as posições 6,7,9,10 são usadas (8 = SOC, calculado
- * pelo Battery_Manager via polinômio, não tem calibração de hardware aqui). */
+/* ---- Calibração genérica dos sensores baseados em ADC (v_batt/i_batt/
+ * temperatura/air_speed): y = linear * (tensão_no_pino_mV) + offset — o
+ * MESMO padrão e a MESMA estrutura do HX711 (HAL_HX711_Set_Calib), sem
+ * nenhuma fórmula física de hardware no meio (divisor resistivo, ACS758,
+ * NTC, MPXV7002DP — removidas; ver TODO "calibrar constantes..." em
+ * CLAUDE.md: ninguém tem os componentes reais em mãos para confiar nelas).
+ * O usuário ajusta linear/offset via CMD/shell com os valores medidos na
+ * bancada, exatamente como já faz para as células de carga. Indexado por
+ * SENSOR_ID_* (Log_Manager.h); só as posições 6,7,9,10 são usadas (8 = SOC,
+ * calculado pelo Battery_Manager via polinômio — não passa por aqui). */
 struct hal_adc_calib { float linear; float offset; };
 
 static struct hal_adc_calib adc_calib[SENSOR_ID_AIR_SPEED + 1];
@@ -175,6 +131,17 @@ void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
     adc_calib[sensor_id].offset = offset;
 }
 
+void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
+{
+    float l = 1.0f, o = 0.0f;
+    if (sensor_id < ARRAY_SIZE(adc_calib)) {
+        l = adc_calib[sensor_id].linear;
+        o = adc_calib[sensor_id].offset;
+    }
+    if (linear) *linear = l;
+    if (offset) *offset = o;
+}
+
 static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 {
     return phys_value * adc_calib[sensor_id].linear + adc_calib[sensor_id].offset;
@@ -182,42 +149,41 @@ static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 
 #ifdef CONFIG_ARCH_POSIX
 /* ---- native_sim: "estímulo" do ADC emulado (zephyr,adc-emul, ver
- * native_sim.overlay) — diferente do antigo HAL_mock.c (que publicava
- * valores físicos finais prontos direto no OSSI), aqui INVERTEMOS as
- * mesmas conversões físicas que HAL_ADC_Get_* usa (divisor de tensão,
- * ACS758, LUT do NTC, Bernoulli/MPXV7002DP) para descobrir que tensão
- * (mV) "no pino" produziria o valor físico alvo, e alimentamos isso no
- * adc_emul via adc_emul_const_value_set(). Resultado: HAL_thread_ADC_fn
- * roda a conversão de verdade (raw → físico → calibração) em cima de um
- * sinal de entrada sintético — exercitando o pipeline real, não um atalho.
+ * native_sim.overlay). Como HAL_ADC_Get_* agora é calibração linear pura
+ * (sem fórmula física — ver bloco de calibração acima), não há mais nada
+ * para "inverter": geramos diretamente tendências plausíveis de tensão
+ * "no pino" em mV (0-3300) e alimentamos o adc_emul via
+ * adc_emul_const_value_set(). Com a calibração default (linear=1, offset=0)
+ * o valor relatado é numericamente igual ao mV gerado aqui — comportamento
+ * esperado, igual às células de carga não calibradas.
  *
- * Modelo — propositalmente simples (só para gerar valores plausíveis e
- * variáveis, não um modelo físico de verdade): corrente segue o throttle
- * do ESC (∝ throttle²); tensão drena devagar com a corrente; temperatura
- * sobe com a corrente; air_speed acompanha o RPM (já synthetic — ver
- * HAL_thread_RPM_fn). Tudo com pequeno ruído pseudo-aleatório. */
+ * Modelo — propositalmente simples (só para gerar sinais plausíveis e
+ * variáveis, não um modelo físico de verdade): "i_batt" (mV) sobe com
+ * throttle² do ESC; "v_batt" (mV) drena devagar com a corrente; "temperatura"
+ * (mV) sobe com a corrente; "air_speed" (mV) acompanha o RPM (já synthetic —
+ * ver HAL_thread_RPM_fn). Tudo com pequeno ruído pseudo-aleatório. */
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/random/random.h>
 
 #define HAL_SIM_ADC_PERIOD_MS         50U
 
-#define HAL_SIM_VBATT_FULL           25.2f   /* V — 6S a 4.2V/célula */
-#define HAL_SIM_VBATT_EMPTY          18.0f   /* V — 6S a 3.0V/célula */
-#define HAL_SIM_VBATT_DRAIN_PER_TICK  4e-5f  /* V por amostra por A — ritmo arbitrário p/ teste */
-#define HAL_SIM_VBATT_NOISE           0.03f
+#define HAL_SIM_VBATT_MV_FULL       3000.0f  /* mV "no pino" — pack cheio   */
+#define HAL_SIM_VBATT_MV_EMPTY      2000.0f  /* mV "no pino" — pack vazio   */
+#define HAL_SIM_VBATT_DRAIN_PER_TICK   0.05f /* mV por amostra por (mV de corrente) */
+#define HAL_SIM_VBATT_NOISE           20.0f
 
-#define HAL_SIM_I_IDLE                0.4f   /* A — repouso  */
-#define HAL_SIM_I_MAX                45.0f   /* A — @ 100% throttle */
-#define HAL_SIM_I_NOISE               0.15f
+#define HAL_SIM_I_MV_IDLE            200.0f  /* mV — repouso        */
+#define HAL_SIM_I_MV_MAX            2800.0f  /* mV — @ 100% throttle */
+#define HAL_SIM_I_NOISE               40.0f
 
-#define HAL_SIM_TEMP_BASE            25.0f
-#define HAL_SIM_TEMP_GAIN_C_PER_A     0.6f
-#define HAL_SIM_TEMP_NOISE            0.1f
+#define HAL_SIM_TEMP_MV_BASE         500.0f
+#define HAL_SIM_TEMP_GAIN_MV_PER_MVI   0.3f  /* ganho de "temperatura" sobre "corrente" (mV/mV) */
+#define HAL_SIM_TEMP_NOISE            15.0f
 
-#define HAL_SIM_AIRSPEED_K_PER_RPM   0.0035f
-#define HAL_SIM_AIRSPEED_NOISE        0.4f
+#define HAL_SIM_AIRSPEED_MV_PER_RPM   0.25f
+#define HAL_SIM_AIRSPEED_NOISE        25.0f
 
-static float hal_sim_vbatt_v = HAL_SIM_VBATT_FULL;
+static float hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_FULL;
 
 static inline float hal_sim_noise(float amplitude)
 {
@@ -225,53 +191,18 @@ static inline float hal_sim_noise(float amplitude)
     return amplitude * ((float)r / 1000.0f);
 }
 
-/* ---- Inversões de HAL_ADC_Get_VBatt/IBatt/Temperature_Batt/Air_Speed:
- * valor físico alvo → tensão "no pino" do ADC, em mV ---- */
-
-static inline int32_t hal_sim_inv_vbatt(float v_batt)
+static inline int32_t hal_sim_clamp_mv(float mv)
 {
-    float v_adc = v_batt * HAL_VBATT_DIVIDER_R2_KOHM
-                / (HAL_VBATT_DIVIDER_R1_KOHM + HAL_VBATT_DIVIDER_R2_KOHM);
-    return (int32_t)(v_adc * 1000.0f);
-}
-
-static inline int32_t hal_sim_inv_ibatt(float i_amp)
-{
-    return (int32_t)(i_amp * HAL_ACS758_SENS_MV_PER_A + HAL_ACS758_VZERO_MV);
-}
-
-/* Interpolação linear inversa sobre hal_ntc_lut (y=temperatura decrescente
- * conforme x=mV crescente) — devolve mV correspondente a uma temperatura alvo. */
-static int32_t hal_sim_inv_temperature(float temp_c)
-{
-    size_t n = ARRAY_SIZE(hal_ntc_lut);
-
-    if (temp_c >= hal_ntc_lut[0].y)     return hal_ntc_lut[0].x_mv;
-    if (temp_c <= hal_ntc_lut[n - 1].y) return hal_ntc_lut[n - 1].x_mv;
-
-    for (size_t i = 0; i < n - 1; i++) {
-        if (temp_c <= hal_ntc_lut[i].y && temp_c >= hal_ntc_lut[i + 1].y) {
-            float frac = (hal_ntc_lut[i].y - temp_c)
-                       / (hal_ntc_lut[i].y - hal_ntc_lut[i + 1].y);
-            return hal_ntc_lut[i].x_mv
-                 + (int32_t)(frac * (float)(hal_ntc_lut[i + 1].x_mv - hal_ntc_lut[i].x_mv));
-        }
-    }
-    return hal_ntc_lut[n - 1].x_mv;
-}
-
-static inline int32_t hal_sim_inv_air_speed(float speed_ms)
-{
-    float p_pa  = speed_ms * speed_ms * HAL_AIR_DENSITY_KG_M3 / 2.0f;
-    float p_kpa = p_pa / 1000.0f;
-    return (int32_t)((p_kpa * 0.2f + 0.5f) * HAL_MPXV7002DP_VS_MV);
+    if (mv < 0.0f)    mv = 0.0f;
+    if (mv > 3300.0f) mv = 3300.0f;
+    return (int32_t)mv;
 }
 
 void hal_adc_stimulus_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
-    LOG_INF("HAL ADC stimulus iniciado (native_sim) — alimenta adc_emul invertendo as conversões físicas");
+    LOG_INF("HAL ADC stimulus iniciado (native_sim) — alimenta adc_emul com tendencias diretas em mV");
 
     while (1) {
         k_sleep(K_MSEC(HAL_SIM_ADC_PERIOD_MS));
@@ -280,27 +211,26 @@ void hal_adc_stimulus_thread_fn(void *p1, void *p2, void *p3)
         float rpm          = HAL_RPM_Get();
         float th_frac      = throttle_pct / 100.0f;
 
-        float i_batt = HAL_SIM_I_IDLE
-                     + (HAL_SIM_I_MAX - HAL_SIM_I_IDLE) * th_frac * th_frac
-                     + hal_sim_noise(HAL_SIM_I_NOISE);
-        if (i_batt < 0.0f) i_batt = 0.0f;
+        float i_mv = HAL_SIM_I_MV_IDLE
+                   + (HAL_SIM_I_MV_MAX - HAL_SIM_I_MV_IDLE) * th_frac * th_frac
+                   + hal_sim_noise(HAL_SIM_I_NOISE);
+        if (i_mv < 0.0f) i_mv = 0.0f;
 
-        hal_sim_vbatt_v -= i_batt * HAL_SIM_VBATT_DRAIN_PER_TICK;
-        if (hal_sim_vbatt_v < HAL_SIM_VBATT_EMPTY) hal_sim_vbatt_v = HAL_SIM_VBATT_EMPTY;
-        float v_batt = hal_sim_vbatt_v + hal_sim_noise(HAL_SIM_VBATT_NOISE);
+        hal_sim_vbatt_mv -= i_mv * HAL_SIM_VBATT_DRAIN_PER_TICK * 0.01f;
+        if (hal_sim_vbatt_mv < HAL_SIM_VBATT_MV_EMPTY) hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_EMPTY;
+        float v_mv = hal_sim_vbatt_mv + hal_sim_noise(HAL_SIM_VBATT_NOISE);
 
-        float temperature = HAL_SIM_TEMP_BASE
-                          + i_batt * HAL_SIM_TEMP_GAIN_C_PER_A
-                          + hal_sim_noise(HAL_SIM_TEMP_NOISE);
+        float temp_mv = HAL_SIM_TEMP_MV_BASE
+                      + i_mv * HAL_SIM_TEMP_GAIN_MV_PER_MVI
+                      + hal_sim_noise(HAL_SIM_TEMP_NOISE);
 
-        float air_speed = rpm * HAL_SIM_AIRSPEED_K_PER_RPM + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
-        if (air_speed < 0.0f) air_speed = 0.0f;
+        float air_mv = rpm * HAL_SIM_AIRSPEED_MV_PER_RPM + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
+        if (air_mv < 0.0f) air_mv = 0.0f;
 
-        adc_emul_const_value_set(adc_dev, ADC_CH_V_BATT,    (uint32_t)hal_sim_inv_vbatt(v_batt));
-        adc_emul_const_value_set(adc_dev, ADC_CH_I_BATT,    (uint32_t)hal_sim_inv_ibatt(i_batt));
-        adc_emul_const_value_set(adc_dev, ADC_CH_TEMP_BATT, (uint32_t)hal_sim_inv_temperature(temperature));
-        adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_inv_air_speed(air_speed));
-        adc_emul_const_value_set(adc_dev, ADC_CH_EXPANSION, 0);
+        adc_emul_const_value_set(adc_dev, ADC_CH_V_BATT,    (uint32_t)hal_sim_clamp_mv(v_mv));
+        adc_emul_const_value_set(adc_dev, ADC_CH_I_BATT,    (uint32_t)hal_sim_clamp_mv(i_mv));
+        adc_emul_const_value_set(adc_dev, ADC_CH_TEMP_BATT, (uint32_t)hal_sim_clamp_mv(temp_mv));
+        adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_clamp_mv(air_mv));
     }
 }
 #endif /* CONFIG_ARCH_POSIX */
@@ -332,42 +262,26 @@ uint16_t HAL_ADC_Get(uint8_t channel)
 
 float HAL_ADC_Get_VBatt(void)
 {
-    float v_adc  = adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_V_BATT)) / 1000.0f;
-    float v_batt = v_adc * (HAL_VBATT_DIVIDER_R1_KOHM + HAL_VBATT_DIVIDER_R2_KOHM)
-                         / HAL_VBATT_DIVIDER_R2_KOHM;
-    return hal_adc_apply_calib(SENSOR_ID_V_BATT, v_batt);
+    return hal_adc_apply_calib(SENSOR_ID_V_BATT,
+                               adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_V_BATT)));
 }
 
 float HAL_ADC_Get_IBatt(void)
 {
-    float v_mv  = adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_I_BATT));
-    float i_amp = (v_mv - HAL_ACS758_VZERO_MV) / HAL_ACS758_SENS_MV_PER_A;
-    return hal_adc_apply_calib(SENSOR_ID_I_BATT, i_amp);
+    return hal_adc_apply_calib(SENSOR_ID_I_BATT,
+                               adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_I_BATT)));
 }
 
 float HAL_ADC_Get_Temperature_Batt(void)
 {
-    int32_t v_mv = (int32_t)adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_TEMP_BATT));
-    float   temp = hal_lut_interp(hal_ntc_lut, ARRAY_SIZE(hal_ntc_lut), v_mv);
-    return hal_adc_apply_calib(SENSOR_ID_TEMPERATURE_BATTERY, temp);
+    return hal_adc_apply_calib(SENSOR_ID_TEMPERATURE_BATTERY,
+                               adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_TEMP_BATT)));
 }
 
 float HAL_ADC_Get_Air_Speed(void)
 {
-    /* P_kPa = (Vout/Vs - 0.5) / 0.2 — pressão diferencial do MPXV7002DP */
-    float v_mv  = adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_AIR_SPEED));
-    float p_kpa = (v_mv / HAL_MPXV7002DP_VS_MV - 0.5f) / 0.2f;
-    float p_pa  = p_kpa * 1000.0f;
-    float speed;
-
-    if (p_pa <= 0.0f) {
-        speed = 0.0f;   /* sem fluxo (ou fluxo reverso) → velocidade nula */
-    } else {
-        /* Bernoulli: v = sqrt(2 * ΔP / rho_ar) */
-        speed = hal_sqrtf(2.0f * p_pa / HAL_AIR_DENSITY_KG_M3);
-    }
-
-    return hal_adc_apply_calib(SENSOR_ID_AIR_SPEED, speed);
+    return hal_adc_apply_calib(SENSOR_ID_AIR_SPEED,
+                               adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_AIR_SPEED)));
 }
 
 void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
@@ -401,6 +315,14 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
             acc[i] += adc_seq_buf[i];
         }
         cnt++;
+
+#ifdef CONFIG_ARCH_POSIX
+        /* adc_emul completa a "conversão" instantaneamente — sem isso o
+         * loop nunca bloqueia e trava o scheduler/clock do native_sim
+         * (ver CLAUDE.md "Modo Mock"). Pausa equivalente ao tempo real
+         * de uma conversão+oversample na placa. */
+        k_sleep(K_MSEC(2));
+#endif
 
         if (cnt >= ADC_OVERSAMPLE) {
             for (int i = 0; i < ADC_NUM_CHANNELS; i++) {
@@ -545,6 +467,14 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 static bool hx711_read_one(uint8_t idx, int32_t *out)
 {
     ARG_UNUSED(idx);
+
+    /* A versão real bloqueia aguardando DOUT=LOW (~10Hz por célula — ver
+     * hx711_read_one acima). Sem esse sleep aqui, HAL_thread_HX711_fn roda
+     * em loop apertado sem nunca ceder a CPU: o relógio simulado do
+     * native_sim trava em t=0 e nenhuma outra thread (shell incluído)
+     * consegue progredir. */
+    k_sleep(K_MSEC(100));
+
     float rpm = HAL_RPM_Get();
     int32_t noise = (int32_t)(sys_rand32_get() % (2 * HAL_SIM_HX711_NOISE_RAW + 1))
                     - HAL_SIM_HX711_NOISE_RAW;
@@ -619,6 +549,19 @@ void HAL_HX711_Set_Calib(uint8_t idx, float scale, float offset)
     hx711_state[idx].offset = offset;
     k_mutex_unlock(&hx711_mutex);
     LOG_INF("HX711[%d]: scale=%.4f offset=%.4f", idx, (double)scale, (double)offset);
+}
+
+void HAL_HX711_Get_Calib(uint8_t idx, float *scale, float *offset)
+{
+    float s = 1.0f, o = 0.0f;
+    if (idx < HX711_COUNT) {
+        k_mutex_lock(&hx711_mutex, K_FOREVER);
+        s = hx711_state[idx].scale;
+        o = hx711_state[idx].offset;
+        k_mutex_unlock(&hx711_mutex);
+    }
+    if (scale)  *scale  = s;
+    if (offset) *offset = o;
 }
 
 void HAL_HX711_Tare(uint8_t idx)
@@ -976,6 +919,122 @@ void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
 #endif /* CONFIG_ARCH_POSIX */
 
 /* ===========================================================
+ * I2C — I2C1 remapeado para PB8(SCL)/PB9(SDA)
+ *
+ * Infra MÍNIMA e crua sobre a API genérica i2c_* do Zephyr (driver wch,i2c
+ * já existe in-tree — só precisava ser instanciado no .dts, ver
+ * siba_board.dts/&i2c1). Sem decisão de protocolo: ler/escrever N bytes
+ * num endereço, e scan do barramento — quem decidir como falar com um
+ * dispositivo específico (vai substituir o HX711 no futuro) constrói por
+ * cima disso. Roda igual nos dois alvos (siba_board e native_sim — ambos
+ * têm o driver i2c, real ou emulado pelo i2c_emul).
+ * =========================================================== */
+#define I2C_NODE DT_NODELABEL(i2c1)
+static const struct device *i2c_dev = DEVICE_DT_GET(I2C_NODE);
+
+int HAL_I2C_Init(void)
+{
+    if (!device_is_ready(i2c_dev)) {
+        LOG_ERR("I2C1 não pronto");
+        return -ENODEV;
+    }
+    LOG_INF("HAL I2C: I2C1 inicializado (PB8/PB9, remap=1)");
+    return 0;
+}
+
+int HAL_I2C_Read(uint16_t addr, uint8_t *buf, size_t len)
+{
+    return i2c_read(i2c_dev, buf, len, (uint16_t)addr);
+}
+
+int HAL_I2C_Write(uint16_t addr, const uint8_t *buf, size_t len)
+{
+    return i2c_write(i2c_dev, buf, len, (uint16_t)addr);
+}
+
+int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
+{
+    size_t  count = 0;
+    uint8_t dummy;
+
+    for (uint16_t addr = HAL_I2C_SCAN_ADDR_MIN; addr <= HAL_I2C_SCAN_ADDR_MAX; addr++) {
+        /* Leitura de 0 bytes — só verifica se o dispositivo faz ACK do endereço */
+        if (i2c_read(i2c_dev, &dummy, 0, (uint16_t)addr) == 0) {
+            if (count < max) {
+                found_addrs[count] = (uint8_t)addr;
+            }
+            count++;
+        }
+    }
+
+    if (out_count) {
+        *out_count = count;
+    }
+    return 0;
+}
+
+/* ===========================================================
+ * DAC — DAC1 canal 1 (PA5 / DAC_OUT1)
+ *
+ * Não existe driver/binding Zephyr para o DAC do CH32V307 — acesso via
+ * MMIO bruto, mesmo padrão usado para RPM/TIM3 acima (registradores fixos,
+ * clock habilitado direto via RCC). Em native_sim/POSIX não há periférico
+ * nem endereço mapeado — substituto synthetic guarda o valor numa variável
+ * (mesma ideia de hal_sim_throttle_x100 para o ESC).
+ * =========================================================== */
+#ifdef CONFIG_ARCH_POSIX
+
+static atomic_t hal_sim_dac_value;
+
+int HAL_DAC_Init(void)
+{
+    atomic_set(&hal_sim_dac_value, 0);
+    LOG_INF("HAL DAC: modo synthetic (native_sim) — sem DAC1/PA5");
+    return 0;
+}
+
+void HAL_DAC_Set_Value(uint16_t value_12bit)
+{
+    if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
+    atomic_set(&hal_sim_dac_value, value_12bit);
+}
+
+#else /* !CONFIG_ARCH_POSIX — siba_board real: DAC1 via MMIO direto */
+
+#define DAC_BASE        0x40007400UL
+#define DAC_CTLR        (*(volatile uint32_t *)(DAC_BASE + 0x00))
+#define DAC_R12BDHR1    (*(volatile uint32_t *)(DAC_BASE + 0x08))  /* canal 1, 12 bits alinhado à direita */
+
+#define DAC_CTLR_EN1    (1UL << 0)   /* habilita canal 1            */
+#define DAC_CTLR_BOFF1  (1UL << 1)   /* 0 = buffer de saída ligado  */
+
+#define RCC_APB1PCENR_DAC_EN  (1UL << 29)  /* CH32V20X_V30X_CLOCK_DAC = APB1,29 */
+
+int HAL_DAC_Init(void)
+{
+    /* Habilita clock do DAC (APB1 bit 29) */
+    RCC_APB1PCENR |= RCC_APB1PCENR_DAC_EN;
+
+    /* Canal 1 habilitado, buffer de saída ligado (BOFF1=0) */
+    DAC_CTLR = (DAC_CTLR & ~DAC_CTLR_BOFF1) | DAC_CTLR_EN1;
+    DAC_R12BDHR1 = 0;
+
+    /* Nota: o pino PA5/DAC_OUT1 precisa estar em modo "entrada analógica"
+     * para o DAC poder dirigi-lo — configuração de GPIO a confirmar/ajustar
+     * na bancada (mesma ressalva das constantes de hardware incertas). */
+    LOG_INF("HAL DAC: DAC1 canal 1 inicializado (PA5/DAC_OUT1)");
+    return 0;
+}
+
+void HAL_DAC_Set_Value(uint16_t value_12bit)
+{
+    if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
+    DAC_R12BDHR1 = value_12bit;
+}
+
+#endif /* CONFIG_ARCH_POSIX */
+
+/* ===========================================================
  * HAL_Init — inicializa tudo e registra threads no TCKEC
  * =========================================================== */
 int HAL_Init(void)
@@ -992,6 +1051,12 @@ int HAL_Init(void)
     if (r) return r;
 
     r = HAL_RPM_Init();
+    if (r) return r;
+
+    r = HAL_I2C_Init();
+    if (r) return r;
+
+    r = HAL_DAC_Init();
     if (r) return r;
 
     /* Registra thread ADC no TCKEC */

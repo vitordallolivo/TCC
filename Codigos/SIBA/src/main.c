@@ -53,11 +53,7 @@ int main(void)
 
     LOG_INF("=== SIBA pronto. Threads ativas. ===");
 
-    /* main suspende — Zephyr scheduler assume o controle */
-    while (1) {
-        k_sleep(K_SECONDS(10));
-        LOG_INF("SIBA heartbeat — uptime: %lld s", k_uptime_get() / 1000);
-    }
-
+    /* main retorna — Zephyr scheduler assume o controle; as threads
+     * registradas no TCKEC seguem rodando normalmente. */
     return 0;
 }

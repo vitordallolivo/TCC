@@ -260,19 +260,25 @@ static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
 
     if (!strcmp(argv[2], "linear") && argc == 4) {
         float val = strtof(argv[3], NULL);
+        float linear, offset;
         if (sensor_id_is_load_cell(id)) {
-            Propeller_Manager_Set_Cell_Calib((uint8_t)id, val, HAL_HX711_Get_Grams((uint8_t)id));
+            HAL_HX711_Get_Calib((uint8_t)id, &linear, &offset);
+            Propeller_Manager_Set_Cell_Calib((uint8_t)id, val, offset);
         } else {
-            HAL_ADC_Set_Calib((uint8_t)id, val, 0.0f);
+            HAL_ADC_Get_Calib((uint8_t)id, &linear, &offset);
+            HAL_ADC_Set_Calib((uint8_t)id, val, offset);
         }
         shell_print(sh, "sensor[%d]: linear=%.4f", id, (double)val);
 
     } else if (!strcmp(argv[2], "offset") && argc == 4) {
         float val = strtof(argv[3], NULL);
+        float linear, offset;
         if (sensor_id_is_load_cell(id)) {
-            Propeller_Manager_Set_Cell_Calib((uint8_t)id, 1.0f, val);
+            HAL_HX711_Get_Calib((uint8_t)id, &linear, &offset);
+            Propeller_Manager_Set_Cell_Calib((uint8_t)id, linear, val);
         } else {
-            HAL_ADC_Set_Calib((uint8_t)id, 1.0f, val);
+            HAL_ADC_Get_Calib((uint8_t)id, &linear, &offset);
+            HAL_ADC_Set_Calib((uint8_t)id, linear, val);
         }
         shell_print(sh, "sensor[%d]: offset=%.4f", id, (double)val);
 
@@ -358,6 +364,102 @@ static int cmd_prop_maxcurrent(const struct shell *sh, size_t argc, char **argv)
 }
 
 /* ===========================================================
+ * siba i2c scan|read|write — infra crua do I2C1 (PB8/PB9 remap,
+ * HAL_I2C_*). Sem decisão de protocolo — útil para checar a fiação/
+ * endereço de um dispositivo novo antes de implementar o driver dele.
+ * =========================================================== */
+#define I2C_SHELL_MAX_BYTES 32
+
+static int cmd_i2c_scan(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+
+    uint8_t addrs[16];
+    size_t count = 0;
+
+    HAL_I2C_Scan(addrs, ARRAY_SIZE(addrs), &count);
+
+    shell_print(sh, "I2C scan (0x%02X-0x%02X): %u dispositivo(s)",
+                HAL_I2C_SCAN_ADDR_MIN, HAL_I2C_SCAN_ADDR_MAX, (unsigned)count);
+    for (size_t i = 0; i < count && i < ARRAY_SIZE(addrs); i++) {
+        shell_print(sh, "  0x%02X", addrs[i]);
+    }
+    return 0;
+}
+
+static int cmd_i2c_read(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+
+    unsigned long addr = strtoul(argv[1], NULL, 0);
+    unsigned long len  = strtoul(argv[2], NULL, 0);
+    uint8_t buf[I2C_SHELL_MAX_BYTES];
+
+    if (len == 0 || len > sizeof(buf)) {
+        shell_error(sh, "i2c read: len deve ser 1-%u", (unsigned)sizeof(buf));
+        return -EINVAL;
+    }
+
+    int ret = HAL_I2C_Read((uint16_t)addr, buf, (size_t)len);
+    if (ret != 0) {
+        shell_error(sh, "i2c read 0x%02X: erro %d", (unsigned)addr, ret);
+        return ret;
+    }
+
+    shell_fprintf(sh, SHELL_NORMAL, "0x%02X:", (unsigned)addr);
+    for (unsigned long i = 0; i < len; i++) {
+        shell_fprintf(sh, SHELL_NORMAL, " %02X", buf[i]);
+    }
+    shell_print(sh, "");
+    return 0;
+}
+
+static int cmd_i2c_write(const struct shell *sh, size_t argc, char **argv)
+{
+    unsigned long addr = strtoul(argv[1], NULL, 0);
+    size_t len = argc - 2;
+    uint8_t buf[I2C_SHELL_MAX_BYTES];
+
+    if (len == 0 || len > sizeof(buf)) {
+        shell_error(sh, "i2c write: numero de bytes deve ser 1-%u", (unsigned)sizeof(buf));
+        return -EINVAL;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = (uint8_t)strtoul(argv[2 + i], NULL, 0);
+    }
+
+    int ret = HAL_I2C_Write((uint16_t)addr, buf, len);
+    if (ret != 0) {
+        shell_error(sh, "i2c write 0x%02X: erro %d", (unsigned)addr, ret);
+        return ret;
+    }
+
+    shell_print(sh, "i2c write 0x%02X: %u byte(s) OK", (unsigned)addr, (unsigned)len);
+    return 0;
+}
+
+/* ===========================================================
+ * siba dac <0-4095> — DAC1 canal 1 (PA5/DAC_OUT1), valor bruto 12 bits.
+ * =========================================================== */
+static int cmd_dac(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+
+    long val = strtol(argv[1], NULL, 0);
+
+    if (val < 0 || val > HAL_DAC_MAX_VALUE) {
+        shell_error(sh, "dac: valor deve ser 0-%u", HAL_DAC_MAX_VALUE);
+        return -EINVAL;
+    }
+
+    HAL_DAC_Set_Value((uint16_t)val);
+    shell_print(sh, "DAC: %ld / %u", val, HAL_DAC_MAX_VALUE);
+    return 0;
+}
+
+/* ===========================================================
  * Árvore de (sub)comandos — "siba <grupo> <ação> [args...]"
  * =========================================================== */
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_batt,
@@ -380,6 +482,19 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_prop,
     SHELL_CMD_ARG(maxcurrent, NULL,
                   "<amps> — sobrescreve limite de corrente do motor (Propeller_Manager direto)",
                   cmd_prop_maxcurrent, 2, 0),
+    SHELL_SUBCMD_SET_END
+);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_i2c,
+    SHELL_CMD_ARG(scan, NULL,
+                  "varre o barramento (HAL_I2C_SCAN_ADDR_MIN-MAX) listando enderecos que respondem",
+                  cmd_i2c_scan, 1, 0),
+    SHELL_CMD_ARG(read, NULL,
+                  "<addr> <len> — le len bytes do endereco addr (HAL_I2C_Read)",
+                  cmd_i2c_read, 3, 0),
+    SHELL_CMD_ARG(write, NULL,
+                  "<addr> <byte0> [byte1...] — escreve bytes no endereco addr (HAL_I2C_Write)",
+                  cmd_i2c_write, 3, I2C_SHELL_MAX_BYTES - 1),
     SHELL_SUBCMD_SET_END
 );
 
@@ -413,6 +528,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_siba,
                   cmd_sensor, 3, 1),
     SHELL_CMD(batt, &sub_batt, "comandos da bateria (Battery_Manager direto)", NULL),
     SHELL_CMD(prop, &sub_prop, "comandos do Propeller_Manager", NULL),
+    SHELL_CMD(i2c, &sub_i2c, "I2C1 (PB8/PB9) — scan/read/write crus (HAL_I2C direto)", NULL),
+    SHELL_CMD_ARG(dac, NULL,
+                  "<0-4095> — DAC1 canal 1 / PA5 (HAL_DAC direto)", cmd_dac, 2, 0),
     SHELL_SUBCMD_SET_END
 );
 

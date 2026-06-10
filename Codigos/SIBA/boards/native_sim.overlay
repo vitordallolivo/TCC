@@ -1,3 +1,5 @@
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
 /*
  * Overlay de devicetree para `west build -b native_sim` — fornece um
  * substituto emulado in-tree do ADC custom usado por HAL.c, com o MESMO
@@ -6,29 +8,45 @@
  * Zephyr (adc_channel_setup/adc_read_async — ver CMakeLists.txt, HAL.c
  * agora é compilado para os dois alvos, sem HAL_mock.c).
  *
- * adc1 → zephyr,adc-emul com 5 canais (mesmo ADC_NUM_CHANNELS de HAL.c) e
- * ref-internal-mv = 3300 (mesmo HAL_ADC_VREF_MV) — os valores de tensão
- * (mV) em cada canal são alimentados em runtime por um stimulus thread via
- * adc_emul_const_value_set(), invertendo as mesmas fórmulas físicas que
- * HAL_ADC_Get_* usa, para que o pipeline completo (ADC bruto → conversão
- * física → calibração) seja exercitado de verdade.
+ * adc1 → zephyr,adc-emul com 7 canais (cobre até ADC_CH_TEMP_BATT=6, o
+ * maior índice de canal usado em HAL.c) e ref-internal-mv = 3300 (mesmo
+ * HAL_ADC_VREF_MV) — os valores de tensão (mV) em cada canal são
+ * alimentados em runtime por um stimulus thread via
+ * adc_emul_const_value_set() (ver hal_adc_stimulus_thread_fn em HAL.c).
  *
- * NOTA — por que só o ADC ganha um nó emulado aqui: PWM (ESC) e
+ * i2c1 → zephyr,i2c-emul-controller, mesmo nodelabel `i2c1` que
+ * siba_board.dts usa para o I2C1 remapeado (PB8/PB9) — permite que
+ * HAL_I2C_Init()/DEVICE_DT_GET(DT_NODELABEL(i2c1)) resolva em native_sim
+ * sem nenhuma mudança no HAL.c. Sem dispositivos I2C reais no barramento
+ * emulado: HAL_I2C_Read/Write/Scan funcionam (não travam/crasham), apenas
+ * não encontram nada a responder.
+ *
+ * NOTA — por que só ADC e I2C ganham nó emulado aqui: PWM (ESC) e
  * Counter/TIM3 (RPM) não têm equivalente in-tree utilizável em firmware de
  * produção (zephyr,fake-pwm depende do framework de teste FFF —
  * subsys/testsuite/include/zephyr/fff.h, inexistente fora de builds
  * Twister/ztest — e RPM usa MMIO bruto em endereço físico fixo). Esses
- * dois ganham, em vez disso, um pequeno bloco `#ifdef CONFIG_ARCH_POSIX`
- * dentro do próprio HAL.c (ver HAL_ESC_HAL_RPM_* — modelo synthetic
- * equivalente ao do antigo HAL_mock.c, agora isolado e mínimo).
+ * dois (e o DAC) ganham, em vez disso, um pequeno bloco
+ * `#ifdef CONFIG_ARCH_POSIX` dentro do próprio HAL.c — modelo synthetic
+ * equivalente ao do antigo HAL_mock.c, agora isolado e mínimo.
  */
 
 / {
     adc1: adc_emul_1 {
         compatible = "zephyr,adc-emul";
-        nchannels = <5>;
+        nchannels = <7>;
         ref-internal-mv = <3300>;
         #io-channel-cells = <1>;
+        status = "okay";
+    };
+
+    i2c1: i2c@110 {
+        compatible = "zephyr,i2c-emul-controller";
+        reg = <0x110 4>;
+        clock-frequency = <I2C_BITRATE_STANDARD>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        #forward-cells = <1>;
         status = "okay";
     };
 };

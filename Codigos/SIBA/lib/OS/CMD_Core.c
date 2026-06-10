@@ -65,10 +65,11 @@ static void handle_func_battery(const CMD *cmd)
 
 /* Aplica Linear_Coeff/Offset_Coeff ao hardware do sensor `tid`, de forma
  * genérica — célula de carga (HX711) ou sensor analógico (ADC). `sensor_cfg[]`
- * (struct SENSORS, Common_Types.h/Log_Manager.h) é a fonte única de verdade
- * para os coeficientes; aqui só decidimos para qual driver empurrá-los.
- * SENSOR_ID_SOC não tem hardware próprio (calculado via polinômio pelo
- * Battery_Manager) — não recebe calibração linear/offset. */
+ * (struct SENSORS, Common_Types.h/Log_Manager.h) é só um cache local; quem
+ * guarda os valores de verdade é o HAL/Propeller_Manager (ver
+ * read_sensor_calib abaixo). SENSOR_ID_SOC não tem hardware próprio
+ * (calculado via polinômio pelo Battery_Manager) — não recebe calibração
+ * linear/offset. */
 static void apply_sensor_calib(int8_t tid, float linear, float offset)
 {
     switch (tid) {
@@ -91,6 +92,33 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
     }
 }
 
+/* Lê o par (linear, offset) hoje aplicado no HAL/Propeller_Manager para o
+ * sensor `tid` — HAL é a fonte única de verdade da calibração (pode ter
+ * sido alterada pelo shell `siba sensor`, fora do cache sensor_cfg[]).
+ * Usado para alterações PARCIAIS (só linear ou só offset): lê o par atual,
+ * troca apenas o campo pedido e regrava os dois — sem isso, alterar um
+ * coeficiente sobrescreveria o outro com o default (1.0/0.0). */
+static void read_sensor_calib(int8_t tid, float *linear, float *offset)
+{
+    switch (tid) {
+        case SENSOR_ID_LOAD_CELL_0 ... SENSOR_ID_LOAD_CELL_5:
+            HAL_HX711_Get_Calib((uint8_t)tid, linear, offset);
+            break;
+
+        case SENSOR_ID_V_BATT:
+        case SENSOR_ID_I_BATT:
+        case SENSOR_ID_TEMPERATURE_BATTERY:
+        case SENSOR_ID_AIR_SPEED:
+            HAL_ADC_Get_Calib((uint8_t)tid, linear, offset);
+            break;
+
+        default:
+            *linear = 1.0f;
+            *offset = 0.0f;
+            break;
+    }
+}
+
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
@@ -103,17 +131,27 @@ static void handle_func_sensor(const CMD *cmd)
     SENSORS *s = &sensor_cfg[tid];
 
     switch (act) {
-        case DEFAULT_ACTION_SENSE_LINEAR_COEF:
-            s->Linear_Coeff = cmd->value;
-            apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
+        case DEFAULT_ACTION_SENSE_LINEAR_COEF: {
+            float linear, offset;
+            read_sensor_calib(tid, &linear, &offset);
+            linear = cmd->value;
+            apply_sensor_calib(tid, linear, offset);
+            s->Linear_Coeff = linear;
+            s->Offset_Coeff = offset;
             LOG_INF("CMD SENSOR[%d]: linear=%.4f", tid, (double)cmd->value);
             break;
+        }
 
-        case DEFAULT_ACTION_SENSE_OFFSET_COEF:
-            s->Offset_Coeff = cmd->value;
-            apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
+        case DEFAULT_ACTION_SENSE_OFFSET_COEF: {
+            float linear, offset;
+            read_sensor_calib(tid, &linear, &offset);
+            offset = cmd->value;
+            apply_sensor_calib(tid, linear, offset);
+            s->Linear_Coeff = linear;
+            s->Offset_Coeff = offset;
             LOG_INF("CMD SENSOR[%d]: offset=%.4f", tid, (double)cmd->value);
             break;
+        }
 
         case DEFAULT_ACTION_SENSE_RESET_DEFAULT:
             s->Linear_Coeff = s->Linear_Coeff_Reset_Default;
