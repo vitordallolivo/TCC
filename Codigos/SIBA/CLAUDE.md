@@ -32,8 +32,7 @@ SIBA/
 ├── drivers/
 │   └── adc/
 │       └── adc_ch32v307.c      # Driver ADC custom (MMIO+DMA, sem HAL WCH)
-├── dts/bindings/
-│   ├── adc/wch,adc.yaml             # Binding para compatible="wch,adc"
+├── dts/bindings/                    # (ADC usa o binding upstream "wch,adc" do Zephyr)
 │   ├── gpio/siba,gpio-array.yaml    # Binding genérico p/ arrays de GPIO (HX711, RPM)
 │   └── pwm/siba,pwm-consumer.yaml   # Binding p/ consumidor de PWM nomeado (ESC)
 ├── lib/

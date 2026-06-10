@@ -136,7 +136,10 @@ esquemático e da decisão de design para cada item.
 
 ### ADC1 — scan circular multicanal (4 canais) via DMA
 - Driver custom out-of-tree: `drivers/adc/adc_ch32v307.c` (MMIO direto, DMA circular)
-- Binding DTS: `compatible = "wch,adc"` (`dts/bindings/adc/wch,adc.yaml`)
+- Binding DTS: `compatible = "wch,adc"` — usa o binding **upstream do Zephyr**
+  (`zephyr/dts/bindings/adc/wch,adc.yaml`); a cópia local foi removida porque
+  o edtlib não aceita dois bindings com o mesmo `compatible` (e, com espaço
+  acidental no nome, ela era ignorada e ainda quebrava `git pull` no Windows)
 - Resolução 12 bits, oversample 8x (média), `ADC_NUM_CHANNELS = 4` (`HAL_ADC_IDX_*` em `HAL.h`)
 - O driver já fazia DMA circular desde o início — a mudança nesta rodada foi
   puramente de configuração no `HAL.c` (canais em `adc_ch_cfg[]`/`adc_seq`)
@@ -282,9 +285,12 @@ nós `hx711_sck_pins` / `hx711_dout_pins`.
 
 | Binding                         | Compatible              | Uso                                             |
 |---------------------------------|--------------------------|-------------------------------------------------|
-| `adc/wch,adc.yaml`               | `wch,adc`               | Driver ADC custom (`drivers/adc/adc_ch32v307.c`) |
 | `gpio/siba,gpio-array.yaml`      | `siba,gpio-array`       | Arrays de GPIO genéricos (HX711 SCK/DOUT, RPM)   |
 | `pwm/siba,pwm-consumer.yaml`     | `siba,pwm-consumer`     | Consumidor de PWM nomeado (ESC)                  |
+
+> O ADC (`compatible = "wch,adc"`, driver custom `drivers/adc/adc_ch32v307.c`)
+> usa o binding upstream do Zephyr (`zephyr/dts/bindings/adc/wch,adc.yaml`) —
+> não há cópia local (edtlib proíbe `compatible` duplicado).
 
 ## Memória
 
