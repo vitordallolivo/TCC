@@ -6,7 +6,6 @@
 #include <zephyr/dt-bindings/clock/ch32v20x_30x-clocks.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 
-/* ADICIONE ESTA LINHA: Cria um valor nulo para o pre-processador não quebrar */
 #define CH32V20X_V30X_PINMUX_ADC1_RM 0
 
 / {
@@ -25,12 +24,12 @@
         relay0 = &relay_batt;
     };
 
-    /* PE15 — uso DUPLO confirmado no esquemático: além de LED de status
-     * (ready_pin/led0), o mesmo sinal alimenta a porta lógica AND como
-     * MCU_Sig_Ready — a porta AND combina esse sinal com outra condição de
-     * segurança e sua saída (PD2, ver gpio_pd2_and_out abaixo) habilita o
-     * SSR de 100A. Ou seja: o "sistema pronto" do MCU é literalmente uma
-     * das duas condições para a placa permitir corrente alta no contator. */
+    /* PE15 - uso DUPLO confirmado no esquematico: alem de LED de status
+     * (ready_pin/led0), o mesmo sinal alimenta a porta logica AND como
+     * MCU_Sig_Ready - a porta AND combina esse sinal com outra condicao de
+     * seguranca e sua saida (PD2, ver gpio_pd2_and_out abaixo) habilita o
+     * SSR de 100A. Ou seja: o "sistema pronto" do MCU e literalmente uma
+     * das duas condicoes para a placa permitir corrente alta no contator. */
     leds {
         compatible = "gpio-leds";
         ready_pin: ready_pin {
@@ -39,94 +38,60 @@
         };
     };
 
-    /* PD2 — saída da porta AND (MCU_Sig_Ready AND <outra condição>) que
-     * habilita o SSR de 100A. Reservado como entrada para o MCU poder
-     * eventualmente ler esse sinal de volta (feedback/diagnóstico —
-     * confirma que o SSR está realmente habilitado). Sem lógica de
-     * leitura implementada ainda — só reserva o pino. */
     gpio_pd2_and_out: gpio-pd2-and-out {
         compatible = "siba,gpio-array";
-        gpios = <&gpiod 2 GPIO_ACTIVE_HIGH>;   /* AND-gate out -> habilita SSR 100A */
+        gpios = <&gpiod 2 GPIO_ACTIVE_HIGH>;
     };
 
-    /* PA8 — "Ensaio_Bateria_Corrente" no esquemático. Fora do range físico
-     * do ADC1 (CH0-CH7 = PA0-PA7) e do mux do ADC2 suportado pelo driver —
-     * função exata ainda não confirmada/usada. Reservado/ocupado no .dts +
-     * slot de código correspondente (ver HAL_RESERVED_PA8_IDX em HAL.h)
-     * para uso futuro, conforme pedido. */
     pa8_reserved: pa8-reserved {
         compatible = "siba,gpio-array";
-        gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;   /* Ensaio_Bateria_Corrente — reservado */
+        gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;
     };
 
-    /* Relés — PB15 é o relé de potência principal (alias relay0, usado por
-     * Battery_Manager_Set_Relay/DT_ALIAS(relay0)). PB11-PB14 são relés
-     * genéricos cuja função individual ainda não foi detalhada no
-     * esquemático — reservados/documentados, sem lógica de uso ainda. */
     relay_batt: relay-batt {
         compatible = "siba,gpio-array";
-        gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;  /* relay0 — relé de potência (bateria) */
+        gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;
     };
 
     relays_generic: relays-generic {
         compatible = "siba,gpio-array";
-        gpios = <&gpiob 11 GPIO_ACTIVE_HIGH>,  /* relé genérico 0 — uso TBD */
-                <&gpiob 12 GPIO_ACTIVE_HIGH>,  /* relé genérico 1 — uso TBD */
-                <&gpiob 13 GPIO_ACTIVE_HIGH>,  /* relé genérico 2 — uso TBD */
-                <&gpiob 14 GPIO_ACTIVE_HIGH>;  /* relé genérico 3 — uso TBD */
+        gpios = <&gpiob 11 GPIO_ACTIVE_HIGH>,
+                <&gpiob 12 GPIO_ACTIVE_HIGH>,
+                <&gpiob 13 GPIO_ACTIVE_HIGH>,
+                <&gpiob 14 GPIO_ACTIVE_HIGH>;
     };
 
-    /* ADC1 — scan circular via DMA (ver adc_ch32v307.c). Pinagem REAL aplicada
-     * conforme esquemático (ver HW.md "Pinagem real"):
-     *   CH0 (PA0) → v_batt            CH1 (PA1) → i_batt
-     *   CH2 (PA2) → air_speed (Pitot) CH6 (PA6) → temperature_battery
-     *                                   (uso duplo — mesmo circuito de
-     *                                   Ensaio_Bateria_Termistor_1)
-     * IMPORTANTE: ADC1 só enxerga os canais 0-7 (pinos PA0-PA7) — canais 8+
-     * pertencem ao mux do ADC2, não suportado por este driver custom.
-     *
-     * Pinos PA3/PA4/PA7 (Ensaio_Bateria_Voltage/DAC/Termistor_2) são da
-     * bancada de ensaio — documentados aqui mas SEM nó funcional/leitura
-     * (fora do TELEMETRY_LOG por enquanto, ver CLAUDE.md). PA8
-     * (Ensaio_Bateria_Corrente) está fora do range do ADC1 — ver nó
-     * `pa8_reserved` (reservado/ocupado para uso futuro). */
     adc1: adc@40012400 {
         compatible = "wch,adc";
-        reg = <0x40012400 0x400>; 
+        reg = <0x40012400 0x400>;
         clocks = <&rcc CH32V20X_V30X_CLOCK_ADC1>;
         interrupt-parent = <&pfic>;
-        interrupts = <34>; 
-        
-        dmas = <&dma1 1>; 
+        interrupts = <34>;
+        dmas = <&dma1 1>;
         dma-names = "rx";
-        
-        /* LINHAS ADICIONADAS AQUI */
         pinctrl-0 = <&adc1_default>;
         pinctrl-names = "default";
-        
         status = "okay";
         #io-channel-cells = <1>;
     };
 
-
     tim3: timer@40000400 {
         compatible = "wch,gptm";
-        reg = <0x40000400 0x400>; 
+        reg = <0x40000400 0x400>;
         clocks = <&rcc CH32V20X_V30X_CLOCK_TIM3>;
         interrupt-parent = <&pfic>;
-        interrupts = <45>; 
-        channels = <4>; /* <-- ADICIONE ESTA LINHA AQUI */
+        interrupts = <45>;
+        channels = <4>;
         status = "okay";
         prescaler = <0>;
-        
     };
 
     tim4: timer@40000800 {
         compatible = "wch,gptm";
-        reg = <0x40000800 0x400>; /* Endereço Base do TIM4  */
+        reg = <0x40000800 0x400>;
         clocks = <&rcc CH32V20X_V30X_CLOCK_TIM4>;
         interrupt-parent = <&pfic>;
-        interrupts = <46>; /* IRQ do TIM4  */
+        interrupts = <46>;
         channels = <4>;
         prescaler = <143>;
         status = "okay";
@@ -140,77 +105,59 @@
         };
     };
 
-    /* ESC — TIM4 CH1 (PB6), 50Hz / período 20ms (ver HAL_ESC_*) */
     esc_motor: esc-motor {
         compatible = "siba,pwm-consumer";
         pwms = <&pwm4 1 PWM_USEC(20000) PWM_POLARITY_NORMAL>;
     };
 
-    /* HX711 x6 — bit-bang GPIO (sem função alternada — qualquer GPIO serve).
-     * Remapeado para a Porta E (estava em PA1-PA6/PB1-PB5/PC0) para liberar
-     * PA1-PA7 inteiramente para o ADC1 (canais 0-7 — ver comentário no nó
-     * adc1). Pinagem ainda placeholder (ver tabela em CLAUDE.md/HW.md);
-     * confirmar no esquemático e atualizar junto de HAL.c::hx711_sck/hx711_dout. */
     hx711_sck_pins: hx711-sck-pins {
         compatible = "siba,gpio-array";
-        gpios = <&gpioe 2 GPIO_ACTIVE_HIGH>,   /* HX711[0] PE2 */
-                <&gpioe 3 GPIO_ACTIVE_HIGH>,   /* HX711[1] PE3 */
-                <&gpioe 4 GPIO_ACTIVE_HIGH>,   /* HX711[2] PE4 */
-                <&gpioe 5 GPIO_ACTIVE_HIGH>,   /* HX711[3] PE5 */
-                <&gpioe 6 GPIO_ACTIVE_HIGH>,   /* HX711[4] PE6 */
-                <&gpioe 7 GPIO_ACTIVE_HIGH>;   /* HX711[5] PE7 */
+        gpios = <&gpioe 2 GPIO_ACTIVE_HIGH>,
+                <&gpioe 3 GPIO_ACTIVE_HIGH>,
+                <&gpioe 4 GPIO_ACTIVE_HIGH>,
+                <&gpioe 5 GPIO_ACTIVE_HIGH>,
+                <&gpioe 6 GPIO_ACTIVE_HIGH>,
+                <&gpioe 7 GPIO_ACTIVE_HIGH>;
     };
 
-    /* RPM — TIM3 CH3 / PB0 (sem remap). Configurado como entrada flutuante;
-     * o periférico TIM3 lê o pino diretamente em modo input capture (não
-     * requer função alternada de GPIO, apenas que o pino esteja em modo
-     * entrada — ver HAL_RPM_Init em HAL.c). */
     rpm_capture_pin: rpm-capture-pin {
         compatible = "siba,gpio-array";
-        gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>;   /* TIM3_CH3 PB0 */
+        gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>;
     };
 
     hx711_dout_pins: hx711-dout-pins {
         compatible = "siba,gpio-array";
-        gpios = <&gpioe 8 GPIO_ACTIVE_HIGH>,   /* HX711[0] PE8 */
-                <&gpioe 9 GPIO_ACTIVE_HIGH>,   /* HX711[1] PE9 */
-                <&gpioe 10 GPIO_ACTIVE_HIGH>,  /* HX711[2] PE10 */
-                <&gpioe 11 GPIO_ACTIVE_HIGH>,  /* HX711[3] PE11 */
-                <&gpioe 12 GPIO_ACTIVE_HIGH>,  /* HX711[4] PE12 */
-                <&gpioe 13 GPIO_ACTIVE_HIGH>;  /* HX711[5] PE13 */
+        gpios = <&gpioe 8 GPIO_ACTIVE_HIGH>,
+                <&gpioe 9 GPIO_ACTIVE_HIGH>,
+                <&gpioe 10 GPIO_ACTIVE_HIGH>,
+                <&gpioe 11 GPIO_ACTIVE_HIGH>,
+                <&gpioe 12 GPIO_ACTIVE_HIGH>,
+                <&gpioe 13 GPIO_ACTIVE_HIGH>;
     };
 
 };
 
 /* ==================================================================== *
- * REFERÊNCIAS AO HARDWARE EXISTENTE E PINCTRL                          *
+ * PINCTRL                                                               *
  * ==================================================================== */
 
 &pinctrl {
 
     adc1_default: adc1_default {
-        /* Pinagem REAL (ver HW.md "Pinagem real") — 4 canais úteis, todos
-         * dentro do range físico do ADC1 (CH0-CH7 = PA0-PA7): */
         group1 {
-            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>;   /* CH0 — v_batt */
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>;   /* CH0 - v_batt */
         };
         group2 {
-            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>;   /* CH1 — i_batt */
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>;   /* CH1 - i_batt */
         };
         group3 {
-            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 2, ADC1, 0)>;   /* CH2 — air_speed (Pitot) */
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 2, ADC1, 0)>;   /* CH2 - air_speed */
         };
-        /* CH6 (PA6) — uso DUPLO: mesmo circuito de Ensaio_Bateria_Termistor_1,
-         * agora também fonte de temperature_battery no TELEMETRY_LOG. */
         group4 {
-            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 6, ADC1, 0)>;   /* CH6 — temperature_battery */
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 6, ADC1, 0)>;   /* CH6 - temperature_battery */
         };
     };
 
-    /* I2C1 remapeado para PB8(SCL)/PB9(SDA) — driver wch,i2c já existe no
-     * Zephyr (i2c_wch.c); só precisa instanciar com o pinmux remapeado
-     * (remap=1 — ver I2C1_SCL_PB8_1/I2C1_SDA_PB9_1). Infra mínima para
-     * leitura/escrita/scan crus — substituirá o HX711 no futuro. */
     i2c1_default: i2c1_default {
         group1 {
             pinmux = <I2C1_SCL_PB8_1>;
@@ -223,7 +170,6 @@
             drive-open-drain;
         };
     };
-
 
     usart1_default: usart1_default {
         group1 {
@@ -240,15 +186,13 @@
 
     tim3_ch3_pb0: tim3_ch3_pb0 {
         group1 {
-            /* PB0, TIM3, Remap=0 (Roteamento Padrão) */
             pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 0, TIM3, 0)>;
-            bias-pull-up; 
+            bias-pull-up;
         };
     };
 
     tim4_ch1_default: tim4_ch1_default {
         group1 {
-            /* PB6, TIM4, Remap=0 */
             pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 6, TIM4, 0)>;
             drive-push-pull;
             slew-rate = "max-speed-50mhz";
@@ -275,9 +219,13 @@
     };
 
     mdio_default: mdio_default {
-        /* No MDIO pinmux required for internal PHY */
+        /* PHY interno - sem pinos MDIO externos necessarios */
     };
 };
+
+/* ==================================================================== *
+ * HARDWARE EXISTENTE                                                    *
+ * ==================================================================== */
 
 &clk_hse {
     status = "okay";
@@ -292,29 +240,12 @@
     clocks = <&pll>;
 };
 
-&gpioa {
-    status = "okay";
-};
-
-&gpiob {
-    status = "okay";
-};
-
-&gpioc {
-    status = "okay";
-};
-
-&gpiod {
-    status = "okay";
-};
-
-&gpioe {
-    status = "okay";
-};
-
-&dma1 {
-    status = "okay";
-};
+&gpioa { status = "okay"; };
+&gpiob { status = "okay"; };
+&gpioc { status = "okay"; };
+&gpiod { status = "okay"; };
+&gpioe { status = "okay"; };
+&dma1  { status = "okay"; };
 
 &usart1 {
     status = "okay";
@@ -323,12 +254,26 @@
     pinctrl-names = "default";
 };
 
+/* FIX 1: habilita o controller pai - sem isso o clock do MAC nunca sobe
+ * e o driver trava antes de qualquer log aparecer no serial. */
+&eth {
+    status = "okay";
+};
+
+/* FIX 2: local-mac-address - sem isso o driver tenta ler da OTP interna;
+ * se zerada (chip novo/apagado), entra em loop e o watchdog reinicia.
+ * FIX 3: internal-phy-pllmul/prediv explicitos - HSE 8MHz / prediv2=2 *
+ * pllmul=15 = 60MHz para o PHY interno. Ja vem do dtsi mas declarados
+ * aqui para garantir independencia de versao do dtsi. */
 &mac {
     status = "okay";
     pinctrl-0 = <&mac_default>;
     pinctrl-names = "default";
     phy-connection-type = "internal";
     phy-handle = <&eth_phy>;
+    local-mac-address = [02 00 00 01 02 03];
+    internal-phy-pllmul = "15";
+    internal-phy-prediv = "2";
 };
 
 &mdio {
@@ -345,10 +290,6 @@
     status = "okay";
 };
 
-/* I2C1 — remapeado para PB8(SCL)/PB9(SDA) (remap=1). Driver wch,i2c já
- * existe no Zephyr (ch32v307.dtsi traz o nó disabled por padrão) — só
- * habilita e aponta o pinctrl. Infra mínima (HAL_I2C_Read/Write/Scan)
- * para uso futuro (substituirá o HX711 — ver HAL.c/HW.md). */
 &i2c1 {
     status = "okay";
     pinctrl-0 = <&i2c1_default>;

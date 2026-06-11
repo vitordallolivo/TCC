@@ -22,6 +22,15 @@ if(NOT CONFIG_ARCH_POSIX)
     zephyr_library_named(adc_ch32v307)
     zephyr_library_sources(drivers/adc/adc_ch32v307.c)
     zephyr_library_link_libraries(zephyr_interface)
+
+
+
+    zephyr_library_sources_ifdef(CONFIG_ETH_WCH
+        drivers/ethernet/eth_wch.c
+    )
+    zephyr_include_directories_ifdef(CONFIG_ETH_WCH
+        ${ZEPHYR_BASE}/drivers/ethernet
+    )
 endif()
 
 target_sources(app PRIVATE
