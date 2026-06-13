@@ -34,8 +34,14 @@ void nci_tx_thread(void *p1, void *p2, void *p3)
 
     while (1) {
         if (k_msgq_get(&fila_nci, &msg, K_FOREVER) != 0) continue;
-        if (!is_network_connected) continue;
-        if (msg.target != TARGET_NETWORK) continue;
+        if (!is_network_connected) {
+            LOG_ERR("Nao conectado");
+            continue;
+        };
+        if (msg.target != TARGET_NETWORK){
+            LOG_ERR("Target errado");
+            continue;
+        };
 
         /* payload.raw contém TELEMETRY_LOG serializado pelo Log_Manager */
         ssize_t sent = zsock_sendto(sock,

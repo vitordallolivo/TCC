@@ -43,7 +43,9 @@ int main(void)
     /* 6. NCI — TX/RX UDP */
     NCI_Init();
 
-    /* 7. HAL — ADC, HX711, ESC, RPM — registra threads via TCKEC */
+    /* 7. HAL — ADC, HX711, ESC, RPM, I2C, DAC — registra threads via TCKEC
+     * (HAL_prm.h controla quais módulos realmente inicializam hardware —
+     * usado para bissecção de crash em bancada, ver CLAUDE.md/HAL_prm.h) */
     if (HAL_Init() != 0) {
         LOG_ERR("HAL_Init falhou — sistema degradado");
     }
@@ -52,7 +54,6 @@ int main(void)
     NCI_Set_Connection_Status(true);
 
     LOG_INF("=== SIBA pronto. Threads ativas. ===");
-
     /* main retorna — Zephyr scheduler assume o controle; as threads
      * registradas no TCKEC seguem rodando normalmente. */
     return 0;

@@ -245,7 +245,16 @@
 &gpioc { status = "okay"; };
 &gpiod { status = "okay"; };
 &gpioe { status = "okay"; };
-&dma1  { status = "okay"; };
+/* dma1 fica "disabled" como CONTROLLER GENERICO Zephyr (dma_wch.c):
+ * dma_wch_init roda em PRE_KERNEL_1 e faz IRQ_CONNECT+irq_enable para TODAS
+ * as IRQs 27-33 (DMA1 canais 1-7) com seu proprio handler/dev. O driver
+ * adc_ch32v307.c NAO usa a API generica de DMA (faz MMIO direto nos
+ * registradores do DMA1) -- so precisa da CELULA "channel" de
+ * `dmas = <&dma1 1>` (resolvida em tempo de compilacao, independente do
+ * status do no). Com dma1 "okay", adc_ch32v307_init (POST_KERNEL) sobrescreve
+ * o vetor da IRQ27 (antes apontando pro dma_wch) com seu proprio ISR --
+ * dois drivers disputando a mesma IRQ/canal = conflito de "mesmo DMA". */
+&dma1  { status = "disabled"; };
 
 &usart1 {
     status = "okay";

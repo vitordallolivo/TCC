@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <zephyr/kernel.h>
+#include "HAL_prm.h"
 
 /* ===========================================================
  * IDs de Thread para o TCKEC

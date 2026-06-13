@@ -310,6 +310,8 @@ static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t coun
     ADC_REG(base, ADC_OFF_SAMPTR1) = smp1;
 }
 
+static void adc_hw_reconfigure(const struct device *dev);
+
 /* =========================================================
  * API Zephyr: channel_setup
  * ========================================================= */
@@ -345,6 +347,12 @@ static int adc_ch32v307_channel_setup(const struct device *dev,
 
         LOG_DBG("Canal %d adicionado (total: %d)", cfg->channel_id,
                 data->ch_count);
+
+        /* Reprograma RSQR/SAMPTR/DMA com a sequência atualizada — chamado
+         * uma vez por canal adicionado; a última chamada (todos os canais
+         * já registrados) deixa o scan circular rodando com a sequência
+         * completa. */
+        adc_hw_reconfigure(dev);
     }
 
     return 0;
@@ -471,8 +479,11 @@ static int adc_ch32v307_init(const struct device *dev)
         __asm__ volatile("nop");
     }
 
-    /* Conecta e habilita a IRQ do canal DMA1 alocado para esta instância
-     * (gerada por instância via ADC_CH32V307_INIT — IRQ = 26 + canal) */
+    /* Conecta/habilita a IRQ do canal DMA1 alocado (transfer-complete) --
+     * a partir daqui adc_ch32v307_dma_isr() pode disparar, mas o canal
+     * ainda está com CFGR.EN=0 (dma_init() só roda em adc_hw_reconfigure(),
+     * chamado por adc_channel_setup() depois que HAL_ADC_Init() configurar
+     * os canais) — sem transferência em andamento, sem TC, sem ISR. */
     cfg->irq_config_func(dev);
 
     data->initialized = true;

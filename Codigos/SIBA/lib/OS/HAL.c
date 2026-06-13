@@ -37,6 +37,15 @@
 
 LOG_MODULE_REGISTER(hal, LOG_LEVEL_DBG);
 
+#ifndef CONFIG_ARCH_POSIX
+/* RCC — registrador de habilitação de clock dos periféricos em APB1.
+ * Compartilhado entre RPM (TIM3, RCC_APB1_TIM3EN) e DAC (DAC1,
+ * RCC_APB1PCENR_DAC_EN) — fica aqui no topo para não criar dependência
+ * entre as seções RPM/DAC quando uma delas é desabilitada via HAL_prm.h. */
+#define RCC_BASE         0x40021000UL
+#define RCC_APB1PCENR    (*(volatile uint32_t *)(RCC_BASE + 0x1C))
+#endif /* !CONFIG_ARCH_POSIX */
+
 #ifdef CONFIG_ARCH_POSIX
 /* native_sim: throttle "comandado" do ESC synthetic (percent * 100),
  * compartilhado entre HAL_ESC_Set_Throttle (escritor — ver seção ESC),
@@ -60,10 +69,18 @@ static atomic_t hal_sim_throttle_x100;
  *   idx 3 = CH6 (PA6)  temperature_battery (uso duplo c/ Ensaio_Termistor_1)
  * PA3/PA4/PA7 (Ensaio_Bateria_*) não entram nesse scan — ver siba_board.dts.
  * =========================================================== */
+#define ADC_NUM_CHANNELS  4
+
+/* adc_raw[]/HAL_ADC_Get() são software puro (nenhum acesso a hardware) —
+ * ficam sempre compilados mesmo com HAL_ENABLE_ADC=0 (ver HAL_prm.h),
+ * para que HAL_ADC_Get_*()/Test_Shell continuem linkando e devolvendo 0. */
+static atomic_t adc_raw[ADC_NUM_CHANNELS];
+
+#if HAL_ENABLE_ADC
+
 #define ADC_NODE DT_NODELABEL(adc1)
 static const struct device *adc_dev = DEVICE_DT_GET(ADC_NODE);
 
-#define ADC_NUM_CHANNELS  4
 #define ADC_RESOLUTION    12
 #define ADC_OVERSAMPLE    8
 
@@ -72,8 +89,17 @@ static const struct device *adc_dev = DEVICE_DT_GET(ADC_NODE);
 #define ADC_CH_AIR_SPEED   2
 #define ADC_CH_TEMP_BATT   6
 
+/* PA5 é, ao mesmo tempo, ADC1 canal 5 e DAC1_OUT1 (HAL_DAC) — ver
+ * HAL_prm.h. Se algum dia o canal 5 entrar nesse scan com o DAC
+ * habilitado, é um conflito de pino real: aborta o build. */
+#if HAL_ENABLE_DAC
+#if (ADC_CH_V_BATT == 5) || (ADC_CH_I_BATT == 5) || \
+    (ADC_CH_AIR_SPEED == 5) || (ADC_CH_TEMP_BATT == 5)
+#error "PA5 (ADC1 CH5) conflita com DAC1_OUT1 (HAL_DAC) -- escolha um uso para PA5 (ver HAL_prm.h)"
+#endif
+#endif
+
 static uint16_t adc_seq_buf[ADC_NUM_CHANNELS];
-static atomic_t adc_raw[ADC_NUM_CHANNELS];
 
 static const struct adc_channel_cfg adc_ch_cfg[ADC_NUM_CHANNELS] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
@@ -93,6 +119,8 @@ static struct adc_sequence adc_seq = {
     .buffer_size = sizeof(adc_seq_buf),
     .resolution  = ADC_RESOLUTION,
 };
+
+#endif /* HAL_ENABLE_ADC */
 
 /* Tensão lida no pino do ADC, em mV, a partir da contagem bruta */
 static inline float adc_raw_to_mv(uint16_t raw)
@@ -147,7 +175,7 @@ static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
     return phys_value * adc_calib[sensor_id].linear + adc_calib[sensor_id].offset;
 }
 
-#ifdef CONFIG_ARCH_POSIX
+#if HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
 /* ---- native_sim: "estímulo" do ADC emulado (zephyr,adc-emul, ver
  * native_sim.overlay). Como HAL_ADC_Get_* agora é calibração linear pura
  * (sem fórmula física — ver bloco de calibração acima), não há mais nada
@@ -233,12 +261,15 @@ void hal_adc_stimulus_thread_fn(void *p1, void *p2, void *p3)
         adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_clamp_mv(air_mv));
     }
 }
-#endif /* CONFIG_ARCH_POSIX */
+#endif /* HAL_ENABLE_ADC && CONFIG_ARCH_POSIX */
 
 int HAL_ADC_Init(void)
 {
+    /* hal_adc_calib_init() é software puro — roda mesmo desabilitado,
+     * para que HAL_ADC_Get_*()/HAL_ADC_Set_Calib() continuem coerentes. */
     hal_adc_calib_init();
 
+#if HAL_ENABLE_ADC
     if (!device_is_ready(adc_dev)) {
         LOG_ERR("ADC não pronto");
         return -ENODEV;
@@ -251,6 +282,9 @@ int HAL_ADC_Init(void)
         }
     }
     LOG_INF("HAL ADC: %d canal(is) configurado(s) — scan circular via DMA", ADC_NUM_CHANNELS);
+#else
+    LOG_INF("HAL ADC: desabilitado via HAL_prm.h (HAL_DISABLE_ADC)");
+#endif
     return 0;
 }
 
@@ -284,6 +318,7 @@ float HAL_ADC_Get_Air_Speed(void)
                                adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_AIR_SPEED)));
 }
 
+#if HAL_ENABLE_ADC
 void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -352,6 +387,7 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
         }
     }
 }
+#endif /* HAL_ENABLE_ADC */
 
 /* ===========================================================
  * HX711 — Bit-bang GPIO
@@ -363,7 +399,7 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
  *   4. Resultado é complemento de dois de 24 bits com sinal
  * =========================================================== */
 
-#ifndef CONFIG_ARCH_POSIX
+#if HAL_ENABLE_HX711 && !defined(CONFIG_ARCH_POSIX)
 /* Mapeamento de pinos — ajuste conforme esquemático */
 #define HX711_SCK_NODE  DT_NODELABEL(hx711_sck_pins)
 #define HX711_DOUT_NODE DT_NODELABEL(hx711_dout_pins)
@@ -385,7 +421,7 @@ static const struct gpio_dt_spec hx711_dout[HX711_COUNT] = {
     GPIO_DT_SPEC_GET_BY_IDX(HX711_DOUT_NODE, gpios, 4),  /* PE12 */
     GPIO_DT_SPEC_GET_BY_IDX(HX711_DOUT_NODE, gpios, 5),  /* PE13 */
 };
-#endif /* !CONFIG_ARCH_POSIX */
+#endif /* HAL_ENABLE_HX711 && !CONFIG_ARCH_POSIX */
 
 /* Estado interno de cada célula */
 static struct {
@@ -399,7 +435,7 @@ static struct {
 /* Mutex para acesso thread-safe ao estado */
 static struct k_mutex hx711_mutex;
 
-#ifndef CONFIG_ARCH_POSIX
+#if HAL_ENABLE_HX711 && !defined(CONFIG_ARCH_POSIX)
 /* Pulso de clock em torno de 1µs @ 144MHz */
 static inline void hx711_clock_pulse(const struct gpio_dt_spec *sck)
 {
@@ -450,9 +486,9 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 
     return true;
 }
-#endif /* !CONFIG_ARCH_POSIX */
+#endif /* HAL_ENABLE_HX711 && !CONFIG_ARCH_POSIX */
 
-#ifdef CONFIG_ARCH_POSIX
+#if HAL_ENABLE_HX711 && defined(CONFIG_ARCH_POSIX)
 /* native_sim: sem GPIO bit-bang (DT_NODELABEL(hx711_sck/dout_pins) não
  * existem no devicetree do native_sim) — sintetiza o valor "raw" 24 bits
  * direto, modelo de empuxo proporcional ao quadrado do RPM, mesmo padrão
@@ -483,12 +519,24 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
            + noise;
     return true;
 }
-#endif /* CONFIG_ARCH_POSIX */
+#endif /* HAL_ENABLE_HX711 && CONFIG_ARCH_POSIX */
 
 int HAL_HX711_Init(void)
 {
     k_mutex_init(&hx711_mutex);
 
+    /* Estado/calibração são software puro — sempre inicializados, mesmo
+     * com HAL_ENABLE_HX711=0 (ver HAL_prm.h), para que HAL_HX711_Get_*()/
+     * Set_Calib/Tare/Get_Calib continuem coerentes para CMD_Core/Test_Shell. */
+    for (int i = 0; i < HX711_COUNT; i++) {
+        hx711_state[i].raw    = 0;
+        hx711_state[i].tare   = 0;
+        hx711_state[i].scale  = 1.0f;
+        hx711_state[i].offset = 0.0f;
+        hx711_state[i].ready  = false;
+    }
+
+#if HAL_ENABLE_HX711
 #ifndef CONFIG_ARCH_POSIX
     for (int i = 0; i < HX711_COUNT; i++) {
         if (!gpio_is_ready_dt(&hx711_sck[i]) ||
@@ -499,25 +547,14 @@ int HAL_HX711_Init(void)
 
         gpio_pin_configure_dt(&hx711_sck[i],  GPIO_OUTPUT_LOW);
         gpio_pin_configure_dt(&hx711_dout[i], GPIO_INPUT);
-
-        hx711_state[i].raw    = 0;
-        hx711_state[i].tare   = 0;
-        hx711_state[i].scale  = 1.0f;
-        hx711_state[i].offset = 0.0f;
-        hx711_state[i].ready  = false;
     }
 #else
     LOG_INF("HAL HX711: modo synthetic (native_sim) — sem GPIO bit-bang");
-    for (int i = 0; i < HX711_COUNT; i++) {
-        hx711_state[i].raw    = 0;
-        hx711_state[i].tare   = 0;
-        hx711_state[i].scale  = 1.0f;
-        hx711_state[i].offset = 0.0f;
-        hx711_state[i].ready  = false;
-    }
 #endif
-
     LOG_INF("HAL HX711: %d células configuradas", HX711_COUNT);
+#else
+    LOG_INF("HAL HX711: desabilitado via HAL_prm.h (HAL_DISABLE_HX711)");
+#endif
     return 0;
 }
 
@@ -573,6 +610,7 @@ void HAL_HX711_Tare(uint8_t idx)
     LOG_INF("HX711[%d]: tare=%d", idx, hx711_state[idx].tare);
 }
 
+#if HAL_ENABLE_HX711
 /*
  * HAL_thread_HX711_fn
  * Lê as 6 células em sequência (~10Hz cada) e publica no OSSI→SYS.
@@ -615,6 +653,7 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
         }
     }
 }
+#endif /* HAL_ENABLE_HX711 */
 
 /* ===========================================================
  * ESC PWM — TIM4 CH1 (PB6), 50 Hz
@@ -631,6 +670,7 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
  * por HAL_thread_RPM_fn (também synthetic em POSIX, ver abaixo) para que
  * o RPM "siga" o throttle, como no antigo HAL_mock.c.
  * =========================================================== */
+#if HAL_ENABLE_ESC
 #ifdef CONFIG_ARCH_POSIX
 
 static bool esc_armed;
@@ -742,6 +782,32 @@ int HAL_ESC_Set_Throttle(float percent)
 
 #endif /* CONFIG_ARCH_POSIX */
 
+#else /* !HAL_ENABLE_ESC */
+
+int HAL_ESC_Init(void)
+{
+    LOG_INF("HAL ESC: desabilitado via HAL_prm.h (HAL_DISABLE_ESC)");
+    return 0;
+}
+
+void HAL_ESC_Arm(void)
+{
+    LOG_INF("HAL ESC: arm ignorado — módulo desabilitado (HAL_DISABLE_ESC)");
+}
+
+void HAL_ESC_Disarm(void)
+{
+    /* no-op — módulo desabilitado */
+}
+
+int HAL_ESC_Set_Throttle(float percent)
+{
+    ARG_UNUSED(percent);
+    return -ENODEV;
+}
+
+#endif /* HAL_ENABLE_ESC */
+
 /* ===========================================================
  * RPM — TIM3 CH3 (PB0), modo input capture
  *
@@ -755,13 +821,25 @@ int HAL_ESC_Set_Throttle(float percent)
  * throttle do ESC (mesma ideia/parâmetros do antigo HAL_mock.c, isolada
  * aqui), publicando pelo MESMO caminho OSSI→SYS.
  * =========================================================== */
+
+/* rpm_value (RPM * 10) é consultado por HAL_RPM_Get() — usado pelas threads
+ * synthetic do ADC/HX711 em native_sim independentemente de HAL_ENABLE_RPM
+ * (ver HAL_prm.h), por isso fica sempre compilado. Permanece 0 (RPM=0) se o
+ * módulo RPM estiver desabilitado. */
+static atomic_t rpm_value;
+
+float HAL_RPM_Get(void)
+{
+    return (float)atomic_get(&rpm_value) / 10.0f;
+}
+
+#if HAL_ENABLE_RPM
 #ifdef CONFIG_ARCH_POSIX
 
 #define HAL_RPM_SIM_MAX_RPM   9000.0f  /* RPM @ 100% throttle (arbitrário — só p/ exercitar lógica) */
 #define HAL_RPM_SIM_LAG          0.15f /* fração do erro corrigida por amostra (1ª ordem) */
 #define HAL_RPM_SIM_NOISE_RPM   20.0f
 
-static atomic_t rpm_value;  /* RPM * 10 — mesma representação do HW real */
 static float    rpm_sim_current;
 
 int HAL_RPM_Init(void)
@@ -770,11 +848,6 @@ int HAL_RPM_Init(void)
     atomic_set(&rpm_value, 0);
     LOG_INF("HAL RPM: modo synthetic (native_sim) — sem TIM3");
     return 0;
-}
-
-float HAL_RPM_Get(void)
-{
-    return (float)atomic_get(&rpm_value) / 10.0f;
 }
 
 void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
@@ -819,8 +892,6 @@ void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
 #define TIM3_ATRLR       (*(volatile uint32_t *)(TIM3_BASE + 0x2C))
 #define TIM3_CH3CVR      (*(volatile uint32_t *)(TIM3_BASE + 0x3C))
 
-#define RCC_BASE         0x40021000UL
-#define RCC_APB1PCENR    (*(volatile uint32_t *)(RCC_BASE + 0x1C))
 #define RCC_APB1_TIM3EN  (1UL << 1)
 
 #define TIM_CC3S_IC3_TI3 (1UL << 0)   /* CHCTLR2.CC3S = 01: IC3 mapeado em TI3 */
@@ -840,7 +911,6 @@ static const struct gpio_dt_spec rpm_capture_pin =
 
 #define TIM3_IRQN        45
 
-static atomic_t rpm_value;       /* RPM * 10 para preservar 1 casa decimal */
 static atomic_t rpm_pulse_count; /* incrementado na ISR a cada captura     */
 
 static void tim3_capture_isr(const void *arg)
@@ -881,11 +951,6 @@ int HAL_RPM_Init(void)
     return 0;
 }
 
-float HAL_RPM_Get(void)
-{
-    return (float)atomic_get(&rpm_value) / 10.0f;
-}
-
 void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -918,6 +983,16 @@ void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
 
 #endif /* CONFIG_ARCH_POSIX */
 
+#else /* !HAL_ENABLE_RPM */
+
+int HAL_RPM_Init(void)
+{
+    LOG_INF("HAL RPM: desabilitado via HAL_prm.h (HAL_DISABLE_RPM)");
+    return 0;
+}
+
+#endif /* HAL_ENABLE_RPM */
+
 /* ===========================================================
  * I2C — I2C1 remapeado para PB8(SCL)/PB9(SDA)
  *
@@ -929,6 +1004,8 @@ void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
  * cima disso. Roda igual nos dois alvos (siba_board e native_sim — ambos
  * têm o driver i2c, real ou emulado pelo i2c_emul).
  * =========================================================== */
+#if HAL_ENABLE_I2C
+
 #define I2C_NODE DT_NODELABEL(i2c1)
 static const struct device *i2c_dev = DEVICE_DT_GET(I2C_NODE);
 
@@ -973,6 +1050,37 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
     return 0;
 }
 
+#else /* !HAL_ENABLE_I2C */
+
+int HAL_I2C_Init(void)
+{
+    LOG_INF("HAL I2C: desabilitado via HAL_prm.h (HAL_DISABLE_I2C)");
+    return 0;
+}
+
+int HAL_I2C_Read(uint16_t addr, uint8_t *buf, size_t len)
+{
+    ARG_UNUSED(addr); ARG_UNUSED(buf); ARG_UNUSED(len);
+    return -ENODEV;
+}
+
+int HAL_I2C_Write(uint16_t addr, const uint8_t *buf, size_t len)
+{
+    ARG_UNUSED(addr); ARG_UNUSED(buf); ARG_UNUSED(len);
+    return -ENODEV;
+}
+
+int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
+{
+    ARG_UNUSED(found_addrs); ARG_UNUSED(max);
+    if (out_count) {
+        *out_count = 0;
+    }
+    return -ENODEV;
+}
+
+#endif /* HAL_ENABLE_I2C */
+
 /* ===========================================================
  * DAC — DAC1 canal 1 (PA5 / DAC_OUT1)
  *
@@ -982,6 +1090,7 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
  * nem endereço mapeado — substituto synthetic guarda o valor numa variável
  * (mesma ideia de hal_sim_throttle_x100 para o ESC).
  * =========================================================== */
+#if HAL_ENABLE_DAC
 #ifdef CONFIG_ARCH_POSIX
 
 static atomic_t hal_sim_dac_value;
@@ -1034,6 +1143,21 @@ void HAL_DAC_Set_Value(uint16_t value_12bit)
 
 #endif /* CONFIG_ARCH_POSIX */
 
+#else /* !HAL_ENABLE_DAC */
+
+int HAL_DAC_Init(void)
+{
+    LOG_INF("HAL DAC: desabilitado via HAL_prm.h (HAL_DISABLE_DAC)");
+    return 0;
+}
+
+void HAL_DAC_Set_Value(uint16_t value_12bit)
+{
+    ARG_UNUSED(value_12bit);
+}
+
+#endif /* HAL_ENABLE_DAC */
+
 /* ===========================================================
  * HAL_Init — inicializa tudo e registra threads no TCKEC
  * =========================================================== */
@@ -1059,33 +1183,58 @@ int HAL_Init(void)
     r = HAL_DAC_Init();
     if (r) return r;
 
+    /* Cada bloco abaixo é independente e só registra sua thread no TCKEC se
+     * o módulo correspondente estiver ativo (ver HAL_prm.h) — módulo
+     * desabilitado não tem entry_point definido, então a thread nem pode
+     * ser referenciada. */
+
+#if HAL_ENABLE_ADC
     /* Registra thread ADC no TCKEC */
-    ossi_msg_t req = { .target = TARGET_TCKEC,
-                       .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
-    req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_ID;
-    req.payload.tckec_req.entry_point = HAL_thread_ADC_fn;
-    req.payload.tckec_req.priority    = HAL_ADC_PRIO;
-    OSSI_Send(&req);
+    {
+        ossi_msg_t req = { .target = TARGET_TCKEC,
+                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
+        req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_ID;
+        req.payload.tckec_req.entry_point = HAL_thread_ADC_fn;
+        req.payload.tckec_req.priority    = HAL_ADC_PRIO;
+        OSSI_Send(&req);
+    }
+#endif
 
+#if HAL_ENABLE_HX711
     /* Registra thread HX711 no TCKEC */
-    req.payload.tckec_req.thread_id   = HAL_THREAD_HX711_ID;
-    req.payload.tckec_req.entry_point = HAL_thread_HX711_fn;
-    req.payload.tckec_req.priority    = HAL_HX711_PRIO;
-    OSSI_Send(&req);
+    {
+        ossi_msg_t req = { .target = TARGET_TCKEC,
+                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
+        req.payload.tckec_req.thread_id   = HAL_THREAD_HX711_ID;
+        req.payload.tckec_req.entry_point = HAL_thread_HX711_fn;
+        req.payload.tckec_req.priority    = HAL_HX711_PRIO;
+        OSSI_Send(&req);
+    }
+#endif
 
+#if HAL_ENABLE_RPM
     /* Registra thread RPM no TCKEC */
-    req.payload.tckec_req.thread_id   = HAL_THREAD_RPM_ID;
-    req.payload.tckec_req.entry_point = HAL_thread_RPM_fn;
-    req.payload.tckec_req.priority    = HAL_RPM_PRIO;
-    OSSI_Send(&req);
+    {
+        ossi_msg_t req = { .target = TARGET_TCKEC,
+                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
+        req.payload.tckec_req.thread_id   = HAL_THREAD_RPM_ID;
+        req.payload.tckec_req.entry_point = HAL_thread_RPM_fn;
+        req.payload.tckec_req.priority    = HAL_RPM_PRIO;
+        OSSI_Send(&req);
+    }
+#endif
 
-#ifdef CONFIG_ARCH_POSIX
+#if HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
     /* native_sim: alimenta o adc_emul (ver native_sim.overlay) com sinais
      * sintéticos — sem isso HAL_thread_ADC_fn leria sempre 0mV. */
-    req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_STIMULUS_ID;
-    req.payload.tckec_req.entry_point = hal_adc_stimulus_thread_fn;
-    req.payload.tckec_req.priority    = HAL_ADC_PRIO;
-    OSSI_Send(&req);
+    {
+        ossi_msg_t req = { .target = TARGET_TCKEC,
+                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
+        req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_STIMULUS_ID;
+        req.payload.tckec_req.entry_point = hal_adc_stimulus_thread_fn;
+        req.payload.tckec_req.priority    = HAL_ADC_PRIO;
+        OSSI_Send(&req);
+    }
 #endif
 
     LOG_INF("HAL_Init concluído");

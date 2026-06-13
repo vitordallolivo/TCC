@@ -17,14 +17,6 @@ project(SIBA)
 # então o firmware troca pacotes UDP de verdade com Aplicacao_Pi sem
 # precisar de hardware. Ver CLAUDE.md/HW.md "Mock mode (native_sim)" e
 # Aplicacao_Pi/CLAUDE.md.
-if(NOT CONFIG_ARCH_POSIX)
-    # Driver ADC out-of-tree — inclui diretamente sem módulo
-    zephyr_library_named(adc_ch32v307)
-    zephyr_library_sources(drivers/adc/adc_ch32v307.c)
-    zephyr_library_link_libraries(zephyr_interface)
-
-endif()
-
 target_sources(app PRIVATE
     src/main.c
 
@@ -43,6 +35,18 @@ target_sources(app PRIVATE
     lib/SYS/Log_Manager.c
     lib/SYS/Test_Shell.c
 )
+
+if(NOT CONFIG_ARCH_POSIX)
+    # Driver ADC out-of-tree — adicionado direto em `app` (linkado com
+    # --whole-archive) em vez de zephyr_library_named(): uma lib estática
+    # separada não entrava na linha de link de zephyr_pre0.elf, então o
+    # linker descartava adc_ch32v307.c por completo e `adc1` acabava
+    # resolvendo para o driver upstream adc_ch32v00x.c (também
+    # DT_DRV_COMPAT wch_adc, compilado incondicionalmente) — síncrono-only,
+    # sem .read_async, causando jalr por ponteiro NULL em
+    # HAL_thread_ADC_fn (ver CONFIG_ADC_CH32V00X=n em prj.conf).
+    target_sources(app PRIVATE drivers/adc/adc_ch32v307.c)
+endif()
 
 target_include_directories(app PRIVATE
     lib/OS
