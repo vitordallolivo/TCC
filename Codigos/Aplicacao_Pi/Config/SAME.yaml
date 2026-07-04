@@ -5,6 +5,16 @@
 DEFAULT_IP_BOARD : "169.254.97.100"
 DEFAULT_PORT: 4444
 
+# Bloco de link (fonte de verdade do endereçamento, lido por
+# Communication_Data/registry.py). pc_rx = porta onde o PC ESCUTA a telemetria;
+# board_rx = porta onde a placa ESCUTA os comandos CMD.
+link:
+  transport: udp_struct
+  ip: "169.254.97.100"
+  ports:
+    pc_rx: 4445
+    board_rx: 4444
+
 enums:
   func_type:
     - FUNC_START

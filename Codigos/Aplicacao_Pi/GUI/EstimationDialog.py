@@ -1,0 +1,257 @@
+"""Camada 4 · Apresentação — popout de estimação dos ganhos do SMO.
+
+Fluxo pedido: botão "Estimar" (menu Motor) -> este popout, que:
+- recebe R e L (indutância/resistência usadas na bancada) + Ts/maxiter/popsize;
+- pergunta se deseja PLOTAR o resultado final (checkbox -> --plot);
+- mostra em TEMPO REAL quantas iterações/avaliações rodaram e o custo atual/melhor;
+- ao terminar, mostra o RESULTADO final (Ks1/Ks2/Kt) e pergunta antes de gravar
+  no SAME.yaml.
+
+Roda `Scripts/autotune_cost.py` via EstimationRunner e parseia o stdout
+(linhas PROGRESS/GEN/RESULT). O parsing roda na thread do subprocesso e é
+levado à UI por sinais Qt (thread-safe).
+"""
+import os
+import time
+
+import pyqtgraph as pg
+import yaml
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QCheckBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QVBoxLayout,
+)
+
+from Communication_Data.estimation import EstimationRunner
+
+
+def _parse_kv(line):
+    """'RESULT Ks1=1 Ks2=2 ...' -> {'Ks1':1.0, ...} (só tokens k=v numéricos)."""
+    out = {}
+    for tok in line.split():
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            try:
+                out[k] = float(v)
+            except ValueError:
+                out[k] = v
+    return out
+
+
+class EstimationDialog(QDialog):
+    # Sinais emitidos da thread de relay -> atualizam a UI com segurança.
+    sig_progress = Signal(int, float, float)   # eval, cost, best
+    sig_gen = Signal(int, float)               # iter, best
+    sig_result = Signal(dict)
+    sig_log = Signal(str)
+    sig_done = Signal(int)
+
+    def __init__(self, config_dir, same_yaml_path, parent=None):
+        super().__init__(parent)
+        self.config_dir = config_dir
+        self.same_yaml_path = same_yaml_path
+        self.setWindowTitle("Estimar Ganhos do SMO (autotuning)")
+        self.setWindowFlags(Qt.Window)
+        self.resize(720, 560)
+
+        self.runner = EstimationRunner.from_config_dir(
+            config_dir, log_fn=lambda m: self.sig_log.emit(m)
+        )
+        self._result = None
+        self._saved_figs = []
+
+        self._build_ui()
+        self._prefill_from_motor()
+
+        self.sig_progress.connect(self._on_progress)
+        self.sig_gen.connect(self._on_gen)
+        self.sig_result.connect(self._on_result)
+        self.sig_log.connect(self._append_log)
+        self.sig_done.connect(self._on_done)
+
+    # ------------------------------------------------------------------ #
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+
+        # --- Parâmetros da bancada (R, L usados) ---
+        params = QGroupBox("Parâmetros da bancada (motor)")
+        form = QFormLayout(params)
+        self.ed_R = QLineEdit("0.0173")
+        self.ed_L = QLineEdit("7e-6")
+        self.ed_Ts = QLineEdit("10e-6")
+        self.sp_maxiter = QSpinBox(); self.sp_maxiter.setRange(1, 500); self.sp_maxiter.setValue(30)
+        self.sp_popsize = QSpinBox(); self.sp_popsize.setRange(3, 100); self.sp_popsize.setValue(10)
+        form.addRow("Resistência R [Ω]:", self.ed_R)
+        form.addRow("Indutância L [H]:", self.ed_L)
+        form.addRow("Passo Ts [s]:", self.ed_Ts)
+        form.addRow("Gerações (maxiter):", self.sp_maxiter)
+        form.addRow("População (popsize):", self.sp_popsize)
+        self.chk_plot = QCheckBox("Plotar o resultado final (gera figuras ao terminar)")
+        form.addRow(self.chk_plot)
+        root.addWidget(params)
+
+        # --- Controles ---
+        ctrl = QHBoxLayout()
+        self.btn_run = QPushButton("▶ Rodar Estimação")
+        self.btn_run.clicked.connect(self._start)
+        self.btn_stop = QPushButton("■ Parar")
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.clicked.connect(self._stop)
+        ctrl.addWidget(self.btn_run); ctrl.addWidget(self.btn_stop); ctrl.addStretch()
+        root.addLayout(ctrl)
+
+        # --- Status ao vivo ---
+        self.lbl_status = QLabel("Iteração: 0 | Avaliações: 0 | Custo atual: — | Melhor: —")
+        self.lbl_status.setStyleSheet("font-weight: bold;")
+        root.addWidget(self.lbl_status)
+
+        # --- Curva de custo em tempo real ---
+        self.plot = pg.PlotWidget()
+        self.plot.setLabel("bottom", "Avaliação")
+        self.plot.setLabel("left", "Custo J")
+        self.plot.setLogMode(y=True)
+        self.plot.addLegend()
+        self.curve_cost = self.plot.plot(pen=pg.mkPen("#1E90FF", width=1), name="Custo")
+        self.curve_best = self.plot.plot(pen=pg.mkPen("#2ecc40", width=2), name="Melhor")
+        self.plot.setMaximumHeight(200)
+        root.addWidget(self.plot)
+        self._evals, self._costs, self._bests = [], [], []
+
+        # --- Log ---
+        self.log = QPlainTextEdit(); self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(2000)
+        self.log.setStyleSheet("background:#0F0F0F; color:#DCDCDC; font-family:monospace; font-size:9pt;")
+        root.addWidget(self.log)
+
+        # --- Resultado + aplicar ---
+        self.grp_result = QGroupBox("Resultado")
+        rl = QHBoxLayout(self.grp_result)
+        self.lbl_result = QLabel("—")
+        self.btn_apply = QPushButton("Aplicar ao SAME.yaml")
+        self.btn_apply.setEnabled(False)
+        self.btn_apply.clicked.connect(self._apply)
+        rl.addWidget(self.lbl_result, 1); rl.addWidget(self.btn_apply)
+        root.addWidget(self.grp_result)
+
+    def _prefill_from_motor(self):
+        """Pré-preenche R/L a partir do motor do SAME.yaml, se existir."""
+        try:
+            data = yaml.safe_load(open(self.same_yaml_path)) or {}
+        except Exception:
+            return
+        motors = data.get("motors", {}) or {}
+        for _name, mot in motors.items():
+            if not isinstance(mot, dict):
+                continue
+            r = mot.get("resistance") or mot.get("R")
+            l = mot.get("inductance") or mot.get("L")
+            if r is not None: self.ed_R.setText(str(r))
+            if l is not None: self.ed_L.setText(str(l))
+            break
+
+    # ------------------------------------------------------------------ #
+    def _start(self):
+        try:
+            R = float(self.ed_R.text()); L = float(self.ed_L.text()); Ts = float(self.ed_Ts.text())
+        except ValueError:
+            QMessageBox.warning(self, "Entrada inválida", "R, L e Ts devem ser numéricos.")
+            return
+        # limpa estado
+        self._evals, self._costs, self._bests = [], [], []
+        self.curve_cost.setData([], []); self.curve_best.setData([], [])
+        self.log.clear(); self._result = None; self._saved_figs = []
+        self.btn_apply.setEnabled(False); self.lbl_result.setText("—")
+
+        self.json_out = os.path.join(self.config_dir, "..", "Scripts", "smo_gains.json")
+        ok = self.runner.run_smo_gains(
+            R=R, L=L, Ts=Ts, plot=self.chk_plot.isChecked(),
+            maxiter=self.sp_maxiter.value(), popsize=self.sp_popsize.value(),
+            on_line=self._on_line, on_done=lambda rc: self.sig_done.emit(rc),
+        )
+        if ok:
+            self.btn_run.setEnabled(False); self.btn_stop.setEnabled(True)
+            self._append_log(f"[GUI] Iniciado (R={R} Ω, L={L} H, Ts={Ts} s).")
+
+    def _stop(self):
+        self.runner.stop_all()
+        self._append_log("[GUI] Estimação interrompida pelo usuário.")
+        self._on_done(-1)
+
+    # --- parsing do stdout (thread do subprocesso) ---
+    def _on_line(self, line):
+        if line.startswith("PROGRESS"):
+            d = _parse_kv(line)
+            self.sig_progress.emit(int(d.get("eval", 0)), d.get("cost", float("nan")),
+                                   d.get("best", float("nan")))
+        elif line.startswith("GEN"):
+            d = _parse_kv(line)
+            self.sig_gen.emit(int(d.get("iter", 0)), d.get("best", float("nan")))
+        elif line.startswith("RESULT"):
+            self.sig_result.emit(_parse_kv(line))
+        elif line.startswith("salvo:"):
+            self._saved_figs.append(line.split("salvo:", 1)[1].strip())
+
+    # --- slots na UI ---
+    def _on_progress(self, ev, cost, best):
+        self._evals.append(ev); self._costs.append(cost); self._bests.append(best)
+        self.curve_cost.setData(self._evals, self._costs)
+        self.curve_best.setData(self._evals, self._bests)
+        self._it = getattr(self, "_it", 0)
+        self.lbl_status.setText(
+            f"Iteração: {self._it} | Avaliações: {ev} | "
+            f"Custo atual: {cost:.4f} | Melhor: {best:.4f}")
+
+    def _on_gen(self, it, best):
+        self._it = it
+
+    def _append_log(self, msg):
+        self.log.appendPlainText(msg)
+
+    def _on_result(self, d):
+        self._result = d
+        self.lbl_result.setText(
+            f"<b>Ks1</b>={d.get('Ks1', 0):,.0f}  <b>Ks2</b>={d.get('Ks2', 0):,.0f}  "
+            f"<b>Kt</b>={d.get('Kt', 0):,.1f}  |  custo={d.get('cost', 0):.4f}")
+        self.btn_apply.setEnabled(True)
+
+    def _on_done(self, rc):
+        self.btn_run.setEnabled(True); self.btn_stop.setEnabled(False)
+        if rc == 0 and self._result is not None:
+            self._append_log("[GUI] Concluído. Confira o resultado e aplique se desejar.")
+            if self._saved_figs:
+                QMessageBox.information(
+                    self, "Figuras geradas",
+                    "Figuras salvas:\n" + "\n".join(self._saved_figs))
+        elif rc not in (0, -1):
+            self._append_log(f"[GUI] Terminou com erro (rc={rc}). Veja o log acima.")
+
+    # ------------------------------------------------------------------ #
+    def _apply(self):
+        if not self._result:
+            return
+        r = self._result
+        resp = QMessageBox.question(
+            self, "Aplicar ganhos",
+            f"Gravar no SAME.yaml (bloco smo_gains)?\n\n"
+            f"Ks1 = {r.get('Ks1', 0):,.1f}\nKs2 = {r.get('Ks2', 0):,.1f}\n"
+            f"Kt  = {r.get('Kt', 0):,.1f}",
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            data = yaml.safe_load(open(self.same_yaml_path)) or {}
+            data["smo_gains"] = {
+                "Ks1": float(r.get("Ks1", 0)), "Ks2": float(r.get("Ks2", 0)),
+                "Kt": float(r.get("Kt", 0)),
+                "Gamma_s1": float(r.get("Gamma_s1", 0)), "Gamma_s2": float(r.get("Gamma_s2", 0)),
+                "Gamma_t": float(r.get("Gamma_t", 0)),
+                "Ts": float(r.get("Ts", 0)), "cost": float(r.get("cost", 0)),
+                "R": float(self.ed_R.text()), "L": float(self.ed_L.text()),
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            with open(self.same_yaml_path, "w") as f:
+                yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+            self._append_log("[GUI] Ganhos gravados em SAME.yaml (smo_gains).")
+            QMessageBox.information(self, "Aplicado", "Ganhos gravados em SAME.yaml.")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro ao gravar", str(e))

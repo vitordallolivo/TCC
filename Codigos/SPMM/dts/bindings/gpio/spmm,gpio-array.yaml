@@ -1,0 +1,11 @@
+description: |
+  Lista genérica de linhas GPIO usada por periféricos bit-bang (ex.: HX711),
+  onde cada índice do array corresponde a um pino físico específico.
+
+compatible: "spmm,gpio-array"
+
+properties:
+  gpios:
+    type: phandle-array
+    required: true
+    description: Lista ordenada de especificadores de GPIO

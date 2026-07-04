@@ -5,7 +5,17 @@
 # CMD -> FUNCTION, INSTRUCTION, TARGET, VALUE, STATUS OR ACTION
 
 DEFAULT_IP_BOARD : "169.254.97.200"
-DEFAULT_PORT: 5555 
+DEFAULT_PORT: 5555
+
+# Bloco de link (fonte de verdade do endereçamento, lido por
+# Communication_Data/registry.py). pc_rx = porta onde o PC ESCUTA a telemetria;
+# board_rx = porta onde a placa ESCUTA os comandos CMD.
+link:
+  transport: udp_struct
+  ip: "169.254.97.200"
+  ports:
+    pc_rx: 5555
+    board_rx: 5000
 
 enums:
   func_type:

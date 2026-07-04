@@ -1,0 +1,10 @@
+description: |
+  Consumidor genérico de um único canal PWM (ex.: ESC do propulsor).
+
+compatible: "spmm,pwm-consumer"
+
+properties:
+  pwms:
+    type: phandle-array
+    required: true
+    description: Especificador do canal PWM (controlador, canal, período, polaridade)

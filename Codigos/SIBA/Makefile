@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 BOARD ?= siba_board
-PROJECT_DIR := $(HOME)/projetos/TCC/Codigos/SIBA
+PROJECT_DIR := $(HOME)/Documentos/Facul/TCC/Codigos/SIBA
 WEST = source $(HOME)/zephyrproject/.venv/bin/activate && cd $(HOME)/zephyrproject && west
 
 WCH_OPENOCD := $(HOME)/.platformio/packages/tool-openocd-riscv-wch/bin/openocd

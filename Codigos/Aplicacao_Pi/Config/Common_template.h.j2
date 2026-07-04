@@ -6,7 +6,7 @@
 /* Auto-generated — edite SIBA.yaml, não este arquivo */
 
 {% for enum_name, enum_values in enums.items() %}
-typedef enum {
+typedef enum{% if enum_name in packed_enums|default([]) %} __attribute__((packed)){% endif %} {
 {% for val in enum_values %}
     {{ val }}{% if not loop.last %},{% endif %}
 

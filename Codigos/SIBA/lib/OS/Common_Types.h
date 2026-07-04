@@ -6,7 +6,7 @@
 /* Auto-generated — edite SIBA.yaml, não este arquivo */
 
 
-typedef enum {
+typedef enum __attribute__((packed)) {
 
     FUNC_START,
 
@@ -29,7 +29,7 @@ typedef enum {
 } func_type;
 
 
-typedef enum {
+typedef enum __attribute__((packed)) {
 
     INSTR_READ,
 
