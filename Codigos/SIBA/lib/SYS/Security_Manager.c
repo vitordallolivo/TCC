@@ -1,4 +1,5 @@
 #include "Security_Manager.h"
+#include "CMD_Core.h"        /* CMD_Core_Get_Sensor_Cfg — faixa central (CMD_Core_prm.h) */
 #include "HAL.h"
 #include "Log_Manager.h"
 #include <zephyr/kernel.h>
@@ -6,11 +7,9 @@
 
 LOG_MODULE_REGISTER(security_mgr, LOG_LEVEL_WRN);
 
-/* Limites operacionais */
-#define LIMIT_V_BATT_MIN   18.0f   /* 6S * 3.0V/célula */
-#define LIMIT_V_BATT_MAX   25.2f   /* 6S * 4.2V/célula */
-#define LIMIT_I_BATT_MAX   60.0f   /* A — ajuste conforme BMS */
-#define LIMIT_RPM_MAX   20000.0f
+/* Os limites operacionais NÃO vivem mais aqui — vêm da tabela central
+ * SIBA_SENSOR_TABLE em CMD_Core_prm.h (via CMD_Core_Get_Sensor_Cfg).
+ * Para mudar um limite, edite a linha do sensor lá. */
 
 static bool emergency_active = false;
 
@@ -70,47 +69,30 @@ void Security_Manager_Trigger_Emergency(void)
  */
 void Security_Manager_Check(uint32_t sensor_id, float value)
 {
+    /* Sensores de SEGURANÇA: sair da faixa dispara parada de emergência.
+     * A faixa [min,max] e o bit de erro vêm da tabela central (CMD_Core_prm.h),
+     * não mais de #defines locais. Assim mudar um limite é editar UMA linha. */
+    siba_error_bit_t bit;
     switch (sensor_id) {
-        case SENSOR_ID_V_BATT:
-            if (value < LIMIT_V_BATT_MIN || value > LIMIT_V_BATT_MAX) {
-                if (Security_Manager_Error_Detect(ERROR_SEC_VOLTAGE_OUT_OF_RANGE)) {
-                    LOG_ERR("SECURITY: tensão fora do limite: %.2fV", (double)value);
-                }
-                if (!emergency_active) {
-                    Security_Manager_Trigger_Emergency();
-                }
-            } else {
-                Security_Manager_Error_Erase(ERROR_SEC_VOLTAGE_OUT_OF_RANGE);
-            }
-            break;
+        case SENSOR_ID_V_BATT: bit = ERROR_SEC_VOLTAGE_OUT_OF_RANGE; break;
+        case SENSOR_ID_I_BATT: bit = ERROR_SEC_CURRENT_EXCESSIVE;    break;
+        case SENSOR_ID_RPM:    bit = ERROR_SEC_RPM_EXCESSIVE;        break;
+        default: return;   /* sensor não é crítico de segurança */
+    }
 
-        case SENSOR_ID_I_BATT:
-            if (value > LIMIT_I_BATT_MAX) {
-                if (Security_Manager_Error_Detect(ERROR_SEC_CURRENT_EXCESSIVE)) {
-                    LOG_ERR("SECURITY: corrente excessiva: %.1fA", (double)value);
-                }
-                if (!emergency_active) {
-                    Security_Manager_Trigger_Emergency();
-                }
-            } else {
-                Security_Manager_Error_Erase(ERROR_SEC_CURRENT_EXCESSIVE);
-            }
-            break;
+    const SENSORS *cfg = CMD_Core_Get_Sensor_Cfg(sensor_id);
+    if (!cfg) return;
 
-        case SENSOR_ID_RPM:
-            if (value > LIMIT_RPM_MAX) {
-                if (Security_Manager_Error_Detect(ERROR_SEC_RPM_EXCESSIVE)) {
-                    LOG_ERR("SECURITY: RPM excessivo: %.0f", (double)value);
-                }
-                if (!emergency_active) {
-                    Security_Manager_Trigger_Emergency();
-                }
-            } else {
-                Security_Manager_Error_Erase(ERROR_SEC_RPM_EXCESSIVE);
-            }
-            break;
-
-        default:
-            break;
+    if (value < cfg->Minimum_Valid_Value || value > cfg->Max_Valid_Value) {
+        if (Security_Manager_Error_Detect(bit)) {
+            LOG_ERR("SECURITY: sensor_id %u fora da faixa [%.2f, %.2f]: %.2f",
+                    sensor_id, (double)cfg->Minimum_Valid_Value,
+                    (double)cfg->Max_Valid_Value, (double)value);
+        }
+        if (!emergency_active) {
+            Security_Manager_Trigger_Emergency();
+        }
+    } else {
+        Security_Manager_Error_Erase(bit);
     }
 }

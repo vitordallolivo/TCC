@@ -1,4 +1,5 @@
 #include "CMD_Core.h"
+#include "CMD_Core_prm.h"
 #include "CMD.h"
 #include "HAL.h"
 #include "Battery_Manager.h"
@@ -11,8 +12,9 @@
 
 LOG_MODULE_REGISTER(cmd_core, LOG_LEVEL_DBG);
 
-/* Tabela de calibração dos sensores (6 células + pitot + v_batt + i_batt) */
-static SENSORS sensor_cfg[11];  /* índice = target_id */
+/* Config/calibração/faixa de cada sensor — índice = sensor_id. Preenchida por
+ * CMD_Core_Init() a partir da tabela SIBA_SENSOR_TABLE (CMD_Core_prm.h). */
+static SENSORS sensor_cfg[CMD_CORE_SENSOR_COUNT];
 
 static void handle_func_start(const CMD *cmd)
 {
@@ -248,17 +250,46 @@ void CMD_Core_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
+/* Bit de erro por sensor, na MESMA ordem da tabela — usado por
+ * CMD_Core_Validate_Sensor. Índice = sensor_id. */
+static const uint32_t sensor_err_bit[CMD_CORE_SENSOR_COUNT] = {
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)   [ID] = (uint32_t)(ERRBIT),
+    SIBA_SENSOR_TABLE(X)
+#undef X
+};
+
+const SENSORS *CMD_Core_Get_Sensor_Cfg(uint32_t id)
+{
+    if (id >= CMD_CORE_SENSOR_COUNT) return NULL;
+    return &sensor_cfg[id];
+}
+
+uint32_t CMD_Core_Validate_Sensor(uint32_t id, float value)
+{
+    if (id >= CMD_CORE_SENSOR_COUNT) return 0U;
+    uint32_t bit = sensor_err_bit[id];
+    if (bit == 0U) return 0U;   /* sensor sem verificação de faixa */
+    if (value < sensor_cfg[id].Minimum_Valid_Value ||
+        value > sensor_cfg[id].Max_Valid_Value) {
+        return bit;             /* fora da faixa -> reporta o bit configurado */
+    }
+    return 0U;                  /* dentro da faixa */
+}
+
 void CMD_Core_Init(void)
 {
-    /* Inicializa tabela de sensores com defaults */
-    for (int i = 0; i < 11; i++) {
-        sensor_cfg[i].Linear_Coeff              = 1.0f;
-        sensor_cfg[i].Offset_Coeff              = 0.0f;
-        sensor_cfg[i].Linear_Coeff_Reset_Default= 1.0f;
-        sensor_cfg[i].Offset_Coeff_Reset_Default= 0.0f;
-        sensor_cfg[i].Max_Valid_Value            = 1e6f;
-        sensor_cfg[i].Minimum_Valid_Value        = -1e6f;
-    }
+    /* Inicializa TODA a tabela de sensores a partir de SIBA_SENSOR_TABLE
+     * (CMD_Core_prm.h) — defaults de calibração + faixa válida, num único
+     * lugar. Vale igual para hardware e native_sim (sem #ifdef POSIX). */
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)                 \
+    sensor_cfg[ID].Linear_Coeff               = (DEF_LIN);          \
+    sensor_cfg[ID].Offset_Coeff               = (DEF_OFF);          \
+    sensor_cfg[ID].Linear_Coeff_Reset_Default = (DEF_LIN);          \
+    sensor_cfg[ID].Offset_Coeff_Reset_Default = (DEF_OFF);          \
+    sensor_cfg[ID].Minimum_Valid_Value        = (MINV);             \
+    sensor_cfg[ID].Max_Valid_Value            = (MAXV);
+    SIBA_SENSOR_TABLE(X)
+#undef X
 
     ossi_msg_t req = {
         .target   = TARGET_TCKEC,

@@ -33,6 +33,7 @@ from GUI.EstimationDialog import EstimationDialog
 from GUI.HeliceDialog import HeliceDialog
 from GUI.LoadCellDialog import LoadCellDialog
 from GUI.SPMMEnsaioDialog import SPMMEnsaioDialog
+from GUI.ErrorPanelDialog import ErrorPanelDialog
 
 # Mapeamento de tipos para o struct.unpack (C -> Python)
 TYPE_MAP = {
@@ -120,6 +121,20 @@ class AlbatrozGUI(QMainWindow):
         self.ui_timer.timeout.connect(self.update_plots_ui)
         self.ui_timer.start(100)
         print("Sistema de atualização de gráficos e timer de UI prontos.")
+
+        # --- Erros/alarmes da telemetria (error_code, bitfield do Security_Manager) ---
+        # A thread de rede só ATUALIZA estes dois; o texto do rótulo é escrito na
+        # main thread (update_plots_ui). Ver Communication_Data/errors.py.
+        self._last_error_code = {}          # protocol -> último error_code visto
+        self._error_status_text = "Erros: aguardando telemetria…"
+        self._error_status_detail = ""
+        self._error_status_lbl = QLabel("Erros: aguardando telemetria…")
+        self._error_status_lbl.setStyleSheet("color: #2ecc40; font-weight: bold; padding: 0 8px;")
+        # Clicar no rótulo abre o painel completo de erros (lâmpadas).
+        self._error_status_lbl.setCursor(Qt.PointingHandCursor)
+        self._error_status_lbl.setToolTip("Clique para ver o painel de erros")
+        self._error_status_lbl.mousePressEvent = lambda _ev: self.open_error_panel()
+        self.statusBar().addPermanentWidget(self._error_status_lbl)
         # 8. Inicializa o terminal  
         self.terminal.show()
     # --- Lógica de Inicialização ---
@@ -456,6 +471,13 @@ class AlbatrozGUI(QMainWindow):
         self.menu_boards.addAction(self.action_board_manager)
         mb.addMenu(self.menu_boards)
 
+        # --- Diagnóstico (topo) — painel de erros/alarmes ---
+        self.action_error_panel = QAction("Painel de Erros e Alarmes", self)
+        self.action_error_panel.triggered.connect(self.open_error_panel)
+        self.menu_diag = QMenu("Diagnóstico", mb)
+        self.menu_diag.addAction(self.action_error_panel)
+        mb.addMenu(self.menu_diag)
+
         # --- Ajuda (topo, mantém tema/infos) ---
         if getattr(self.ui, "menuHelp", None) is not None:
             self.ui.menuHelp.setTitle("Ajuda")
@@ -490,9 +512,59 @@ class AlbatrozGUI(QMainWindow):
             if hasattr(self, 'terminal'):
                 self.terminal.log_board_data(protocol, data, decoded)
 
+            self._check_error_code(protocol, decoded)
             self._update_internal_buffers(decoded)
         except Exception as e:
             print(f"Erro no processamento de rede [{protocol}]: {e}")
+
+    def current_error_code(self):
+        """error_code agregado (união dos bits) de todas as placas — usado pelo
+        Painel de Erros e pelo rótulo da barra de status."""
+        merged = 0
+        for c in getattr(self, "_last_error_code", {}).values():
+            merged |= int(c)
+        return merged
+
+    def open_error_panel(self):
+        """Abre (ou traz à frente) o painel completo de erros com lâmpadas."""
+        if not hasattr(self, "_error_panel") or self._error_panel is None:
+            self._error_panel = ErrorPanelDialog(self, self)
+        self._error_panel.show()
+        self._error_panel.raise_()
+        self._error_panel.activateWindow()
+
+    def _check_error_code(self, protocol, decoded):
+        """Decodifica o `error_code` (bitfield) da telemetria e reporta as
+        transições no terminal (só na borda, como o firmware). Roda na thread de
+        rede — usa só `append_log` (thread-safe via signal) e escreve o texto do
+        rótulo persistente numa string (atualizada na main thread por
+        update_plots_ui). Ver Communication_Data/errors.py."""
+        if "error_code" not in decoded:
+            return
+        try:
+            code = int(decoded["error_code"]) & 0xFFFFFFFF
+        except (TypeError, ValueError):
+            return
+        prev = self._last_error_code.get(protocol, 0)
+        if code == prev:
+            return
+        self._last_error_code[protocol] = code
+
+        from Communication_Data.errors import (decode_error_code, format_error_code,
+                                                format_error_detail)
+        if hasattr(self, 'terminal'):
+            for _m, msg, grp in decode_error_code(code & ~prev):   # novos
+                self.terminal.append_log(protocol, f"⚠ PROBLEMA ({grp}): {msg}", "#ff4136")
+            for _m, msg, grp in decode_error_code(prev & ~code):   # resolvidos
+                self.terminal.append_log(protocol, f"✓ Resolvido ({grp}): {msg}", "#2ecc40")
+
+        # Texto do rótulo = união dos erros ativos de todas as placas (em pt-BR).
+        merged = 0
+        for c in self._last_error_code.values():
+            merged |= c
+        self._error_status_text = ("✓ Tudo OK" if merged == 0
+                                   else "⚠ " + format_error_code(merged))
+        self._error_status_detail = format_error_detail(merged)
 
     @Slot(str, dict)
     def on_decoded_sample(self, protocol, decoded):
@@ -603,9 +675,28 @@ class AlbatrozGUI(QMainWindow):
         # Slot do QTimer — nunca deixar uma exceção escapar para o C++ do Qt
         # (boa prática PyQt: exceção em slot pode corromper estado/crashar).
         try:
+            self._refresh_error_label()   # main thread: escreve o rótulo de erros
+        except Exception as e:
+            print(f"[error_label] erro ignorado: {e}")
+        try:
             self._update_plots_ui_impl()
         except Exception as e:
             print(f"[update_plots_ui] erro ignorado: {e}")
+
+    def _refresh_error_label(self):
+        """Atualiza o rótulo persistente de erros na barra de status (main thread)."""
+        lbl = getattr(self, "_error_status_lbl", None)
+        if lbl is None:
+            return
+        txt = getattr(self, "_error_status_text", "Erros: —")
+        if lbl.text() != txt:
+            lbl.setText(txt)
+            ok = ("Tudo OK" in txt) or txt.endswith("—")
+            lbl.setStyleSheet("color: %s; font-weight: bold; padding: 0 8px;"
+                              % ("#2ecc40" if ok else "#ff4136"))
+            # detalhe agrupado por área + dica de clique ao passar o mouse
+            det = getattr(self, "_error_status_detail", "")
+            lbl.setToolTip((det + "\n\n" if det else "") + "(clique para abrir o painel de erros)")
 
     def _update_plots_ui_impl(self):
         if self.ptr == 0: return

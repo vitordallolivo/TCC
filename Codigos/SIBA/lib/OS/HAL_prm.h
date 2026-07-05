@@ -41,12 +41,12 @@
  * SYNTHETIC. Se a bancada crashar no boot por causa do HX711 (GPIO port E
  * PE2–PE13), reabilite este `#define HAL_DISABLE_HX711` para isolar. */
 #ifndef CONFIG_ARCH_POSIX
-#define HAL_DISABLE_ESC
-#define HAL_DISABLE_RPM
+// #define HAL_DISABLE_ESC
+// #define HAL_DISABLE_RPM
 #endif
 
-#define HAL_DISABLE_I2C
-#define HAL_DISABLE_DAC
+// #define HAL_DISABLE_I2C
+// #define HAL_DISABLE_DAC
 
 /* ===========================================================
  * HAL_SIM_NOISE_SCALE — nível de ruído aleatório do modo synthetic (native_sim)
