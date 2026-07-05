@@ -21,6 +21,11 @@ static void handle_func_start(const CMD *cmd)
             /* Células de carga iniciam automaticamente via HX711 thread */
             LOG_INF("CMD: START load_cell[%d] — já ativo", cmd->target_id);
             break;
+        case TARGET_DEFAULT:
+            /* START genérico/telemetria (ex.: `siba start telemetry` do app e o
+             * CMD neutro do test_io) — a telemetria já está sempre ativa. */
+            LOG_INF("CMD: START (telemetria/geral) — já ativo");
+            break;
         default:
             LOG_WRN("CMD START: target %d não reconhecido", cmd->target_id);
     }
@@ -128,6 +133,32 @@ static void handle_func_sensor(const CMD *cmd)
     }
 
     default_action act = (default_action)cmd->action_or_status;
+
+    /* ---- Célula de carga (HX711): modelo CANÔNICO grams=(raw-tare)/scale ----
+     * Diferente do ADC (afim y=linear·x+offset): a célula tem UM só offset (o
+     * tare, em counts) e a "escala" é derivada de um PESO conhecido — não é um
+     * ganho digitado à mão. Por isso:
+     *   OFFSET  -> TARA (tare = raw atual; zera; `value` ignorado)
+     *   LINEAR  -> calibra a escala pelo PESO conhecido em `value`
+     *              (scale = (raw-tare)/value  =>  leitura passa a valer o peso)
+     *   RESET   -> restaura defaults e re-tara (tratado no bloco genérico) */
+    if (tid >= SENSOR_ID_LOAD_CELL_0 && tid <= SENSOR_ID_LOAD_CELL_5 &&
+        act != DEFAULT_ACTION_SENSE_RESET_DEFAULT) {
+        switch (act) {
+            case DEFAULT_ACTION_SENSE_OFFSET_COEF:
+                Propeller_Manager_Tare_Cell((uint8_t)tid);
+                LOG_INF("CMD SENSOR[%d]: TARA (offset = raw atual)", tid);
+                break;
+            case DEFAULT_ACTION_SENSE_LINEAR_COEF:
+                Propeller_Manager_Calibrate_Cell_Weight((uint8_t)tid, cmd->value);
+                LOG_INF("CMD SENSOR[%d]: calib por peso=%.3f", tid, (double)cmd->value);
+                break;
+            default:
+                LOG_WRN("CMD SENSOR: ação %d desconhecida (célula)", act);
+        }
+        return;
+    }
+
     SENSORS *s = &sensor_cfg[tid];
 
     switch (act) {

@@ -215,8 +215,9 @@ static float hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_FULL;
 
 static inline float hal_sim_noise(float amplitude)
 {
+    /* HAL_SIM_NOISE_SCALE (HAL_prm.h) zera/atenua o ruído p/ testar calibração. */
     int32_t r = (int32_t)(sys_rand32_get() % 2001) - 1000; /* -1000..+1000 */
-    return amplitude * ((float)r / 1000.0f);
+    return amplitude * HAL_SIM_NOISE_SCALE * ((float)r / 1000.0f);
 }
 
 static inline int32_t hal_sim_clamp_mv(float mv)
@@ -423,12 +424,13 @@ static const struct gpio_dt_spec hx711_dout[HX711_COUNT] = {
 };
 #endif /* HAL_ENABLE_HX711 && !CONFIG_ARCH_POSIX */
 
-/* Estado interno de cada célula */
+/* Estado interno de cada célula — modelo CANÔNICO do HX711 (HW e native_sim
+ * usam ESTE mesmo struct/estado): grams = (raw - tare)/scale.
+ * UM só offset: o `tare` (em counts). Não há mais o segundo offset aditivo. */
 static struct {
     int32_t raw;        /* último valor bruto 24 bits com sinal */
-    int32_t tare;       /* zero de referência */
-    float   scale;      /* fator de calibração (raw/grama) */
-    float   offset;     /* offset pós-escala */
+    int32_t tare;       /* zero de referência, em CONTAGENS brutas (o único offset) */
+    float   scale;      /* contagens por unidade (counts/grama) */
     bool    ready;
 } hx711_state[HX711_COUNT];
 
@@ -499,11 +501,17 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 #define HAL_SIM_HX711_BASE_RAW      8000000L
 #define HAL_SIM_HX711_GAIN_PER_RPM2     0.06f
 #define HAL_SIM_HX711_NOISE_RAW          400L
+/* Escala synthetic (counts/grama): sem isso, com scale=1 os grams saem em
+ * centenas de milhar. 0,06·rpm² a 3000 RPM = 540k counts; /270 ~= 2000 g. */
+#define HAL_SIM_HX711_SCALE            270.0f
+/* Leitura de REPOUSO (grams) por célula, mesmo com rpm=0 e ruído=0. Sem isto
+ * grams=(BASE-tare)/scale=0 e não há NADA para tarar/calibrar no native_sim.
+ * Distinto por célula (idle + idx·step) p/ dar pra distinguir uma da outra. */
+#define HAL_SIM_HX711_IDLE_GRAMS      1000.0f
+#define HAL_SIM_HX711_IDLE_STEP_G      250.0f
 
 static bool hx711_read_one(uint8_t idx, int32_t *out)
 {
-    ARG_UNUSED(idx);
-
     /* A versão real bloqueia aguardando DOUT=LOW (~10Hz por célula — ver
      * hx711_read_one acima). Sem esse sleep aqui, HAL_thread_HX711_fn roda
      * em loop apertado sem nunca ceder a CPU: o relógio simulado do
@@ -512,11 +520,15 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
     k_sleep(K_MSEC(100));
 
     float rpm = HAL_RPM_Get();
+    /* Baseline de repouso não-nulo (e distinto por célula): dá um "peso" fixo
+     * em cima do tare para você conseguir tarar (leva a 0) e calibrar o ganho. */
+    float idle_g = HAL_SIM_HX711_IDLE_GRAMS + (float)idx * HAL_SIM_HX711_IDLE_STEP_G;
     int32_t noise = (int32_t)(sys_rand32_get() % (2 * HAL_SIM_HX711_NOISE_RAW + 1))
                     - HAL_SIM_HX711_NOISE_RAW;
     *out = HAL_SIM_HX711_BASE_RAW
+           + (int32_t)(idle_g * HAL_SIM_HX711_SCALE)
            + (int32_t)(HAL_SIM_HX711_GAIN_PER_RPM2 * rpm * rpm)
-           + noise;
+           + (int32_t)(noise * HAL_SIM_NOISE_SCALE);   /* HAL_prm.h: 0 = estável */
     return true;
 }
 #endif /* HAL_ENABLE_HX711 && CONFIG_ARCH_POSIX */
@@ -532,7 +544,6 @@ int HAL_HX711_Init(void)
         hx711_state[i].raw    = 0;
         hx711_state[i].tare   = 0;
         hx711_state[i].scale  = 1.0f;
-        hx711_state[i].offset = 0.0f;
         hx711_state[i].ready  = false;
     }
 
@@ -549,7 +560,16 @@ int HAL_HX711_Init(void)
         gpio_pin_configure_dt(&hx711_dout[i], GPIO_INPUT);
     }
 #else
-    LOG_INF("HAL HX711: modo synthetic (native_sim) — sem GPIO bit-bang");
+    /* Synthetic: "tara" o baseline (BASE_RAW) e usa uma escala realista, senão
+     * grams = raw/scale ~= 8.000.000 (rejeitado pela validação -> células em 0
+     * e imunes a offset/linear). Com isto: repouso ~= 0, sobe com rpm² (empuxo)
+     * e a calibração (offset/linear via CMD) passa a refletir na telemetria. */
+    for (int i = 0; i < HX711_COUNT; i++) {
+        hx711_state[i].tare  = HAL_SIM_HX711_BASE_RAW;
+        hx711_state[i].scale = HAL_SIM_HX711_SCALE;
+    }
+    LOG_INF("HAL HX711: modo synthetic (native_sim) — tare=%ld scale=%.0f",
+            (long)HAL_SIM_HX711_BASE_RAW, (double)HAL_SIM_HX711_SCALE);
 #endif
     LOG_INF("HAL HX711: %d células configuradas", HX711_COUNT);
 #else
@@ -567,47 +587,77 @@ int32_t HAL_HX711_Get_Raw(uint8_t idx)
     return v;
 }
 
+/* Modelo canônico do HX711 (igual às libs de referência, ex.: Bogde/AVR):
+ *
+ *      grams = (raw - tare) / scale
+ *
+ * UM só offset — o `tare`, em CONTAGENS BRUTAS (raw), subtraído ANTES de
+ * dividir. `scale` = contagens por unidade (counts/grama). NÃO existe um
+ * segundo offset aditivo (o antigo `+ offset` era redundante e invertia a
+ * intuição da calibração). Ver `HAL_HX711_Tare` (tara = raw) e
+ * `HAL_HX711_Calibrate_Weight` (deriva scale de um peso conhecido). */
 float HAL_HX711_Get_Grams(uint8_t idx)
 {
     if (idx >= HX711_COUNT) return 0.0f;
     k_mutex_lock(&hx711_mutex, K_FOREVER);
-    float v = ((float)(hx711_state[idx].raw - hx711_state[idx].tare)
-               / hx711_state[idx].scale)
-              + hx711_state[idx].offset;
+    float v = (float)(hx711_state[idx].raw - hx711_state[idx].tare)
+              / hx711_state[idx].scale;
     k_mutex_unlock(&hx711_mutex);
     return v;
 }
 
-void HAL_HX711_Set_Calib(uint8_t idx, float scale, float offset)
+/* Ajuste direto do par canônico: `scale` (counts/unidade) e `tare` (raw). */
+void HAL_HX711_Set_Calib(uint8_t idx, float scale, float tare_raw)
 {
     if (idx >= HX711_COUNT) return;
     k_mutex_lock(&hx711_mutex, K_FOREVER);
-    hx711_state[idx].scale  = (scale == 0.0f) ? 1.0f : scale;
-    hx711_state[idx].offset = offset;
+    hx711_state[idx].scale = (scale == 0.0f) ? 1.0f : scale;
+    hx711_state[idx].tare  = (int32_t)tare_raw;
     k_mutex_unlock(&hx711_mutex);
-    LOG_INF("HX711[%d]: scale=%.4f offset=%.4f", idx, (double)scale, (double)offset);
+    LOG_INF("HX711[%d]: scale=%.4f tare=%d (counts)", idx, (double)scale, (int)tare_raw);
 }
 
-void HAL_HX711_Get_Calib(uint8_t idx, float *scale, float *offset)
+void HAL_HX711_Get_Calib(uint8_t idx, float *scale, float *tare_raw)
 {
-    float s = 1.0f, o = 0.0f;
+    float s = 1.0f, t = 0.0f;
     if (idx < HX711_COUNT) {
         k_mutex_lock(&hx711_mutex, K_FOREVER);
         s = hx711_state[idx].scale;
-        o = hx711_state[idx].offset;
+        t = (float)hx711_state[idx].tare;
         k_mutex_unlock(&hx711_mutex);
     }
-    if (scale)  *scale  = s;
-    if (offset) *offset = o;
+    if (scale)    *scale    = s;
+    if (tare_raw) *tare_raw = t;
 }
 
+/* Tara canônica: offset = leitura bruta atual (em counts). Zera a leitura
+ * (grams = (raw-raw)/scale = 0). Tarar de novo só re-zera — não empilha. */
 void HAL_HX711_Tare(uint8_t idx)
 {
     if (idx >= HX711_COUNT) return;
     k_mutex_lock(&hx711_mutex, K_FOREVER);
     hx711_state[idx].tare = hx711_state[idx].raw;
     k_mutex_unlock(&hx711_mutex);
-    LOG_INF("HX711[%d]: tare=%d", idx, hx711_state[idx].tare);
+    LOG_INF("HX711[%d]: tare=%d (counts)", idx, hx711_state[idx].tare);
+}
+
+/* Calibra a escala por PESO CONHECIDO: com a célula já tarada, coloca-se um
+ * peso `known_weight` (na unidade desejada) e resolve-se scale de modo que
+ * grams == known_weight:  scale = (raw - tare) / known_weight  (counts/unidade). */
+void HAL_HX711_Calibrate_Weight(uint8_t idx, float known_weight)
+{
+    if (idx >= HX711_COUNT) return;
+    if (known_weight == 0.0f) {
+        LOG_WRN("HX711[%d]: calib por peso ignorada (peso=0)", idx);
+        return;
+    }
+    k_mutex_lock(&hx711_mutex, K_FOREVER);
+    float counts = (float)(hx711_state[idx].raw - hx711_state[idx].tare);
+    float scale  = counts / known_weight;
+    hx711_state[idx].scale = (scale == 0.0f) ? 1.0f : scale;
+    k_mutex_unlock(&hx711_mutex);
+    LOG_INF("HX711[%d]: calib peso=%.3f -> scale=%.4f counts/un",
+            idx, (double)known_weight, (double)hx711_state[idx].scale);
 }
 
 #if HAL_ENABLE_HX711
@@ -637,9 +687,9 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
             k_mutex_lock(&hx711_mutex, K_FOREVER);
             hx711_state[i].raw   = raw;
             hx711_state[i].ready = true;
-            float grams = ((float)(raw - hx711_state[i].tare)
-                           / hx711_state[i].scale)
-                          + hx711_state[i].offset;
+            /* Canônico: grams = (raw - tare)/scale (ver HAL_HX711_Get_Grams). */
+            float grams = (float)(raw - hx711_state[i].tare)
+                          / hx711_state[i].scale;
             k_mutex_unlock(&hx711_mutex);
 
             /* Publica no SYS via OSSI */
@@ -865,7 +915,8 @@ void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
         rpm_sim_current += (target_rpm - rpm_sim_current) * HAL_RPM_SIM_LAG;
 
         int32_t  noise = (int32_t)(sys_rand32_get() % 2001) - 1000; /* -1000..+1000 */
-        float    rpm   = rpm_sim_current + HAL_RPM_SIM_NOISE_RPM * ((float)noise / 1000.0f);
+        float    rpm   = rpm_sim_current
+                       + HAL_RPM_SIM_NOISE_RPM * HAL_SIM_NOISE_SCALE * ((float)noise / 1000.0f);
         if (rpm < 0.0f) rpm = 0.0f;
 
         atomic_set(&rpm_value, (uint32_t)(rpm * 10.0f));

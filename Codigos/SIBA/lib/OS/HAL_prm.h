@@ -33,11 +33,39 @@
  * =========================================================== */
 
 // #define HAL_DISABLE_ADC
-#define HAL_DISABLE_HX711
+
+/* HX711 (células de carga) roda AGORA também no HARDWARE real — a calibração
+ * canônica (grams=(raw-tare)/scale) precisa do driver ativo na placa, não só
+ * no native_sim. ESC/RPM seguem desabilitados só no HARDWARE (periféricos
+ * ainda não validados em bancada); no native_sim (POSIX) todos rodam em modo
+ * SYNTHETIC. Se a bancada crashar no boot por causa do HX711 (GPIO port E
+ * PE2–PE13), reabilite este `#define HAL_DISABLE_HX711` para isolar. */
+#ifndef CONFIG_ARCH_POSIX
 #define HAL_DISABLE_ESC
 #define HAL_DISABLE_RPM
+#endif
+
 #define HAL_DISABLE_I2C
 #define HAL_DISABLE_DAC
+
+/* ===========================================================
+ * HAL_SIM_NOISE_SCALE — nível de ruído aleatório do modo synthetic (native_sim)
+ *
+ * Fator global (0.0–1.0) que multiplica TODO o ruído pseudo-aleatório dos
+ * estímulos synthetic (ADC v_batt/i_batt/temp/air_speed, HX711 e RPM). Não
+ * afeta as tendências determinísticas (empuxo ∝ rpm², dreno da bateria, etc.),
+ * só a parte "chacoalhando".
+ *
+ *   0.0f  -> valores ESTÁVEIS (determinísticos) — ideal para testar calibração
+ *            (offset/linear) sem os números oscilando (padrão atual).
+ *   1.0f  -> ruído "realista" (amplitudes originais) — para exercitar filtros/
+ *            média e ver a telemetria "viva".
+ *
+ * Só vale no build native_sim (POSIX); no hardware o ruído é o do sensor real.
+ * =========================================================== */
+#ifndef HAL_SIM_NOISE_SCALE
+#define HAL_SIM_NOISE_SCALE   0.0f
+#endif
 
 #ifndef HAL_DISABLE_ADC
 #define HAL_ENABLE_ADC   1

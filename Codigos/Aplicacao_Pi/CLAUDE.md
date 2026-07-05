@@ -386,12 +386,18 @@ de *gerência*:
       1000`) sempre no `finally`/closeEvent. Matemática em
       `Communication_Data/spmm_analysis.py`.
 - [x] **Controles da tela principal ligados** — slider `Motor_action` = throttle:
-      SPMM → `arm` + `throttle <us>` (1000–2000); SAME → CMD `FUNC_START` com
-      value=duty. "Atualizar (Motor)"/soltar o slider **envia**; "Desligar
-      (Motor)" faz parada segura (SPMM `throttle 1000`+`disarm`; SAME `FUNC_STOP`).
-      "Conectar" sobe os links do modo atual.
-- [ ] **IP da SPMM** — trocado para `169.254.97.150` no lado PC (`SPMM.yaml`);
-      falta alinhar o **firmware** em `../SPMM/` para o mesmo IP.
+      SPMM → `arm` + `throttle <us>` (1000–2000); **SIBA → CMD `FUNC_ESC` com
+      value=<us>** (a SIBA controla o ESC, servo PWM). "Atualizar (Motor)"/soltar
+      o slider **envia**; "Desligar (Motor)" faz parada segura (SPMM `throttle
+      1000`+`disarm`; SIBA `FUNC_ESC 1000`+`FUNC_STOP`). "Conectar" sobe os
+      links do modo atual.
+- [x] **Papéis SIBA/SAME/ESC** — a **SIBA aciona o ESC** (recebe o throttle;
+      `_motor_board` = SIBA nos modos SIBA e SIBA+SAME). A **SAME é só leitura**
+      das correntes/tensões a,b,c do ESC + estimativa (SMO) — não aciona; no
+      modo SAME sozinho o slider/motor ficam desabilitados.
+- [x] **IP da SPMM** — `169.254.97.150` nos dois lados: PC (`SPMM.yaml`) e
+      firmware (`../SPMM/prj.conf` `CONFIG_NET_CONFIG_MY_IPV4_ADDR`). native_sim
+      continua em 127.0.0.1 (override em `boards/native_sim.conf`).
 
 ## TODO / Observações em aberto
 

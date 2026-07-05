@@ -17,6 +17,7 @@ Dois modos de comando conforme o transporte da placa:
   vão pelo `write_stdin()`.
 """
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -25,6 +26,35 @@ import threading
 def native_sim_supported():
     """native_sim (zephyr.exe ELF POSIX) só executa no Linux."""
     return sys.platform.startswith("linux")
+
+
+def _pdeathsig_preexec():
+    """Linux: faz o KERNEL matar este filho (zephyr.exe) quando o processo pai
+    (a app Python) morrer — INCLUSIVE em segfault/kill -9, onde stop_native_sim
+    não chega a rodar. Evita `zephyr.exe` órfãos acumulando e streamando UDP na
+    porta 5000 (causa de tráfego 7x + dados misturados + travamentos)."""
+    try:
+        import ctypes
+        PR_SET_PDEATHSIG = 1
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+    except Exception:
+        pass
+
+
+def kill_stray_native_sims():
+    """Mata `zephyr.exe` órfãos (de execuções anteriores que crasharam sem
+    limpar). Chamado no boot da app. Só Linux."""
+    if not native_sim_supported():
+        return 0
+    try:
+        r = subprocess.run(["pkill", "-x", "zephyr.exe"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode == 0:
+            print("[NATIVE_SIM] Processos zephyr.exe órfãos encerrados no boot.")
+        return r.returncode
+    except Exception as e:
+        print(f"[NATIVE_SIM] Falha ao limpar órfãos: {e}")
+        return -1
 
 
 class NativeSimProcess:
@@ -58,6 +88,9 @@ class NativeSimProcess:
                 stdin=subprocess.PIPE if self.pipe_stdin else None,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1,
+                # Linux: o filho recebe SIGTERM se a app Python morrer (mesmo
+                # em segfault) — nada de zephyr.exe órfão sobrando na porta 5000.
+                preexec_fn=_pdeathsig_preexec if native_sim_supported() else None,
             )
         except Exception as e:
             print(f"[NATIVE_SIM] Falha ao iniciar {self.board_id}: {e}")

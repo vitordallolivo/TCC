@@ -64,6 +64,16 @@ class SPMMEnsaioDialog(QDialog):
         ml.addWidget(self.rb_atrito); ml.addWidget(self.rb_inercia)
         root.addWidget(modo)
 
+        # Espaço para figura/diagrama do que cada ensaio faz.
+        self.diagrama = QLabel()
+        self.diagrama.setWordWrap(True)
+        self.diagrama.setTextFormat(Qt.RichText)
+        self.diagrama.setMinimumHeight(120)
+        self.diagrama.setStyleSheet(
+            "background:#101418; color:#DCDCDC; border:1px solid #2a2f36;"
+            "border-radius:6px; padding:10px; font-size:10pt;")
+        root.addWidget(self.diagrama)
+
         # Parâmetros — Atrito
         self.g_atrito = QGroupBox("Parâmetros — Atrito")
         fa = QFormLayout(self.g_atrito)
@@ -119,11 +129,34 @@ class SPMMEnsaioDialog(QDialog):
 
         self._toggle_params()
 
+    _DIAG_ATRITO = (
+        "<b>Atrito (B, τc) — patamares em regime permanente</b><br>"
+        "Para cada throttle, o motor estabiliza e mede-se (ω, Te). Em regime "
+        "(dω/dt=0): <b>Te = B·ω + τc</b>.<br>"
+        "<pre>Te │        •<br>"
+        "   │     •     ← reta ajustada (mín. quadrados)<br>"
+        "   │  •        inclinação = B ; intercepto = τc<br>"
+        "   └───────── ω</pre>"
+        "throttle 1200→1700 (patamares) · o PC faz a regressão · alerta se R²&lt;0,98 ou τc&lt;0.")
+
+    _DIAG_INERCIA = (
+        "<b>Inércia (J) — coast-down</b><br>"
+        "Sobe a rotação, <b>coast</b> corta o throttle e coleta-se ω(t) "
+        "(t = n·Ts, do micro). Sem torque: <b>J·(dω/dt) = -(B·ω+τc)</b> → "
+        "<b>J = -(B·ω+τc)/(dω/dt)</b>.<br>"
+        "<pre>ω │•<br>"
+        "  │ •._<br>"
+        "  │    '•._      decaimento livre; derivada dω/dt&lt;0<br>"
+        "  │        '•.__ J calculado em várias janelas (validação)<br>"
+        "  └──────────── t = n·Ts</pre>"
+        "usa B e τc do ensaio de atrito · J deve ficar ~constante entre janelas.")
+
     def _toggle_params(self):
         atrito = self.rb_atrito.isChecked()
         self.g_atrito.setVisible(atrito)
         self.g_inercia.setVisible(not atrito)
         self.g_btc.setVisible(not atrito)
+        self.diagrama.setText(self._DIAG_ATRITO if atrito else self._DIAG_INERCIA)
 
     def _pick_csv(self):
         path, _ = QFileDialog.getSaveFileName(self, "CSV do ensaio", "ensaio_spmm.csv", "CSV (*.csv)")
@@ -138,32 +171,54 @@ class SPMMEnsaioDialog(QDialog):
     def _start(self):
         if self._running:
             return
-        if not self.ed_csv.text().strip():
+        # === TUDO que toca WIDGET é feito AQUI, na MAIN thread ===
+        # A thread do ensaio NUNCA acessa widget (nem leitura .value()/.text()
+        # nem escrita .setText()) — só computa e emite sinais. Isso evita o
+        # crash de "atualizar a GUI fora da main thread" (que ocorria no fim do
+        # ensaio, quando o _save_csv fazia ed_csv.setText()).
+        csv_path = self._normalize_csv_path()   # pode fazer setText (main thread)
+        if not csv_path:
             QMessageBox.warning(self, "CSV", "Defina o nome do arquivo .csv.")
             return
         if "SPMM" not in self.gui.eth.workers:
             self.gui.eth.start_link("SPMM")
+
+        # Fotografa TODOS os parâmetros dos widgets num dict simples.
+        try:
+            throttles = [int(x) for x in self.ed_throttles.text().replace(";", ",").split(",") if x.strip()]
+        except ValueError:
+            QMessageBox.warning(self, "Throttles", "Lista de throttles inválida.")
+            return
+        self._cfg = {
+            "csv": csv_path,
+            "atrito": self.rb_atrito.isChecked(),
+            "throttles": throttles,
+            "settle": self.sp_settle.value(),
+            "thr_alto": self.sp_thr_alto.value(),
+            "estab": self.sp_estab.value(),
+            "loghz": self.sp_loghz.value(),
+            "dur": self.sp_dur.value(),
+            "B": self.sp_B.value(),
+            "tc": self.sp_tc.value(),
+        }
+
         self._running = True
         self.btn_run.setEnabled(False); self.btn_stop.setEnabled(True)
-        # Instala o gancho de coleta de amostras (t = n·Ts).
-        self._samples = []
-        self.gui._spmm_sample_sink = self._collect
-        atrito = self.rb_atrito.isChecked()
+        self.gui.set_motor_locked(True)
         self._thread = threading.Thread(
-            target=self._run_atrito if atrito else self._run_inercia, daemon=True)
+            target=self._run_atrito if self._cfg["atrito"] else self._run_inercia, daemon=True)
         self._thread.start()
+
+    def _normalize_csv_path(self):
+        """Garante a extensão .csv — SÓ na main thread (faz setText)."""
+        p = self.ed_csv.text().strip()
+        if p and not p.lower().endswith(".csv"):
+            p += ".csv"
+            self.ed_csv.setText(p)
+        return p
 
     def _stop(self):
         self._running = False   # o loop do ensaio checa isso e sai pelo finally
-
-    def _collect(self, decoded):
-        # t = n·Ts vem em decoded['timestamp'] (ms) — base de tempo do micro.
-        self._samples.append({
-            "n": decoded.get("n"),
-            "t": decoded.get("timestamp", 0.0) / 1000.0,
-            "omega": decoded.get("omega"),
-            "te": decoded.get("te"),
-        })
 
     def _sleep(self, s):
         """Espera respeitando o botão Parar."""
@@ -172,36 +227,57 @@ class SPMMEnsaioDialog(QDialog):
             time.sleep(0.02)
 
     # ------------------------------------------------------------------ #
+    # NOVO approach: o ensaio só COMANDA o motor e MARCA janelas de tempo (na
+    # base do buffer/CSV). Ao final, lê os dados JÁ capturados (rpm/te dos
+    # buffers da GUI — os mesmos do CSV) filtrados por essas janelas. Sem coleta
+    # paralela (evita a corrida que causava o segfault). ω = rpm·2π/60.
+    # ------------------------------------------------------------------ #
     def _run_atrito(self):
         try:
-            throttles = [int(x) for x in self.ed_throttles.text().replace(";", ",").split(",") if x.strip()]
-            settle = self.sp_settle.value()
-            self.sig_log.emit(f"[Atrito] arm + {len(throttles)} patamares...")
-            self._spmm("arm"); self._sleep(2.0)
-            pares = []
+            throttles = self._cfg["throttles"]      # já lido na main thread
+            settle = self._cfg["settle"]
+            self.sig_log.emit(f"[Atrito] arm + {len(throttles)} patamares (marcando janelas)...")
+            self._spmm("arm"); self._spmm("log start 200"); self._sleep(2.0)
+            janelas = []   # (us, t0, t1) na base do buffer/CSV
             for us in throttles:
                 if not self._running:
                     break
                 self._spmm(f"throttle {us}")
-                start = len(self._samples)
+                t0 = self.gui.now_buffer_time()
                 self._sleep(settle)
-                seg = [s for s in self._samples[start:] if s["omega"] is not None]
-                if not seg:
-                    self.sig_log.emit(f"  throttle {us}: sem amostras (SPMM enviando log?)")
-                    continue
-                omega = float(np.mean([s["omega"] for s in seg]))
-                te = float(np.mean([s["te"] for s in seg]))
-                pares.append((us, omega, te))
-                self.sig_log.emit(f"  throttle {us}: ω={omega:.2f} rad/s  Te={te:.4f} N·m  ({len(seg)} amostras)")
+                t1 = self.gui.now_buffer_time()
+                janelas.append((us, t0, t1))
+                self.sig_log.emit(f"  throttle {us}: janela [{t0:.1f}, {t1:.1f}] s marcada")
             self._spmm("throttle 1000")
+
+            # Fim: lê os buffers (mesmos do CSV) e usa só o que está nas janelas.
+            t, ys = self.gui.snapshot_series(["rpm", "te"])
+            rpm, te = ys.get("rpm"), ys.get("te")
+            pares, rows = [], []
+            if rpm is not None and te is not None and t.size:
+                for us, t0, t1 in janelas:
+                    m = (np.isfinite(t) & (t >= t0 + 0.4 * (t1 - t0)) & (t <= t1)
+                         & np.isfinite(rpm) & np.isfinite(te))
+                    if not np.any(m):
+                        self.sig_log.emit(f"  throttle {us}: sem dados na janela (SPMM enviando?)")
+                        continue
+                    omega = float(np.mean(rpm[m])) * (2.0 * np.pi / 60.0)
+                    te_m = float(np.mean(te[m]))
+                    pares.append((omega, te_m))
+                    rows.append({"patamar_us": us, "omega": omega, "te": te_m})
+                    self.sig_log.emit(f"  throttle {us}: ω={omega:.2f} rad/s  Te={te_m:.4f} N·m  ({int(m.sum())} amostras)")
+
             if len(pares) >= 2:
-                B, tc, r2 = sa.fit_atrito([p[1] for p in pares], [p[2] for p in pares])
-                self._save_csv("atrito", [{"patamar_us": p[0], "omega": p[1], "te": p[2]} for p in pares])
-                alerta = "  ⚠ R²<0,98" if r2 < 0.98 else ""
-                alerta += "  ⚠ τc<0" if tc < 0 else ""
-                self.sig_result.emit(f"ATRITO: B = {B:.5g} N·m·s/rad | τc = {tc:.5g} N·m | R² = {r2:.4f}{alerta}")
+                B, tc, r2 = sa.fit_atrito([p[0] for p in pares], [p[1] for p in pares])
+                self._save_csv("atrito", rows)
+                if not np.isfinite(B):
+                    self.sig_result.emit("ATRITO: dados degenerados (ω ~constante) — a SPMM está girando?")
+                else:
+                    alerta = "  ⚠ R²<0,98" if r2 < 0.98 else ""
+                    alerta += "  ⚠ τc<0" if tc < 0 else ""
+                    self.sig_result.emit(f"ATRITO: B = {B:.5g} N·m·s/rad | τc = {tc:.5g} N·m | R² = {r2:.4f}{alerta}")
             else:
-                self.sig_result.emit("ATRITO: dados insuficientes (nenhum patamar com amostras).")
+                self.sig_result.emit("ATRITO: dados insuficientes nas janelas (a SPMM está conectada/girando?).")
         except Exception as e:
             self.sig_log.emit(f"[ERRO Atrito] {e}")
         finally:
@@ -209,28 +285,40 @@ class SPMMEnsaioDialog(QDialog):
 
     def _run_inercia(self):
         try:
-            thr = self.sp_thr_alto.value(); estab = self.sp_estab.value()
-            hz = self.sp_loghz.value(); dur = self.sp_dur.value()
-            B = self.sp_B.value(); tc = self.sp_tc.value()
+            c = self._cfg                            # já lido na main thread
+            thr = c["thr_alto"]; estab = c["estab"]
+            hz = c["loghz"]; dur = c["dur"]
+            B = c["B"]; tc = c["tc"]
             self.sig_log.emit(f"[Inércia] arm, throttle {thr}, estabiliza {estab}s...")
             self._spmm("arm"); self._sleep(2.0)
             self._spmm(f"throttle {thr}"); self._sleep(estab)
             self._spmm(f"log start {hz}")
-            start = len(self._samples)
-            self.sig_log.emit("[Inércia] coast! coletando ω(t)...")
+            t_coast = self.gui.now_buffer_time()   # marca o instante do coast
+            self.sig_log.emit("[Inércia] coast! (marcando janela do coast-down)")
             self._spmm("coast")
             self._sleep(dur)
-            self._spmm("log stop"); self._spmm("throttle 1000")
-            seg = [s for s in self._samples[start:] if s["omega"] is not None]
-            if len(seg) < 10:
-                self.sig_result.emit(f"INÉRCIA: coast-down com poucas amostras ({len(seg)}).")
+            t_end = self.gui.now_buffer_time()
+            self._spmm("log start 100"); self._spmm("throttle 1000")
+
+            # Fim: lê o rpm(t) já capturado na janela do coast e calcula J.
+            t, ys = self.gui.snapshot_series(["rpm"])
+            rpm = ys.get("rpm")
+            if rpm is None or not t.size:
+                self.sig_result.emit("INÉRCIA: sem dados de rpm no buffer (SPMM conectada?).")
+                return
+            m = np.isfinite(t) & (t >= t_coast) & (t <= t_end) & np.isfinite(rpm)
+            tt = t[m]; ww = rpm[m] * (2.0 * np.pi / 60.0)   # ω(t) do coast-down
+            if tt.size < 10:
+                self.sig_result.emit(f"INÉRCIA: coast-down com poucas amostras ({int(tt.size)}).")
+                return
+            res = sa.compute_J(tt, ww, B, tc, n_windows=5)
+            self._save_csv("coast", [{"t": float(a), "omega": float(b)} for a, b in zip(tt, ww)])
+            jw = res["windows"]
+            if not jw or not np.isfinite(res["J_mean"]):
+                self.sig_result.emit("INÉRCIA: coast-down sem desaceleração válida (ω não caiu).")
             else:
-                t = [s["t"] for s in seg]; w = [s["omega"] for s in seg]
-                res = sa.compute_J(t, w, B, tc, n_windows=5)
-                self._save_csv("coast", [{"n": s["n"], "t": s["t"], "omega": s["omega"], "te": s["te"]} for s in seg])
-                jw = res["windows"]
-                disp = f" (±{res['J_std']:.2e}, {len(jw)} janelas)" if jw else ""
-                self.sig_result.emit(f"INÉRCIA: J = {res['J_mean']:.4e} kg·m²{disp}")
+                self.sig_result.emit(f"INÉRCIA: J = {res['J_mean']:.4e} kg·m² "
+                                     f"(±{res['J_std']:.2e}, {len(jw)} janelas)")
         except Exception as e:
             self.sig_log.emit(f"[ERRO Inércia] {e}")
         finally:
@@ -243,22 +331,22 @@ class SPMMEnsaioDialog(QDialog):
             self._spmm("throttle 1000")
             self.sig_log.emit("[SEGURANÇA] disarm + throttle 1000 enviados.")
         finally:
-            if getattr(self.gui, "_spmm_sample_sink", None) is self._collect:
-                self.gui._spmm_sample_sink = None
             self.sig_done.emit()
 
     # ------------------------------------------------------------------ #
     def _save_csv(self, tipo, rows):
-        """Salva incrementalmente (append) com índice de repetição."""
+        """Salva incrementalmente (append) com índice de repetição.
+        Roda na thread do ensaio — usa o path JÁ normalizado no _start (não toca
+        em widget)."""
         self._rep += 1
-        path = self.ed_csv.text().strip()
+        path = self._cfg["csv"]
         write_header = not _exists(path)
         try:
             with open(path, "a", newline="") as f:
                 if tipo == "atrito":
                     fields = ["rep", "tipo", "patamar_us", "omega", "te"]
                 else:
-                    fields = ["rep", "tipo", "n", "t", "omega", "te"]
+                    fields = ["rep", "tipo", "t", "omega"]
                 wr = csv.DictWriter(f, fieldnames=fields)
                 if write_header:
                     wr.writeheader()
@@ -276,6 +364,9 @@ class SPMMEnsaioDialog(QDialog):
         self._running = False
         self.btn_run.setEnabled(True); self.btn_stop.setEnabled(False)
         self.lbl_rep.setText(f"Repetições: {self._rep}")
+        # Destrava os controles de motor da tela principal.
+        if hasattr(self.gui, "set_motor_locked"):
+            self.gui.set_motor_locked(False)
 
     def closeEvent(self, e):
         # Fechar o diálogo também garante o desligamento seguro.
@@ -284,8 +375,6 @@ class SPMMEnsaioDialog(QDialog):
             self._spmm("disarm"); self._spmm("throttle 1000")
         except Exception:
             pass
-        if getattr(self.gui, "_spmm_sample_sink", None) is self._collect:
-            self.gui._spmm_sample_sink = None
         e.accept()
 
 

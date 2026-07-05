@@ -1,7 +1,7 @@
 """Camada 2/3 — pós-processamento dos ensaios da SPMM (tudo no PC, em Python).
 
 Segue as fórmulas de ../SPMM/CLAUDE.md:
-- Atrito (regime permanente):  Te = B·ω + τc  → regressão linear (polyfit).
+- Atrito (regime permanente):  Te = B·ω + τc  → regressão linear (forma fechada).
 - Inércia (coast-down):        J·(dω/dt) = -(B·ω + τc)  →  J = -(B·ω+τc)/(dω/dt),
   com t = n·Ts (contador de amostra, NUNCA o horário de chegada do pacote).
 
@@ -10,19 +10,47 @@ Funções puras (numpy) — sem I/O, sem rede.
 import numpy as np
 
 
+def _linfit(x, y):
+    """Regressão linear y = a·x + b em FORMA FECHADA (mínimos quadrados), SEM
+    LAPACK/`np.polyfit`. Robusta: filtra NaN/inf e retorna (nan, nan) se houver
+    menos de 2 pontos ou x degenerado (variância ~0). Evita o crash do LAPACK
+    (DLASCL illegal value / segfault) com dados ruins vindos de bancada
+    desconectada.
+    """
+    x = np.asarray(x, float)
+    y = np.asarray(y, float)
+    m = np.isfinite(x) & np.isfinite(y)
+    x, y = x[m], y[m]
+    n = x.size
+    if n < 2:
+        return float("nan"), float("nan")
+    sx = float(x.sum()); sy = float(y.sum())
+    sxx = float((x * x).sum()); sxy = float((x * y).sum())
+    denom = n * sxx - sx * sx
+    if abs(denom) < 1e-12:          # x praticamente constante -> reta indefinida
+        return float("nan"), float("nan")
+    a = (n * sxy - sx * sy) / denom
+    b = (sy - a * sx) / n
+    return float(a), float(b)
+
+
 def fit_atrito(omega, te):
     """Regressão Te = B·ω + τc. Retorna (B, tc, r2).
 
     B = coef. angular [N·m·s/rad], tc = intercepto [N·m], r2 = qualidade.
+    Usa `_linfit` (forma fechada) — nunca chama LAPACK, então dados
+    degenerados/NaN retornam nan em vez de causar segfault.
     """
     omega = np.asarray(omega, float)
     te = np.asarray(te, float)
-    if len(omega) < 2:
+    B, tc = _linfit(omega, te)
+    if not np.isfinite(B):
         return float("nan"), float("nan"), float("nan")
-    B, tc = np.polyfit(omega, te, 1)
-    pred = B * omega + tc
-    ss_res = float(np.sum((te - pred) ** 2))
-    ss_tot = float(np.sum((te - np.mean(te)) ** 2)) or 1e-12
+    m = np.isfinite(omega) & np.isfinite(te)
+    om, t = omega[m], te[m]
+    pred = B * om + tc
+    ss_res = float(np.sum((t - pred) ** 2))
+    ss_tot = float(np.sum((t - np.mean(t)) ** 2)) or 1e-12
     r2 = 1.0 - ss_res / ss_tot
     return float(B), float(tc), float(r2)
 
@@ -52,9 +80,9 @@ def compute_J(t, omega, B, tc, n_windows=5):
         if len(seg) < 3:
             continue
         tw, ww = t[seg], omega[seg]
-        slope, _ = np.polyfit(tw, ww, 1)     # dω/dt na janela
+        slope, _ = _linfit(tw, ww)            # dω/dt na janela (forma fechada)
         w_mean = float(np.mean(ww))
-        if slope >= 0:                        # não está desacelerando: ignora
+        if not np.isfinite(slope) or slope >= 0:   # indefinido ou não desacelera
             continue
         J = -(B * w_mean + tc) / slope        # slope<0 → J>0
         windows.append({"omega": w_mean, "dwdt": float(slope), "J": float(J)})

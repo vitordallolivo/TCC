@@ -18,12 +18,15 @@ link:
   # (NUNCA o horário de chegada do pacote UDP — ver ../SPMM/CLAUDE.md).
   Ts: 0.0002
 
-# Layout do pacote de log binário por UDP:
-#   header  <HH>  -> count (nº de amostras), ts_us
-#   sample  <Iff> -> n (contador), omega [rad/s], te [N·m]
+# Layout do pacote de log binário por UDP (fonte: ../SPMM/src/spmm.h, packed):
+#   header  <HH>    -> count (nº de amostras), ts_us (período em µs)
+#   sample  <I11f>  -> n, omega, te, iq, id, theta_e, ia, ib, ic, va, vb, vc
+#                      (48 bytes por amostra — medição completa)
+# O período efetivo vem do próprio pacote (ts_us, reflete o `log start <hz>`);
+# o PC reconstrói t = n · Ts.
 log_packet:
-  header: { format: "<HH>", fields: [count, ts_us] }
-  sample: { format: "<Iff>", fields: [n, omega, te] }
+  header: { format: "<HH", fields: [count, ts_us] }
+  sample: { format: "<I11f", fields: [n, omega, te, iq, id, theta_e, ia, ib, ic, va, vb, vc] }
 
 # Comandos do shell de bancada (Telnet). Espelham SHELL_CMD_ARG_REGISTER do
 # firmware; usados para montar a árvore `spmm ...` do commands.yaml.

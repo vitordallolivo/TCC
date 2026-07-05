@@ -262,25 +262,28 @@ static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
         float val = strtof(argv[3], NULL);
         float linear, offset;
         if (sensor_id_is_load_cell(id)) {
-            HAL_HX711_Get_Calib((uint8_t)id, &linear, &offset);
-            Propeller_Manager_Set_Cell_Calib((uint8_t)id, val, offset);
+            /* Célula: `linear <peso>` = calibra a escala por PESO conhecido
+             * (modelo canônico do HX711), não um ganho digitado. */
+            Propeller_Manager_Calibrate_Cell_Weight((uint8_t)id, val);
+            shell_print(sh, "sensor[%d]: calibrado por peso conhecido=%.3f", id, (double)val);
         } else {
             HAL_ADC_Get_Calib((uint8_t)id, &linear, &offset);
             HAL_ADC_Set_Calib((uint8_t)id, val, offset);
+            shell_print(sh, "sensor[%d]: linear=%.4f", id, (double)val);
         }
-        shell_print(sh, "sensor[%d]: linear=%.4f", id, (double)val);
 
     } else if (!strcmp(argv[2], "offset") && argc == 4) {
         float val = strtof(argv[3], NULL);
         float linear, offset;
         if (sensor_id_is_load_cell(id)) {
-            HAL_HX711_Get_Calib((uint8_t)id, &linear, &offset);
-            Propeller_Manager_Set_Cell_Calib((uint8_t)id, linear, val);
+            /* Célula: `offset` = TARA (offset = raw atual); `val` ignorado. */
+            Propeller_Manager_Tare_Cell((uint8_t)id);
+            shell_print(sh, "sensor[%d]: TARADO (offset = raw atual)", id);
         } else {
             HAL_ADC_Get_Calib((uint8_t)id, &linear, &offset);
             HAL_ADC_Set_Calib((uint8_t)id, linear, val);
+            shell_print(sh, "sensor[%d]: offset=%.4f", id, (double)val);
         }
-        shell_print(sh, "sensor[%d]: offset=%.4f", id, (double)val);
 
     } else if (!strcmp(argv[2], "reset") && argc == 3) {
         if (sensor_id_is_load_cell(id)) {
@@ -289,7 +292,7 @@ static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
         } else {
             HAL_ADC_Set_Calib((uint8_t)id, 1.0f, 0.0f);
         }
-        shell_print(sh, "sensor[%d]: calibracao restaurada (linear=1.0 offset=0.0)", id);
+        shell_print(sh, "sensor[%d]: calibracao restaurada", id);
 
     } else {
         shell_error(sh, "uso: sensor <id> linear|offset <val> | sensor <id> reset");

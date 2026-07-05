@@ -148,6 +148,8 @@ class TelnetLink(BoardLink):
                 "omega": s["omega"],
                 "rpm": s["omega"] * RAD_S_TO_RPM,
                 "te": s["te"],
+                "iq": s.get("iq"),
+                "id": s.get("id"),
             }
             if "t" in s:
                 decoded["timestamp"] = s["t"] * 1000.0  # ms, p/ base de tempo da GUI

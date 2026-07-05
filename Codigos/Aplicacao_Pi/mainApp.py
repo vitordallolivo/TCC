@@ -12,6 +12,14 @@ os.chdir(SCRIPT_DIR)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
+# Debug/log em arquivo (faulthandler p/ segfault + app.log/session.log).
+# Feito o MAIS CEDO possível, antes de qualquer import pesado/thread.
+try:
+    import debug_log
+    debug_log.setup(SCRIPT_DIR)
+except Exception as _e:
+    print(f"[DEBUG] Falha ao iniciar logs: {_e}")
+
 def handle_dependencies():
     """Verifica e instala dependências do pyproject.toml."""
     pyproject_path = Path("pyproject.toml")
@@ -39,6 +47,15 @@ def main():
     if not handle_dependencies():
         sys.exit(1)
 
+    # Limpa processos native_sim (zephyr.exe) órfãos de execuções anteriores
+    # que crasharam sem limpar — senão vários streamam UDP na porta 5000 ao
+    # mesmo tempo (dados misturados + travamentos).
+    try:
+        from Communication_Data.native_sim import kill_stray_native_sims
+        kill_stray_native_sims()
+    except Exception as _e:
+        print(f"[NATIVE_SIM] limpeza de órfãos falhou: {_e}")
+
     # Importação tardia da GUI após as dependências e o path estarem OK
     try:
         from PySide6.QtWidgets import QApplication
@@ -46,6 +63,13 @@ def main():
         
         app = QApplication(sys.argv)
         app.setStyle("Fusion")
+
+        # Captura mensagens do Qt (avisos que costumam preceder o crash).
+        try:
+            import debug_log
+            debug_log.install_qt_message_handler()
+        except Exception as _e:
+            print(f"[DEBUG] Qt handler falhou: {_e}")
         
         window = AlbatrozGUI()
         window.show()

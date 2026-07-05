@@ -128,17 +128,34 @@ void Propeller_Manager_Tare_Cell(uint8_t idx)
 
 /* Calibra a célula `idx` (Linear_Coeff/Offset_Coeff) — marca a célula
  * como "configurada" para Error_Erase(ERROR_PROP_LOAD_CELL_NOT_CONFIGURED). */
-void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float linear, float offset)
+void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float scale, float tare_raw)
 {
     if (idx >= HX711_COUNT) {
         LOG_WRN("Propeller: calib — indice de celula invalido (%u)", idx);
         return;
     }
 
-    HAL_HX711_Set_Calib(idx, linear, offset);
+    HAL_HX711_Set_Calib(idx, scale, tare_raw);
     cell_configured[idx] = true;
-    LOG_INF("Propeller: celula[%u] calibrada (linear=%.4f offset=%.4f)",
-            idx, (double)linear, (double)offset);
+    LOG_INF("Propeller: celula[%u] calibrada (scale=%.4f tare=%d)",
+            idx, (double)scale, (int)tare_raw);
+}
+
+/* Calibra a escala da célula por PESO CONHECIDO (modelo canônico do HX711):
+ * com a célula tarada, aplica-se `known_weight` e resolve-se
+ * scale = (raw - tare)/known_weight, de modo que a leitura passe a valer o
+ * próprio peso. É a forma correta de "ganho" (o app manda o peso, não o ganho). */
+void Propeller_Manager_Calibrate_Cell_Weight(uint8_t idx, float known_weight)
+{
+    if (idx >= HX711_COUNT) {
+        LOG_WRN("Propeller: calib peso — indice de celula invalido (%u)", idx);
+        return;
+    }
+
+    HAL_HX711_Calibrate_Weight(idx, known_weight);
+    cell_configured[idx] = true;
+    LOG_INF("Propeller: celula[%u] calibrada por peso conhecido=%.3f",
+            idx, (double)known_weight);
 }
 
 int Propeller_Manager_Request_Throttle(float percent)

@@ -1,7 +1,14 @@
 import numpy as np
 import pyqtgraph as pg
+import threading
 import time
 import os
+
+# Mitiga o crash em QFontEngineFT::loadGlyphSet (segfault na engine de fontes do
+# Qt6/FreeType renderizando os rótulos ROTACIONADOS dos eixos em alta taxa):
+# - antialias=False: menos glifos com transformação (o caminho que quebra);
+# - useOpenGL=False: força rasterização (evita o cache de glifos via OpenGL).
+pg.setConfigOptions(antialias=False, useOpenGL=False)
 import yaml
 import tempfile
 import csv
@@ -9,7 +16,8 @@ import struct
 import sys
 
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QInputDialog,
-                               QMenu, QComboBox, QLabel, QWidget, QHBoxLayout)
+                               QMenu, QComboBox, QLabel, QWidget, QHBoxLayout,
+                               QGridLayout)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile, Slot, QTimer, QThread, Signal, Qt
 from PySide6.QtGui import QAction
@@ -62,8 +70,14 @@ class AlbatrozGUI(QMainWindow):
         # 3. Atributos de Memória e Swap (Devem existir antes de qualquer dado chegar via rede)
         self.ptr = 0
         self.max_ram = 5000
+        # Lock que serializa TODO acesso aos buffers de plot: a thread de rede
+        # ESCREVE (via _update_internal_buffers) enquanto a thread de UI LÊ
+        # (update_plots_ui/pyqtgraph). Sem isso, o acesso concorrente aos mesmos
+        # arrays numpy corrompe memória e causa Falha de segmentação (visto em
+        # alta taxa, ex.: SPMM a 200 Hz no ensaio).
+        self._buf_lock = threading.Lock()
         self.time_buffer = np.full(self.max_ram, np.nan, dtype=np.float32)
-        self.value_buffers = {} 
+        self.value_buffers = {}
         self.variable_order = [] # Mantém a ordem para o CSV/Swap
         
         self.temp_swap = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
@@ -99,10 +113,12 @@ class AlbatrozGUI(QMainWindow):
         self._build_var_board_map()
         self._apply_mode_plots(self.op_mode)
 
-        # 7. Timer de UI
+        # 7. Timer de UI — 100ms (10 Hz). Taxa mais baixa reduz a re-renderização
+        # dos rótulos de eixo (pressão na engine de fontes que causava o crash),
+        # e ainda é suave para monitoramento.
         self.ui_timer = QTimer()
         self.ui_timer.timeout.connect(self.update_plots_ui)
-        self.ui_timer.start(50)
+        self.ui_timer.start(100)
         print("Sistema de atualização de gráficos e timer de UI prontos.")
         # 8. Inicializa o terminal  
         self.terminal.show()
@@ -182,13 +198,13 @@ class AlbatrozGUI(QMainWindow):
     # Modo de Operação — define quais placas sobem e para qual o throttle vai
     # ================================================================== #
     def _build_mode_selector(self):
-        self.op_mode = "SPMM"
+        self.op_mode = "SIBA+SAME"   # modo padrão
         # Guarda em self (posse) — widget local seria coletado pelo GC e sumiria.
         self._mode_box = QWidget(self.ui.menubar)
         lay = QHBoxLayout(self._mode_box); lay.setContentsMargins(4, 0, 8, 0)
         lay.addWidget(QLabel("Modo:"))
         self.cmb_mode = QComboBox()
-        self.cmb_mode.addItems(["SPMM", "SIBA", "SAME", "SIBA+SAME"])
+        self.cmb_mode.addItems(["SIBA+SAME", "SIBA", "SAME", "SPMM"])
         self.cmb_mode.currentTextChanged.connect(self.on_mode_changed)
         lay.addWidget(self.cmb_mode)
         self.ui.menubar.setCornerWidget(self._mode_box, Qt.TopRightCorner)
@@ -198,11 +214,17 @@ class AlbatrozGUI(QMainWindow):
                 "SIBA+SAME": ["SIBA", "SAME"]}.get(mode, [])
 
     def _motor_board(self, mode):
-        """Placa que recebe o throttle no modo atual (SPMM ou SAME; SIBA não)."""
+        """Placa que ACIONA o ESC no modo atual.
+
+        - SPMM: a bancada comanda o throttle do ESC (comandos de texto).
+        - SIBA: a SIBA controla o ESC (inclusive no modo SIBA+SAME).
+        - SAME: NÃO aciona — a SAME é só LEITURA das correntes/tensões a,b,c
+          do ESC + estimativa (SMO). Por isso 'SAME' sozinho não tem throttle.
+        """
         if mode == "SPMM":
             return "SPMM"
-        if mode in ("SAME", "SIBA+SAME"):
-            return "SAME"
+        if mode in ("SIBA", "SIBA+SAME"):
+            return "SIBA"
         return None
 
     @Slot(str)
@@ -212,10 +234,43 @@ class AlbatrozGUI(QMainWindow):
         # Sobe os links das placas do modo (sob demanda).
         for b in self._boards_in_mode(mode):
             self.eth.start_link(b)
-        mb = self._motor_board(mode)
-        self.ui.Motor_update.setEnabled(mb is not None)
-        self.ui.Motor_action.setEnabled(mb is not None)
+        self._refresh_motor_controls()
         self._apply_mode_plots(mode)
+
+    def _refresh_motor_controls(self):
+        """Habilita slider/Atualizar só se o modo aciona um ESC E não há ensaio
+        travando os controles."""
+        en = (self._motor_board(self.op_mode) is not None) and not getattr(self, "_motor_locked", False)
+        self.ui.Motor_action.setEnabled(en)
+        self.ui.Motor_update.setEnabled(en)
+
+    def set_motor_locked(self, locked):
+        """Trava/destrava os controles de motor da tela principal (usado pelos
+        ensaios SPMM para não conflitar com os comandos do ensaio)."""
+        self._motor_locked = bool(locked)
+        self._refresh_motor_controls()
+
+    def _require_board_mode(self, mode, boards):
+        """Troca para `mode` (mostra os plots certos) e AVISA se as `boards` não
+        estão recebendo dados. Retorna True se todas estão conectadas."""
+        if getattr(self, "cmb_mode", None) is not None and self.op_mode != mode:
+            self.cmb_mode.setCurrentText(mode)   # troca modo + sobe links + plots
+        for b in boards:
+            self.eth.start_link(b)
+        # Dá um instante para a telemetria (contínua) chegar.
+        from PySide6.QtCore import QCoreApplication
+        t0 = time.time()
+        while time.time() - t0 < 0.6:
+            QCoreApplication.processEvents()
+            time.sleep(0.02)
+        faltando = [b for b in boards
+                    if not (self.eth.workers.get(b) and self.eth.workers[b].is_alive_link())]
+        if faltando:
+            QMessageBox.warning(self, "Placa não conectada",
+                f"A(s) placa(s) {', '.join(faltando)} não está(ão) recebendo dados.\n\n"
+                f"Conecte/detecte no Gerenciador de Placas — sem isso o ensaio "
+                f"não recebe amostras.")
+        return not faltando
 
     def _build_var_board_map(self):
         """var de telemetria -> conjunto de placas que a produzem (p/ filtrar
@@ -239,19 +294,102 @@ class AlbatrozGUI(QMainWindow):
             add(v, "SPMM")
 
     def _apply_mode_plots(self, mode):
-        """Mostra só os gráficos cujas variáveis pertencem às placas do modo."""
+        """REORDENA os gráficos do modo: os relevantes (variáveis das placas do
+        modo) vão para o topo (visíveis); os demais/placeholders vão para o fim
+        (ocultos). Refaz o layout do grid de 3 colunas."""
         if not hasattr(self, "_var_boards"):
             self._build_var_board_map()
         boards = set(self._boards_in_mode(mode))
-        for widget_id, info in self.plot_config.get("plots_mapping", {}).items():
-            widget = self.plots.get(widget_id)
-            if widget is None:
-                continue
+        mapping = self.plot_config.get("plots_mapping", {})
+
+        def is_relevant(widget_id):
+            info = mapping.get(widget_id)
+            if not info:
+                return False   # placeholder sem mapeamento
             wboards = set()
             for var in (info.get("vars") or {}):
                 wboards |= self._var_boards.get(var, set())
-            # visível se alguma variável é de uma placa do modo (ou sem vínculo)
-            widget.setVisible((not wboards) or bool(wboards & boards))
+            return (not wboards) or bool(wboards & boards)
+
+        # Todos os widgets Plot_N do .ui, na ordem numérica.
+        all_ids = []
+        for i in range(1, 25):
+            w = getattr(self.ui, f"Plot_{i}", None)
+            if w is not None:
+                all_ids.append((f"Plot_{i}", w))
+
+        relevantes = [(wid, w) for wid, w in all_ids if is_relevant(wid)]
+        outros = [(wid, w) for wid, w in all_ids if not is_relevant(wid)]
+
+        # Grid REAL dos plots = layout do widget-pai de um Plot (dentro da
+        # scroll area). Evita pegar o layout externo por nome errado.
+        grid = None
+        if all_ids:
+            parent = all_ids[0][1].parentWidget()
+            lay = parent.layout() if parent is not None else None
+            if isinstance(lay, QGridLayout):
+                grid = lay
+        if grid is None:   # fallback: só visibilidade
+            for wid, w in relevantes:
+                w.setVisible(True)
+            for wid, w in outros:
+                w.setVisible(False)
+            return
+
+        for _wid, w in all_ids:
+            grid.removeWidget(w)
+
+        NC = 3
+        cell_w, cell_h = self._plot_cell_size(NC)
+        for i, (_wid, w) in enumerate(relevantes):
+            w.setVisible(True)
+            w.setMinimumSize(cell_w, cell_h)
+            w.setMaximumHeight(cell_h)   # NÃO esticar além da célula
+            grid.addWidget(w, i // NC, i % NC)
+        base = (len(relevantes) + NC - 1) // NC
+        for j, (_wid, w) in enumerate(outros):
+            w.setVisible(False)
+            grid.addWidget(w, base + j // NC, j % NC)
+        # Colunas com stretch igual (espaços iguais); linha-sentinela lá embaixo
+        # absorve o espaço vertical extra p/ os gráficos NÃO esticarem.
+        for c in range(NC):
+            grid.setColumnStretch(c, 1)
+        for r in range(grid.rowCount() + 1):
+            grid.setRowStretch(r, 0)
+        grid.setRowStretch(999, 1)
+
+    def _plot_cell_size(self, ncols=3):
+        """Tamanho mínimo/máximo de cada gráfico baseado na ÁREA DE ROLAGEM
+        (Graficos_Scroll), não na tela: largura = viewport/ncols (cabem `ncols`
+        por linha) e altura = viewport/2 (≈2 linhas visíveis; o resto rola).
+        A altura da viewport é o teto por gráfico."""
+        sa = getattr(self.ui, "Graficos_Scroll", None)
+        vw = vh = 0
+        if sa is not None and sa.viewport() is not None:
+            vw = sa.viewport().width()
+            vh = sa.viewport().height()
+        if vw < 200 or vh < 150:   # ainda não dimensionado (antes de show/resize)
+            from PySide6.QtWidgets import QApplication
+            scr = QApplication.primaryScreen()
+            geo = scr.availableGeometry() if scr else None
+            vw = geo.width() if geo else 1280
+            vh = int((geo.height() if geo else 800) * 0.55)
+        cell_w = max(280, vw // ncols - 18)
+        cell_h = max(150, vh // 2 - 12)
+        return cell_w, cell_h
+
+    def resizeEvent(self, event):
+        """Ao redimensionar a janela, reajusta a altura/largura dos gráficos
+        visíveis à nova viewport da scroll (sem refazer o layout todo)."""
+        super().resizeEvent(event)
+        if not hasattr(self, "op_mode"):
+            return
+        cell_w, cell_h = self._plot_cell_size(3)
+        for i in range(1, 25):
+            w = getattr(self.ui, f"Plot_{i}", None)
+            if w is not None and not w.isHidden():
+                w.setMinimumSize(cell_w, cell_h)
+                w.setMaximumHeight(cell_h)
 
     # ================================================================== #
     def _build_menus(self):
@@ -290,27 +428,27 @@ class AlbatrozGUI(QMainWindow):
         for act in list(mb.actions()):
             mb.removeAction(act)
 
-        # --- Motor (topo) ---
+        # --- Motor (topo) — só Carregar/Criar (estimativas foram para menu próprio) ---
         self.ui.menuMotor.setTitle("Motor")
-        self.ui.menuMotor.addSeparator()
-        self.ui.menuMotor.addAction(self.action_estimate_smo)
-        self.ui.menuMotor.addAction(self.action_estimate_helice)
-        self.ui.menuMotor.addAction(self.action_spmm_ensaio)
         mb.addMenu(self.ui.menuMotor)
+
+        # --- Estimativas (topo, menu próprio) ---
+        self.menu_estim = QMenu("Estimativas", mb)
+        self.menu_estim.addAction(self.action_estimate_smo)
+        self.menu_estim.addAction(self.action_estimate_helice)
+        self.menu_estim.addAction(self.action_spmm_ensaio)
+        mb.addMenu(self.menu_estim)
 
         # --- Bateria (topo) ---
         if getattr(self.ui, "menuBattery", None) is not None:
             self.ui.menuBattery.setTitle("Bateria")
             mb.addMenu(self.ui.menuBattery)
 
-        # --- Células de Carga (topo) ---
-        # Cria o QMenu com o menubar como PARENT (posse em C++, não é coletado
-        # pelo GC) e guarda a referência — addMenu(str) tem posse ambígua e o
-        # menu somia da barra.
+        # --- Células de Carga (topo) — só a calibração ---
+        # QMenu com o menubar como PARENT (posse em C++) e ref em self (senão
+        # o GC coleta e some da barra).
         self.menu_cells = QMenu("Células de Carga", mb)
         self.menu_cells.addAction(self.action_calib_load_cell)
-        if getattr(self.ui, "actionLoadCells", None) is not None:
-            self.menu_cells.addAction(self.ui.actionLoadCells)
         mb.addMenu(self.menu_cells)
 
         # --- Gerenciador de Placas (topo) ---
@@ -368,11 +506,42 @@ class AlbatrozGUI(QMainWindow):
             sink = getattr(self, "_spmm_sample_sink", None)
             if sink is not None and protocol == "SPMM":
                 sink(decoded)
+            # Throttle do log no terminal (a SPMM streama ~100-200 Hz; logar tudo
+            # com appendHtml sobrecarrega a main thread). Buffers seguem em taxa
+            # cheia; só o texto do terminal é limitado a ~10 Hz.
             if hasattr(self, 'terminal'):
-                self.terminal.log_board_data(protocol, b"", decoded)
+                now = time.time()
+                if now - getattr(self, "_last_sample_log", 0.0) > 0.1:
+                    self._last_sample_log = now
+                    self.terminal.log_board_data(protocol, b"", decoded)
             self._update_internal_buffers(decoded)
         except Exception as e:
             print(f"Erro ao processar amostra decodificada [{protocol}]: {e}")
+
+    def now_buffer_time(self):
+        """Tempo atual na base do buffer/CSV (segundos desde a 1ª amostra).
+        Os ensaios usam isto para MARCAR janelas e depois filtrar os dados
+        já capturados — sem coleta paralela."""
+        t0 = getattr(self, "_t0", None)
+        return (time.time() - t0) if t0 is not None else 0.0
+
+    def snapshot_series(self, var_names):
+        """Foto (cópias, sob o lock) do histórico em RAM: (t, {var: y}).
+        Reaproveita os mesmos buffers do CSV; o ensaio filtra por timestamp."""
+        with self._buf_lock:
+            ptr = self.ptr
+            if ptr == 0:
+                return np.array([]), {v: np.array([]) for v in var_names}
+            if ptr < self.max_ram:
+                t = self.time_buffer[:ptr].copy()
+                ys = {v: self.value_buffers[v][:ptr].copy()
+                      for v in var_names if v in self.value_buffers}
+            else:
+                split = ptr % self.max_ram
+                t = np.concatenate([self.time_buffer[split:], self.time_buffer[:split]])
+                ys = {v: np.concatenate([self.value_buffers[v][split:], self.value_buffers[v][:split]])
+                      for v in var_names if v in self.value_buffers}
+        return t, ys
 
     def get_recent_average(self, var_name, n=10):
         """Média das últimas `n` medições válidas (não-NaN) de uma variável de
@@ -389,46 +558,86 @@ class AlbatrozGUI(QMainWindow):
         return float(np.mean(vals))
 
     def _update_internal_buffers(self, decoded_data):
-        idx = self.ptr % self.max_ram
+        # Escrita dos buffers sob o lock (roda na thread de rede) — ver
+        # comentário em __init__ (self._buf_lock).
+        with self._buf_lock:
+            idx = self.ptr % self.max_ram
+            # Base de tempo = relógio do PC (Python), não o timestamp do firmware.
+            if getattr(self, "_t0", None) is None:
+                self._t0 = time.time()
+            self.time_buffer[idx] = time.time() - self._t0
 
-        # Base de tempo = relógio do PC (Python), não o timestamp do firmware.
-        # Marca t=0 na primeira amostra; grava segundos decorridos. É esse tempo
-        # que vai para o CSV exportado (usado depois pela identificação da hélice).
-        if getattr(self, "_t0", None) is None:
-            self._t0 = time.time()
-        self.time_buffer[idx] = time.time() - self._t0
-        
-        for var_name, val in decoded_data.items():
-            if var_name in self.value_buffers:
-                self.value_buffers[var_name][idx] = val
-        
-        self.ptr += 1
-        if self.ptr > 0 and self.ptr % self.max_ram == 0:
-            self._flush_to_swap()
+            for var_name, val in decoded_data.items():
+                if var_name in self.value_buffers:
+                    self.value_buffers[var_name][idx] = val
 
-    def _flush_to_swap(self):
-        data_to_save = np.column_stack([self.time_buffer] + [self.value_buffers[v] for v in self.variable_order])
-        with open(self.swap_path, "ab") as f:
-            f.write(data_to_save.astype(np.float32).tobytes())
-        self.points_in_swap += self.max_ram
-        print(f"Swap: {self.max_ram} pontos movidos para o disco. Total em swap: {self.points_in_swap}")
+            self.ptr += 1
+            snapshot = None
+            if self.ptr > 0 and self.ptr % self.max_ram == 0:
+                # Tira a FOTO (cópia) sob o lock, mas grava no disco FORA do lock
+                # (o I/O é lento e não pode segurar o lock — isso travava a UI/
+                # pyqtgraph no meio do ensaio, exatamente quando dava swap).
+                snapshot = np.column_stack(
+                    [self.time_buffer.copy()] +
+                    [self.value_buffers[v].copy() for v in self.variable_order]
+                ).astype(np.float32)
+
+        # I/O de disco fora do lock:
+        if snapshot is not None:
+            self._write_swap(snapshot)
+
+    def _write_swap(self, snapshot):
+        try:
+            with open(self.swap_path, "ab") as f:
+                f.write(snapshot.tobytes())
+            self.points_in_swap += self.max_ram
+            print(f"Swap: {self.max_ram} pontos no disco. Total em swap: {self.points_in_swap}")
+        except Exception as e:
+            print(f"Erro no swap: {e}")
+
+    #: nº de pontos exibidos por gráfico (janela rolante). Limita o trabalho do
+    #: pyqtgraph — o histórico completo continua indo p/ o swap/CSV.
+    PLOT_WINDOW = 2000
 
     def update_plots_ui(self):
-        if self.ptr == 0: return
-        
-        range_slice = slice(0, self.ptr) if self.ptr < self.max_ram else slice(None)
-        x = self.time_buffer[range_slice]
-        
-        if self.ptr >= self.max_ram:
-            split = self.ptr % self.max_ram
-            x = np.concatenate([self.time_buffer[split:], self.time_buffer[:split]])
+        # Slot do QTimer — nunca deixar uma exceção escapar para o C++ do Qt
+        # (boa prática PyQt: exceção em slot pode corromper estado/crashar).
+        try:
+            self._update_plots_ui_impl()
+        except Exception as e:
+            print(f"[update_plots_ui] erro ignorado: {e}")
 
+    def _update_plots_ui_impl(self):
+        if self.ptr == 0: return
+
+        # 1) Sob o lock, tira uma FOTO (cópias) só dos ÚLTIMOS PLOT_WINDOW pontos
+        #    (em ordem cronológica), tratando o buffer circular. Assim o pyqtgraph
+        #    nunca recebe array gigante nem lê os arrays vivos.
+        with self._buf_lock:
+            ptr, mr = self.ptr, self.max_ram
+            win = min(self.PLOT_WINDOW, ptr, mr)
+            if ptr <= mr:
+                sl = slice(ptr - win, ptr)
+                x = self.time_buffer[sl].copy()
+                ys = {v: b[sl].copy() for v, b in self.value_buffers.items()}
+            else:
+                start = (ptr - win) % mr
+                end = start + win
+                if end <= mr:
+                    x = self.time_buffer[start:end].copy()
+                    ys = {v: b[start:end].copy() for v, b in self.value_buffers.items()}
+                else:                       # a janela cruza a borda do circular
+                    tail = end - mr
+                    x = np.concatenate([self.time_buffer[start:], self.time_buffer[:tail]])
+                    ys = {v: np.concatenate([b[start:], b[:tail]])
+                          for v, b in self.value_buffers.items()}
+
+        # 2) Fora do lock, plota a partir das cópias.
         for widget_id, curve_data in self.curves.items():
             for var_name, curve in curve_data:
-                y = self.value_buffers[var_name][range_slice]
-                if self.ptr >= self.max_ram:
-                    y = np.concatenate([self.value_buffers[var_name][split:], self.value_buffers[var_name][:split]])
-                curve.setData(x, y)
+                y = ys.get(var_name)
+                if y is not None:
+                    curve.setData(x, y)
 
     @Slot()
     def on_toggle_network(self):
@@ -452,13 +661,19 @@ class AlbatrozGUI(QMainWindow):
     @Slot()
     def on_clear_all(self):
         print("Limpando todos os buffers e dados de swap...")
-        self.ptr = 0
-        self._t0 = None  # reinicia a base de tempo do PC
-        self.points_in_swap = 0
-        self.time_buffer.fill(np.nan)
-        for b in self.value_buffers.values(): b.fill(np.nan)
+        with self._buf_lock:
+            self.ptr = 0
+            self._t0 = None  # reinicia a base de tempo do PC
+            self.points_in_swap = 0
+            self.time_buffer.fill(np.nan)
+            for b in self.value_buffers.values(): b.fill(np.nan)
         if os.path.exists(self.swap_path):
             open(self.swap_path, 'wb').close()
+        # Limpa as CURVAS de fato — senão continuam mostrando os dados velhos
+        # (update_plots_ui retorna cedo com ptr=0 e não redesenha vazio).
+        for curve_data in self.curves.values():
+            for _var, curve in curve_data:
+                curve.setData([], [])
 
     @Slot()
     def on_save_csv(self):
@@ -474,10 +689,17 @@ class AlbatrozGUI(QMainWindow):
                 if os.path.exists(self.swap_path) and self.points_in_swap > 0:
                     disk_data = np.fromfile(self.swap_path, dtype=np.float32).reshape(-1, num_cols)
                     writer.writerows(disk_data)
-                # Adiciona o resto da RAM
-                ram_idx = self.ptr % self.max_ram
-                if ram_idx > 0:
-                    current_ram = np.column_stack([self.time_buffer[:ram_idx]] + [self.value_buffers[v][:ram_idx] for v in self.variable_order])
+                # Adiciona o resto da RAM (snapshot sob o lock — a thread de
+                # rede pode estar escrevendo os buffers ao mesmo tempo).
+                with self._buf_lock:
+                    ram_idx = self.ptr % self.max_ram
+                    if ram_idx > 0:
+                        current_ram = np.column_stack(
+                            [self.time_buffer[:ram_idx].copy()] +
+                            [self.value_buffers[v][:ram_idx].copy() for v in self.variable_order])
+                    else:
+                        current_ram = None
+                if current_ram is not None:
                     writer.writerows(current_ram)
             print("Exportação CSV concluída com sucesso.")
         except Exception as e:
@@ -521,24 +743,54 @@ class AlbatrozGUI(QMainWindow):
     # Métodos de carregamento de menus...
     @Slot()
     def on_load_motor(self):
-        print("Solicitando lista de motores do SAME.yaml")
+        """Carrega um motor de um .yaml (Config/motors/ ou embutido no SAME.yaml)
+        e pergunta se aplica os parâmetros no hardware (envia os CMDs)."""
+        from Communication_Data import motor_config as mc
         try:
-            with open(self.same_yaml_path, 'r') as f:
-                data = yaml.safe_load(f)
-            motores = list(data.get('motors', {}).keys())
-            choice, ok = QInputDialog.getItem(self, "Motor", "Selecione:", motores, 0, False)
-            if ok and choice:
-                self.prefs["last_motor_name"] = choice
-                self.apply_user_prefs()
-                self.save_user_prefs()
+            files = mc.list_motor_files(self.config_dir)       # {nome: caminho}
+            same = self._load_config_file(self.same_yaml_path)
+            embedded = list((same.get("motors") or {}).keys())
+            options = list(files.keys()) + [f"{m}  (SAME.yaml)" for m in embedded]
+            if not options:
+                QMessageBox.information(self, "Carregar Motor",
+                    "Nenhum motor salvo. Use 'Criar' para salvar um .yaml em Config/motors/.")
+                return
+            choice, ok = QInputDialog.getItem(self, "Carregar Motor",
+                                              "Selecione o motor:", options, 0, False)
+            if not ok or not choice:
+                return
 
-                if self.eth.running: # Tries send configuration
-                    try:
-                        pass
-                    except Exception as e: QMessageBox.warning(self, "Erro", str(e))
+            if choice in files:
+                params = mc.load_motor_file(files[choice])
+            else:
+                name = choice.replace("  (SAME.yaml)", "")
+                params = mc.params_from_motor_dict((same.get("motors") or {}).get(name, {}))
 
+            self.prefs["last_motor_name"] = choice
+            self.save_user_prefs()
 
-        except Exception as e: QMessageBox.warning(self, "Erro", str(e))
+            resp = QMessageBox.question(
+                self, "Aplicar no hardware",
+                f"Aplicar os parâmetros de '{choice}' no hardware (SAME) agora?",
+                QMessageBox.Yes | QMessageBox.No)
+            if resp == QMessageBox.Yes:
+                if "SAME" not in self.eth.workers:
+                    self.eth.start_link("SAME")
+                same_cfg = codecs.board_protocol_cfg(self.configs["SAME"], "SAME")
+                cmds = mc.build_motor_cmds(same_cfg, params)
+                # Loga CADA comando no terminal (hex + decode), igual ao 'Criar'
+                # -> o usuário vê exatamente o que foi mandado para a SAME.
+                print(f"[Motor] Aplicando '{choice}' na SAME ({len(cmds)} parâmetros):")
+                for cmd, (gui_key, target_str) in zip(cmds, mc.MOTOR_TARGET_MAP.items()):
+                    print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
+                    print(f"[DECODE] [SAME] FUNC_SENSOR | INSTR_WRITE | {target_str} | "
+                          f"VAL: {params[gui_key]:.4f} | ACT: DEFAULT_ACTION_SET_VALUE")
+                    self.eth.send_command("SAME", cmd)
+                print(f"[Motor] {len(cmds)} parâmetros de '{choice}' enviados à SAME.")
+                QMessageBox.information(self, "Aplicado",
+                    f"{len(cmds)} parâmetros de '{choice}' aplicados no hardware.")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", str(e))
 
         
     @Slot()
@@ -573,10 +825,11 @@ class AlbatrozGUI(QMainWindow):
 
     @Slot()
     def open_spmm_ensaio(self):
-        """Abre o popout de ensaios da SPMM (atrito B/τc e inércia J)."""
+        """Abre o popout de ensaios da SPMM (atrito B/τc e inércia J).
+        Troca automaticamente para o modo SPMM (plots certos) e avisa se a SPMM
+        não estiver conectada."""
         print("Abrindo Ensaios SPMM...")
-        if "SPMM" not in self.eth.workers:
-            self.eth.start_link("SPMM")
+        self._require_board_mode("SPMM", ["SPMM"])
         if not getattr(self, "_spmm_ensaio_dlg", None):
             self._spmm_ensaio_dlg = SPMMEnsaioDialog(self, self)
         self._spmm_ensaio_dlg.show()
@@ -622,7 +875,8 @@ class AlbatrozGUI(QMainWindow):
         sliderReleased / 'Atualizar (Motor)' (evita inundar a rede)."""
         self.prefs["motor_val"] = val
         board = self._motor_board(self.op_mode)
-        if board == "SPMM":
+        # SPMM e SIBA acionam o ESC em µs (servo PWM); rótulo mostra os µs.
+        if board in ("SPMM", "SIBA"):
             us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
             self.ui.Motor_update.setText(f"Atualizar (throttle {us}us)")
         else:
@@ -631,28 +885,31 @@ class AlbatrozGUI(QMainWindow):
 
     @Slot()
     def apply_throttle(self):
-        """Envia o throttle atual para a placa de motor do modo de operação.
+        """Envia o throttle atual para quem ACIONA o ESC no modo atual.
 
         SPMM: arma (uma vez) e manda `throttle <us>` (1000–2000).
-        SAME: manda um CMD FUNC_START com value = duty (0–1)."""
+        SIBA: manda um CMD FUNC_ESC com value = <us> (1000–2000) — a SIBA
+              controla o ESC (servo PWM). A SAME NÃO aciona (só lê/estima)."""
         board = self._motor_board(self.op_mode)
         val = self.ui.Motor_action.value()
+        us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
         if board == "SPMM":
             if "SPMM" not in self.eth.workers:
                 self.eth.start_link("SPMM")
             if not getattr(self, "_spmm_armed", False):
+                print("[NET] (SPMM) -> 'arm'")
                 self.eth.send_command("SPMM", "arm")
                 self._spmm_armed = True
-            us = 1000 + int(val * 10)
+            print(f"[NET] (SPMM) -> 'throttle {us}'")
             self.eth.send_command("SPMM", f"throttle {us}")
             print(f"[Motor] SPMM throttle {us}us ({val}%)")
-        elif board == "SAME":
-            if "SAME" not in self.eth.workers:
-                self.eth.start_link("SAME")
-            self._send_same_duty(val / 100.0)
-            print(f"[Motor] SAME duty {val}%")
+        elif board == "SIBA":
+            if "SIBA" not in self.eth.workers:
+                self.eth.start_link("SIBA")
+            self._send_board_cmd("SIBA", "FUNC_ESC", float(us))
+            print(f"[Motor] SIBA ESC throttle {us}us ({val}%)")
         else:
-            print("[Motor] Modo SIBA não controla motor.")
+            print("[Motor] Modo atual não aciona o ESC (SAME é só leitura/estimativa).")
 
     @Slot()
     def motor_stop(self):
@@ -663,29 +920,31 @@ class AlbatrozGUI(QMainWindow):
             self.eth.send_command("SPMM", "disarm")
             self._spmm_armed = False
             print("[Motor] SPMM parado (throttle 1000 + disarm).")
-        elif board == "SAME":
-            # FUNC_STOP no alvo padrão.
-            self._send_same_cmd("FUNC_STOP", 0.0)
-            print("[Motor] SAME parado (stop).")
+        elif board == "SIBA":
+            # ESC em idle (1000us) + corte imediato de potência (FUNC_STOP).
+            self._send_board_cmd("SIBA", "FUNC_ESC", 1000.0)
+            self._send_board_cmd("SIBA", "FUNC_STOP", 0.0)
+            print("[Motor] SIBA ESC parado (throttle 1000 + stop).")
         self.ui.Motor_action.setValue(0)
 
-    def _send_same_cmd(self, func_name, value):
-        """Monta e envia um CMD para a SAME usando os enums do SAME.yaml."""
-        enums = codecs.board_protocol_cfg(self.configs["SAME"], "SAME").get("enums", {})
+    def _send_board_cmd(self, board, func_name, value, target="TARGET_DEFAULT",
+                        instr="INSTR_NONE"):
+        """Monta e envia um CMD para `board` usando os enums do <board>.yaml, e
+        LOGA a quebra no terminal (hex + decode) — o usuário vê exatamente os 8
+        bytes e o que cada campo significa."""
+        enums = codecs.board_protocol_cfg(self.configs[board], board).get("enums", {})
 
         def idx(cat, name, default=0):
             lst = enums.get(cat, [])
             return lst.index(name) if name in lst else default
 
-        cmd = codecs.encode_cmd(
-            idx("func_type", func_name, 0),
-            idx("instruct_type", "INSTR_NONE", 2),
-            idx("target_type", "TARGET_DEFAULT", 0),
-            value, 0)
-        self.eth.send_command("SAME", cmd)
-
-    def _send_same_duty(self, duty):
-        self._send_same_cmd("FUNC_START", duty)
+        fi, ii, ti = idx("func_type", func_name, 0), idx("instruct_type", instr, 2), idx("target_type", target, 0)
+        cmd = codecs.encode_cmd(fi, ii, ti, value, 0)
+        # Log da quebra: hex dos 8 bytes + tradução dos campos.
+        print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
+        print(f"[DECODE] [{board}] {func_name}(f={fi}) | {instr}(i={ii}) | "
+              f"{target}(t={ti}) | VAL: {value:.4f} | ACT: 0")
+        self.eth.send_command(board, cmd)
 
     def start_mock_with_target(self, target, quiet=False):
         """Configura e inicia o mock baseado no argumento do terminal."""

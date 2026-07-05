@@ -146,16 +146,18 @@ void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset);
  * range, devolve (1.0, 0.0). */
 void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset);
 
-/* HX711 */
+/* HX711 — modelo canônico: grams = (raw - tare)/scale (um só offset = tare,
+ * em counts; scale = counts/unidade). Ver HAL.c. */
 int     HAL_HX711_Init(void);
 int32_t HAL_HX711_Get_Raw(uint8_t index);      /* valor bruto 24 bits */
-float   HAL_HX711_Get_Grams(uint8_t index);    /* após linear/offset  */
-void    HAL_HX711_Set_Calib(uint8_t index, float scale, float offset);
+float   HAL_HX711_Get_Grams(uint8_t index);    /* (raw - tare)/scale  */
+void    HAL_HX711_Set_Calib(uint8_t index, float scale, float tare_raw);
 
-/* HX711 — lê o par (scale, offset) atualmente aplicado, mesmo motivo de
- * HAL_ADC_Get_Calib (fonte única de verdade para alterações parciais). */
-void    HAL_HX711_Get_Calib(uint8_t index, float *scale, float *offset);
-void    HAL_HX711_Tare(uint8_t index);
+/* HX711 — lê o par canônico (scale, tare_raw) atualmente aplicado. */
+void    HAL_HX711_Get_Calib(uint8_t index, float *scale, float *tare_raw);
+void    HAL_HX711_Tare(uint8_t index);          /* tara = raw atual (zera) */
+/* Calibra a escala por peso conhecido: scale = (raw - tare)/known_weight. */
+void    HAL_HX711_Calibrate_Weight(uint8_t index, float known_weight);
 
 /* PWM / ESC */
 int  HAL_ESC_Init(void);

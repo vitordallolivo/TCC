@@ -1,19 +1,21 @@
 import struct
 
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QGroupBox, 
-                               QDoubleSpinBox, QPushButton, QHBoxLayout, QMessageBox)
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QGroupBox,
+                               QDoubleSpinBox, QPushButton, QHBoxLayout, QMessageBox,
+                               QInputDialog)
 import yaml
 import os
 
-# from Communication_Data.MOCK_Ethernet import pack_same_cmd
+from Communication_Data import motor_config as mc
 
 class SAMEConfigDialog(QDialog):
     def __init__(self, prefs, config_dir, ethernet_mgr, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Configuração SAME (Inversor & Observador)")
         self.resize(400, 600)
-        
+
         self.prefs = prefs
+        self.config_dir = config_dir
         self.ethernet = ethernet_mgr
         self.same_yaml = self._load_yaml(os.path.join(config_dir, "SAME.yaml"))
         self.enums = self.same_yaml.get('enums', {})
@@ -49,15 +51,61 @@ class SAMEConfigDialog(QDialog):
         smo_group.setLayout(smo_layout)
         main_layout.addWidget(smo_group)
 
-        # Botões
+        # Botões: salvar .yaml (Config/motors/), apagar .yaml, aplicar no HW.
         btn_layout = QHBoxLayout()
-        btn_apply = QPushButton("Aplicar no Hardware")
-        btn_apply.clicked.connect(self.apply_and_send)
+        btn_save = QPushButton("Salvar .yaml")
+        btn_save.clicked.connect(self.save_yaml)
+        btn_del = QPushButton("Apagar .yaml")
+        btn_del.clicked.connect(self.delete_yaml)
         btn_cancel = QPushButton("Cancelar")
         btn_cancel.clicked.connect(self.reject)
+        btn_apply = QPushButton("Aplicar no Hardware")
+        btn_apply.clicked.connect(self.apply_and_send)
+        btn_layout.addWidget(btn_save)
+        btn_layout.addWidget(btn_del)
+        btn_layout.addStretch()
         btn_layout.addWidget(btn_cancel)
         btn_layout.addWidget(btn_apply)
         main_layout.addLayout(btn_layout)
+
+    def _params(self):
+        return {key: spin.value() for key, spin in self.inputs.items()}
+
+    def save_yaml(self):
+        """Salva os valores atuais como um motor .yaml em Config/motors/."""
+        name, ok = QInputDialog.getText(self, "Salvar motor", "Nome do motor:")
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        try:
+            path = mc.save_motor_file(self.config_dir, name, self._params())
+            QMessageBox.information(self, "Salvo",
+                f"Motor salvo em:\n{path}\n\nApareça no 'Carregar'.")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro ao salvar", str(e))
+
+    def delete_yaml(self):
+        """Apaga PERMANENTEMENTE um motor .yaml de Config/motors/ (confirmação)."""
+        files = mc.list_motor_files(self.config_dir)
+        if not files:
+            QMessageBox.information(self, "Apagar", "Nenhum motor .yaml em Config/motors/.")
+            return
+        name, ok = QInputDialog.getItem(self, "Apagar motor",
+            "Selecione o motor para APAGAR:", list(files.keys()), 0, False)
+        if not ok or not name:
+            return
+        resp = QMessageBox.question(
+            self, "Confirmar remoção",
+            f"Deseja realmente apagar o motor '{name}'?\n\n"
+            f"Isto vai REMOVER PERMANENTEMENTE o arquivo:\n{files[name]}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            os.remove(files[name])
+            QMessageBox.information(self, "Apagado", f"Motor '{name}' removido permanentemente.")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro ao apagar", str(e))
 
     def add_spinbox(self, layout, key, label, min_val, max_val, decimals):
         spin = QDoubleSpinBox()
@@ -117,55 +165,25 @@ class SAMEConfigDialog(QDialog):
             return 0
 
     def apply_and_send(self):
-        """Gera os CMDs e printa detalhes simulando o parser do terminal."""
-        new_config = {key: spin.value() for key, spin in self.inputs.items()}
-        self.prefs["same_config"] = new_config
-        
-        # Enums base
-        func_name = "FUNC_SENSOR"
-        instr_name = "INSTR_WRITE"
-        act_name = "DEFAULT_ACTION_SET_VALUE"
+        """Aplica no hardware SAME. Usa o MESMO gerador de CMDs
+        (motor_config.build_motor_cmds) que o 'Carregar' — garante que os dois
+        caminhos enviam exatamente os mesmos comandos para a SAME."""
+        params = self._params()
+        self.prefs["same_config"] = params
 
-        func = self.get_enum_val("func_type", func_name)
-        instr = self.get_enum_val("instruct_type", instr_name)
-        action = self.get_enum_val("default_action", act_name)
+        # protocolo do SAME (enums), lidando com raiz aninhada.
+        same_cfg = self.same_yaml
+        if "same" in same_cfg:
+            same_cfg = same_cfg["same"]
 
-        mapping = {
-            "pole_pairs": "TARGET_POLES_PAIRS",
-            "resistance": "TARGET_RESISTANCE",
-            "inductance": "TARGET_INDUCTANCE",
-            "kv_rating":  "TARGET_KV_RATING",
-            "ks1":        "TARGET_KS1",
-            "ks2":        "TARGET_KS2",
-            "bemf_lpf":   "TARGET_BEMF_LPF_FREQUENCY",
-            "torque_lpf": "TARGET_TORQUE_LPF_FREQUENCY"
-        }
+        print("[PRNT] Enviando lote de configuração para SAME...")
+        cmds = mc.build_motor_cmds(same_cfg, params)
+        for cmd_payload, (gui_key, target_str) in zip(cmds, mc.MOTOR_TARGET_MAP.items()):
+            hex_str = cmd_payload.hex(' ').upper()
+            print(f"[NET] CMD -> [{hex_str}]")
+            print(f"[DECODE] [SAME] FUNC_SENSOR | INSTR_WRITE | {target_str} | "
+                  f"VAL: {params[gui_key]:.4f} | ACT: DEFAULT_ACTION_SET_VALUE")
+            self.ethernet.send_command("SAME", cmd_payload)
 
-        print(f"[PRNT] Enviando lote de configuração para SAME...")
-
-        for gui_key, target_str in mapping.items():
-            try:
-                target_id = self.get_enum_val("target_type", target_str)
-                value = new_config[gui_key]
-                
-                # Pack direto usando struct padrão do projeto
-                cmd_payload = struct.pack('<BBBfb', func, instr, target_id, value, action)
-                hex_str = cmd_payload.hex(' ').upper()
-
-                # --- INFO DE REDE (Simula o Terminal) ---
-                print(f"[NET] CMD -> [{hex_str}]")
-
-                # --- INFO DE DECODE (Tradução amigável) ---
-                # Aqui a gente monta a string no braço para garantir o detalhe
-                decode_info = (f"[DECODE] [SAME] {func_name} | {instr_name} | "
-                               f"{target_str} | VAL: {value:.4f} | ACT: {act_name}")
-                print(decode_info)
-
-                # Envio real via Ethernet
-                self.ethernet.send_command("SAME", cmd_payload)
-                
-            except Exception as e:
-                print(f"[ERR] Falha ao configurar {gui_key}: {e}")
-
-        print(f"[PRNT] Configurações aplicadas com sucesso.")
+        print(f"[PRNT] {len(cmds)} parâmetros aplicados na SAME.")
         self.accept()

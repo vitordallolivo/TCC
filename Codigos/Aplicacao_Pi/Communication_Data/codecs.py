@@ -89,19 +89,27 @@ def decode_telemetry(log_cfg, data):
 
 
 # --- SPMM: log binário por UDP ----------------------------------------------
+# Layout REAL do firmware (../SPMM/src/spmm.h, `#pragma pack(1)`):
+#   header  <HH>   -> count, ts_us
+#   sample  <I11f> -> n, omega, te, iq, id, theta_e, ia, ib, ic, va, vb, vc
+#                     (48 bytes por amostra — "medição completa", não só n/ω/Te).
 SPMM_HEADER_FORMAT = "<HH"          # count, ts_us
-SPMM_SAMPLE_FORMAT = "<Iff"         # n, omega, te
+SPMM_SAMPLE_FORMAT = "<I11f"        # n + 11 floats = 48 bytes
+SPMM_SAMPLE_FIELDS = ["n", "omega", "te", "iq", "id", "theta_e",
+                      "ia", "ib", "ic", "va", "vb", "vc"]
 SPMM_HEADER_SIZE = struct.calcsize(SPMM_HEADER_FORMAT)
-SPMM_SAMPLE_SIZE = struct.calcsize(SPMM_SAMPLE_FORMAT)
+SPMM_SAMPLE_SIZE = struct.calcsize(SPMM_SAMPLE_FORMAT)   # 48
 
 
 def decode_spmm_log(data, Ts=None):
-    """Decodifica um pacote de log da SPMM.
+    """Decodifica um pacote de log da SPMM (ver ../SPMM/src/telemetry.c).
 
-    Layout: `<HH>` (count, ts_us) + count * `<Iff>` (n, omega, te).
-    Retorna {"count", "ts_us", "samples": [ {n, omega, te, t?}, ... ]}.
-    Se `Ts` for informado, calcula `t = n * Ts` por amostra (base de tempo
-    do micro — NUNCA usar horário de chegada do pacote; ver ../SPMM/CLAUDE.md).
+    Layout: `<HH>` (count, ts_us) + count * `<I11f>` (medição completa).
+    Retorna {"count", "ts_us", "samples": [ {n, omega, te, iq, ..., t}, ... ]}.
+
+    Base de tempo `t = n · Ts` (contador de amostra × período), NUNCA o horário
+    de chegada do pacote. O período vem do PRÓPRIO pacote (`ts_us`, que reflete
+    o `log start <hz>` usado); `Ts` só é fallback se `ts_us` vier 0.
     Retorna None se o buffer for inconsistente.
     """
     if len(data) < SPMM_HEADER_SIZE:
@@ -111,14 +119,17 @@ def decode_spmm_log(data, Ts=None):
     if len(data) < expected:
         return None
 
+    # Período efetivo: o do pacote (autoritativo) ou o fallback informado.
+    Ts_eff = (ts_us * 1e-6) if ts_us else Ts
+
     samples = []
     off = SPMM_HEADER_SIZE
     for _ in range(count):
-        n, omega, te = struct.unpack(SPMM_SAMPLE_FORMAT, data[off:off + SPMM_SAMPLE_SIZE])
+        vals = struct.unpack(SPMM_SAMPLE_FORMAT, data[off:off + SPMM_SAMPLE_SIZE])
         off += SPMM_SAMPLE_SIZE
-        sample = {"n": n, "omega": omega, "te": te}
-        if Ts is not None:
-            sample["t"] = n * Ts
+        sample = dict(zip(SPMM_SAMPLE_FIELDS, vals))
+        if Ts_eff is not None:
+            sample["t"] = sample["n"] * Ts_eff
         samples.append(sample)
 
     return {"count": count, "ts_us": ts_us, "samples": samples}

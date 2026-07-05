@@ -171,6 +171,18 @@ class TinyTerminal(QWidget):
         """Executado SEMPRE na thread principal do Qt."""
         self.output.appendHtml(f'<span style="color:{col};"><b>[{pre}]</b> {msg}</span>')
         self.output.moveCursor(QTextCursor.End)
+        # Espelha em session.log (texto puro) — para revisar a sequência de
+        # eventos depois de um crash. Não deixa erro de I/O derrubar a UI.
+        try:
+            f = getattr(self, "_session_f", None)
+            if f is None:
+                import debug_log
+                p = debug_log.session_log_path()
+                f = self._session_f = open(p, "a", buffering=1, encoding="utf-8") if p else False
+            if f:
+                f.write(f"[{pre}] {msg}\n")
+        except Exception:
+            self._session_f = False
 
     def clear_shell(self):
         self.output.clear()
@@ -721,14 +733,21 @@ class TinyTerminal(QWidget):
             search_func = ""
             if action in ["SET", "GET"]:
                 if root == "SIBA":
-                    # Detecta se o alvo pertence aos parâmetros de bateria
-                    bat_keywords = ["BATT", "TEMP", "P0", "P1", "P2", "P3", "P4", "RELAY", "SOC"]
-                    if any(x in target_raw for x in bat_keywords):
-                        search_func = "FUNC_BATTERY"
-                    else:
+                    # Calibração de SENSOR (offset/linear/reset) é SEMPRE
+                    # FUNC_SENSOR — inclui v_batt/i_batt, que contêm "BATT" mas
+                    # são SENSORES (não parâmetros de bateria). Só os parâmetros
+                    # de bateria (SOC poly/temp/relé), que NÃO usam offset/linear,
+                    # vão para FUNC_BATTERY.
+                    sub = parts[3].upper() if len(parts) > 3 else ""
+                    if sub in ("LINEAR", "OFFSET", "RESET"):
                         search_func = "FUNC_SENSOR"
+                    else:
+                        bat_keywords = ["TEMP", "RELAY", "SOC", "P0", "P1", "P2", "P3", "P4"]
+                        search_func = ("FUNC_BATTERY"
+                                       if any(x in target_raw for x in bat_keywords)
+                                       else "FUNC_SENSOR")
                 else:
-                    search_func = "FUNC_SENSOR" 
+                    search_func = "FUNC_SENSOR"
             else:
                 search_func = f"FUNC_{action}" # FUNC_START, FUNC_STOP, FUNC_RESET
 
@@ -751,10 +770,27 @@ class TinyTerminal(QWidget):
             # --- 3. TARGET ID ---
             target_val = 0
             targets_dict = self.siba_targets if root == "SIBA" else self.same_targets
-            
-            # Busca exata primeiro, depois substring
+
+            # Aliases: o nome que o usuário digita (e o nome da variável de
+            # telemetria) nem sempre bate por substring com o enum target_type.
+            # Ex.: `v_batt`/`i_batt` NÃO contêm "VOLTAGE_DIVIDOR"/"CURRENT_SENSOR",
+            # então sem isso caíam em TARGET_DEFAULT e o firmware rejeitava a
+            # calibração (era o "não funciona para o resto"). load_cell_* e
+            # pitot_tube já batem por substring e não precisam de alias.
+            TARGET_ALIASES = {
+                "V_BATT": "TARGET_VOLTAGE_DIVIDOR",
+                "I_BATT": "TARGET_CURRENT_SENSOR",
+                "AIR_SPEED": "TARGET_PITOT_TUBE",
+                "PITOT": "TARGET_PITOT_TUBE",
+                "TEMPERATURE_BATTERY": "TARGET_TEMPERATURE_SENSOR",
+                "TEMP_SENSOR": "TARGET_TEMPERATURE_SENSOR",
+            }
+
+            # Busca alias -> exata -> substring
             exact_key = f"TARGET_{target_raw}"
-            if exact_key in targets_dict:
+            if target_raw in TARGET_ALIASES and TARGET_ALIASES[target_raw] in targets_dict:
+                target_val = targets_dict[TARGET_ALIASES[target_raw]]
+            elif exact_key in targets_dict:
                 target_val = targets_dict[exact_key]
             else:
                 for name, idx in targets_dict.items():

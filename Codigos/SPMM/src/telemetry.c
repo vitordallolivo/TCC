@@ -22,6 +22,9 @@ LOG_MODULE_REGISTER(telemetry, LOG_LEVEL_INF);
 #define TELE_STACK_SIZE 2048
 #define TELE_PRIORITY   7           /* BAIXA — abaixo de acq(4)/rpm(6)         */
 #define TELE_BATCH_MAX  20          /* 4 + 20*48 = 964 bytes < MTU             */
+#define TELE_DEFAULT_HZ 100         /* streaming contínuo desde o boot (como   */
+                                    /* SIBA/SAME) — a GUI recebe sempre; o     */
+                                    /* ensaio pode subir a taxa via 'log start'*/
 
 static K_THREAD_STACK_DEFINE(tele_stack, TELE_STACK_SIZE);
 static struct k_thread tele_thread;
@@ -121,5 +124,10 @@ int telemetry_init(void)
                     tele_thread_fn, NULL, NULL, NULL,
                     TELE_PRIORITY, 0, K_NO_WAIT);
     k_thread_name_set(&tele_thread, "telemetry");
+
+    /* Streaming CONTÍNUO desde o boot (como SIBA/SAME): a GUI/PC recebe os
+     * dados o tempo todo, sem depender de 'log start' manual. O ensaio de
+     * coast-down ainda pode subir a taxa com 'log start <hz>'. */
+    telemetry_start_log(TELE_DEFAULT_HZ);
     return 0;
 }

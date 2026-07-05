@@ -33,8 +33,9 @@ void Propeller_Manager_Set_Max_Current(float amps);
  * CMD_Core/Test_Shell — evita que outras camadas chamem HAL_HX711_*
  * diretamente (ver CLAUDE.md "o HAL é apenas questões de configuração").
  * --------------------------------------------------------------------- */
-void Propeller_Manager_Tare_Cell(uint8_t idx);
-void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float linear, float offset);
+void Propeller_Manager_Tare_Cell(uint8_t idx);                              /* tara = raw (zera) */
+void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float scale, float tare_raw);
+void Propeller_Manager_Calibrate_Cell_Weight(uint8_t idx, float known_weight); /* ganho por peso */
 
 /* TODO: Propeller_Manager_thread_fn / cálculo de Ct/Cp a partir de
  * força (load cells) + RPM — ver lib/SYS/Propeller_Manager.h no CLAUDE.md */
