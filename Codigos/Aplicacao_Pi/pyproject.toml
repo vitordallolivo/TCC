@@ -1,10 +1,8 @@
 [project]
 name = "GUI_TCC"
-version = "0.1.1"
+version = "0.2.1"
 description = "GUI desenvolvida para visualização de dados de um conjunto motopropulsor equipado com BLDCs"
-
 requires-python = ">=3.11"
-
 dependencies = [
     "numpy>=2.4.4",
     "PySide6>=6.0",
@@ -13,12 +11,14 @@ dependencies = [
     "jinja2>=3.1",
     "pyyaml>=6.0",
     "pandas>=3.0.3",
-    "psutil>=7.2.2"
+    "psutil>=7.2.2",
+    "matplotlib>=3.8.0",
+    "scipy>=1.12.0"
 ]
 
-
 [project.scripts]
-DesempenhoEnsaioGUI = "mainApp:main"    
+DesempenhoEnsaioGUI = "mainApp:main"
+
 [tool.setuptools]
 packages = ["GUI", "Config", "Communication_Data"]
 py-modules = ["mainApp"]
