@@ -96,12 +96,13 @@ void Log_Manager_thread_fn(void *p1, void *p2, void *p3);
 /* Retorna cópia thread-safe do último log */
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
 
-/* Serializa e envia o snapshot atual via OSSI→NCI (chamado por
- * Sys_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
+/* Serializa e envia o snapshot atual via NCI (disparado pelo timer de TX). */
 void Log_Manager_Transmit(void);
 
-#define LOG_MANAGER_THREAD_ID   40
-#define LOG_MANAGER_PRIO         6
-#define LOG_MANAGER_PERIOD_MS  100   /* 10 Hz */
+/* Reprograma o período de TX da telemetria UDP (target TARGET_TS_UDP, em ms).
+ * Reinicia o k_timer. Valores <=0 são ignorados. */
+void Log_Manager_Set_Period_Ms(uint32_t period_ms);
+
+#define LOG_MANAGER_PERIOD_MS  100   /* 10 Hz (default de TARGET_TS_UDP) */
 
 #endif /* LOG_MANAGER_H */

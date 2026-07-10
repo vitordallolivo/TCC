@@ -1,0 +1,173 @@
+/dts-v1/;
+#include <wch/ch32v307/ch32v307vc.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/ch32v20x_30x-pinctrl.h>
+#include <zephyr/dt-bindings/clock/ch32v20x_30x-clocks.h>
+
+/* O header de pinctrl não define grupos de remap para os ADCs (entrada
+ * analógica não é multiplexada — o pino só entra em modo analógico). Como
+ * na siba_board, declaramos os grupos aqui para o CH32V20X_V30X_PINMUX_DEFINE
+ * resolver. ADC1 e ADC2 compartilham fisicamente os pinos PAx (ADC1_INn e
+ * ADC2_INn são o MESMO pino); o número do canal = número do pino. */
+#define CH32V20X_V30X_PINMUX_ADC1_RM 0
+#define CH32V20X_V30X_PINMUX_ADC2_RM 0
+
+/ {
+    model = "SAME Board";
+    compatible = "wch,ch32v307";
+
+    chosen {
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zephyr,console = &usart1;
+        zephyr,shell-uart = &usart1;
+    };
+
+    /* ================================================================ *
+     * ADC1 — três TENSÕES de fase (V_a, V_b, V_c)                       *
+     *   CH0 = PA0 = V_a   CH1 = PA1 = V_b   CH2 = PA2 = V_c             *
+     * DMA1 canal 1 (IRQ 27).                                            *
+     * ================================================================ */
+    adc1: adc@40012400 {
+        compatible = "wch,adc";
+        reg = <0x40012400 0x400>;
+        clocks = <&rcc CH32V20X_V30X_CLOCK_ADC1>;
+        interrupt-parent = <&pfic>;
+        interrupts = <34>;
+        dmas = <&dma1 1>;
+        dma-names = "rx";
+        pinctrl-0 = <&adc1_default>;
+        pinctrl-names = "default";
+        status = "okay";
+        #io-channel-cells = <1>;
+    };
+
+    /* ================================================================ *
+     * ADC2 — três CORRENTES de fase (i_a, i_b, i_c), entrelaçado c/ADC1 *
+     *   CH3 = PA3 = i_a   CH4 = PA4 = i_b   CH5 = PA5 = i_c             *
+     * DMA1 canal 2 (IRQ 28). Base = ADC1_BASE + 0x400 (ver             *
+     * drivers/adc/adc_ch32v307.c — suporte multi-instância).           *
+     * ================================================================ */
+    adc2: adc@40012800 {
+        compatible = "wch,adc";
+        reg = <0x40012800 0x400>;
+        clocks = <&rcc CH32V20X_V30X_CLOCK_ADC2>;
+        interrupt-parent = <&pfic>;
+        interrupts = <34>;
+        dmas = <&dma1 2>;
+        dma-names = "rx";
+        pinctrl-0 = <&adc2_default>;
+        pinctrl-names = "default";
+        status = "okay";
+        #io-channel-cells = <1>;
+    };
+};
+
+/* ==================================================================== *
+ * PINCTRL                                                              *
+ * ==================================================================== */
+&pinctrl {
+
+    adc1_default: adc1_default {
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>; };  /* CH0 - V_a */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>; };  /* CH1 - V_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 2, ADC1, 0)>; };  /* CH2 - V_c */
+    };
+
+    adc2_default: adc2_default {
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC2, 0)>; };  /* CH3 - i_a */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 4, ADC2, 0)>; };  /* CH4 - i_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 5, ADC2, 0)>; };  /* CH5 - i_c */
+    };
+
+    usart1_default: usart1_default {
+        group1 {
+            pinmux = <USART1_TX_PA9_0>;
+            output-high;
+            drive-push-pull;
+            slew-rate = "max-speed-10mhz";
+        };
+        group2 {
+            pinmux = <USART1_RX_PA10_0>;
+            bias-pull-up;
+        };
+    };
+
+    mac_default: mac_default {
+        mac_internal_rxp {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 6, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_rxn {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 7, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_txp {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 8, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+        mac_internal_txn {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 9, ETH, 0)>;
+            slew-rate = "max-speed-50mhz";
+        };
+    };
+
+    mdio_default: mdio_default {
+        /* PHY interno - sem pinos MDIO externos necessarios */
+    };
+};
+
+/* ==================================================================== *
+ * CLOCKS / PERIFÉRICOS                                                  *
+ * ==================================================================== */
+&clk_hse { status = "okay"; };
+&pll { clocks = <&clk_hse>; status = "okay"; };
+&rcc { clocks = <&pll>; };
+
+&gpioa { status = "okay"; };
+&gpiob { status = "okay"; };
+&gpioc { status = "okay"; };
+
+/* dma1 "disabled" como CONTROLLER genérico Zephyr (dma_wch.c): o driver
+ * adc_ch32v307.c NÃO usa a API genérica de DMA (faz MMIO direto), só precisa
+ * da célula "channel" de `dmas = <&dma1 N>` (resolvida em compilação). Ver
+ * mesma nota em siba_board.dts. */
+&dma1 { status = "disabled"; };
+
+&usart1 {
+    status = "okay";
+    current-speed = <115200>;
+    pinctrl-0 = <&usart1_default>;
+    pinctrl-names = "default";
+};
+
+/* Ethernet — mesma configuração validada na SIBA (MAC interno + PHY interno). */
+&eth {
+    status = "okay";
+};
+
+&mac {
+    status = "okay";
+    pinctrl-0 = <&mac_default>;
+    pinctrl-names = "default";
+    phy-connection-type = "internal";
+    phy-handle = <&eth_phy>;
+    local-mac-address = [02 00 00 02 03 04];
+    internal-phy-pllmul = "15";
+    internal-phy-prediv = "2";
+};
+
+&mdio {
+    status = "okay";
+    pinctrl-0 = <&mdio_default>;
+    pinctrl-names = "default";
+    eth_phy: ethernet-phy@0 {
+        compatible = "ethernet-phy";
+        reg = <0x00>;
+    };
+};
+
+&rng { status = "okay"; };
+
+&sram0 { reg = <0x20000000 DT_SIZE_K(128)>; };
+&flash0 { reg = <0x08000000 DT_SIZE_K(198)>; };

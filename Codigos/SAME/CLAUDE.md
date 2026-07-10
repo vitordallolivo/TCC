@@ -25,17 +25,50 @@ de supervisão (`../Aplicacao_Pi/`):
 
 ---
 
-## ⚠️ Status: SAME AINDA NÃO TEM FIRMWARE
+## ✅ Status: FIRMWARE IMPLEMENTADO (compila HW + native_sim)
 
-Hoje esta pasta só tem este documento (e um `Readme.md` vazio). **Não existe
-código C / projeto Zephyr da SAME.** Este CLAUDE.md é a **especificação + plano**
-do que a SAME deve ser.
+O firmware Zephyr da SAME existe e **compila nos dois alvos** (`make build` p/
+`same_board`, `make native_sim` p/ PC). A SAME continua **só leitura/estimativa**:
+não aciona o motor — quem aciona o ESC é a **SIBA** (recebe o throttle).
 
-Consequências hoje:
-- `same native start/stop` na GUI falha ("binário não encontrado" — não há alvo
-  `native_sim`).
-- A SAME é **só leitura/estimativa**: não aciona o motor. Quem aciona o ESC é a
-  **SIBA** (recebe o throttle).
+Estrutura implementada (espelha a arquitetura em camadas da SIBA):
+
+```
+SAME/
+├── src/main.c                       # ordem de init
+├── prj.conf / CMakeLists.txt        # 2 ADCs + rede UDP + FPU
+├── boards/
+│   ├── wch/same_board/*             # placa real: adc1+adc2 (dual), Ethernet, UART
+│   └── native_sim.conf/.overlay     # adc-emul p/ adc1+adc2, NSOS (UDP no host)
+├── drivers/adc/adc_ch32v307.c       # driver custom (multi-instância ADC1/ADC2) — reciclado da SIBA
+├── lib/OS/
+│   ├── OSSI.{h,c}                   # same_wq (despacho por eventos: telemetria + CMD)
+│   ├── NCI.{h,c}                    # UDP: TX telemetria (4445), RX CMD (4444)
+│   ├── HAL.{h,c} + HAL_prm.h        # 2 ADCs → Clarke → Observer_Step (thread de aquisição)
+│   ├── CMD_Core.{h,c}               # despacho de CMD (calibração / params / ganhos)
+│   ├── CMD_Core_prm.h               # TABELA de sensores (currents/voltages) — como na SIBA
+│   ├── Common_Types.h / CMD.h       # GERADOS do SAME.yaml
+│   └── TCKEC.h                      # stub (sem thread de polling — só eventos)
+└── lib/SYS/
+    ├── Log_Manager.{h,c}            # TELEMETRY_LOG + timer de TX (Ts_udp); .h GERADO
+    └── Observer_Manager.{h,c}       # SMO + PLL + torque (núcleo — ver abaixo)
+```
+
+**Modelo de eventos (pedido do projeto — poucas threads):** só **duas** threads
+de I/O bloqueante — a de aquisição (bloqueia na conversão dos ADCs → roda o
+observador colado a esse evento) e a RX do NCI (bloqueia em `recvfrom`). Todo o
+resto (escrever telemetria no log, despachar CMD, TX UDP) é `k_work` na
+`same_wq`. O observador roda no ritmo do ADC (`Ts_adc`), **fora** da fila.
+
+**Reinício do observador ao mudar uma variável:** um CMD que altera
+parâmetro/ganho só marca `reconfig` pendente; a própria thread do ADC aplica no
+topo do laço (`Observer_Apply_Pending`), **recalcula as constantes e ZERA o
+estado** — o observador reinicia sem arrastar transitório do modelo antigo.
+
+**Desempenho do observador:** `Observer_Step` roda em `float` puro (FPU
+single-precision do CH32V307; `double`/`sin` cairiam em soft-float), com estado
+e constantes carregados em locais `register` e constantes pré-calculadas
+(`hot`/`flatten`). Transcrição direta do laço numba de `test_coeff_auto.py`.
 
 ---
 
@@ -210,14 +243,26 @@ tq_lpf ← α_tq·Te + (1 − α_tq)·tq_lpf           # → torque_eletrico
 Codigos/
 ├── Aplicacao_Pi/   # GUI + Config/SAME.yaml (protocolo) + scripts de estimação
 ├── SIBA/           # firmware aero+bateria (Zephyr) — MODELO/DRIVERS p/ a SAME
-├── SAME/           # ESTA pasta — firmware do nó do motor (A FAZER)
+├── SAME/           # ESTA pasta — firmware do nó do motor (IMPLEMENTADO)
 └── SPMM/           # bancada provisória — mesmos ensaios B/τc/J
 ```
 
-## Decisões em aberto (só firmware da SAME)
-- **Board Zephyr da SAME** (`same_board.dts`, pinos dos shunts de corrente e
-  divisores de tensão de fase) — espelhar `../SIBA/boards/` quando o hardware
-  existir.
-- **`Ts` real do firmware** (define `K = Γ/Ts`) — fixar conforme a taxa da malha
-  de aquisição/estimação.
-- **Forma de BEMF** (`f`): senoidal vs. trapezoidal — casar com o motor real.
+## Decisões em aberto / a validar em bancada
+- **Mapa de pinos** (`same_board.dts`): hoje ADC1=PA0/PA1/PA2 (V_a/V_b/V_c),
+  ADC2=PA3/PA4/PA5 (i_a/i_b/i_c). Confirmar contra o esquemático real dos shunts
+  de corrente e divisores de tensão de fase.
+- **DMA do ADC2 no CH32V307**: o driver `adc_ch32v307.c` instancia ADC1 (DMA1
+  ch1) e ADC2 (DMA1 ch2) igualmente. Validar em bancada que o ADC2 realmente
+  gera requisição de DMA (no STM32F1 clássico ADC2 não tem DMA próprio) — se não
+  gerar, ler ADC2 em modo simultâneo pelo registro combinado do ADC1.
+- **`Ts_adc` real** (define `K = Γ/Ts` e o passo do observador): fixar conforme a
+  taxa efetiva da malha de aquisição (~333 kSps/canal no projeto). Configurável
+  por `TARGET_TS_ADC`.
+- **Forma de BEMF** (`f`): senoidal (default) vs. trapezoidal — casar com o motor
+  real (`DEF_BEMF_KIND` em `Observer_Manager.c`).
+- **`torque_helice`**: hoje espelha `Te` (em regime, carga da hélice = torque
+  eletromagnético). Subtrair atrito `(B·ω + τc)` quando `B/τc` (compartilhados
+  com a SPMM) forem embarcados.
+- **Calibração de tensão**: o `SAME.yaml` só tem `VOLTAGE_AB/BC` (2 alvos) mas o
+  ADC1 lê 3 tensões de fase — hoje V_c reusa a calibração de `VOLTAGE_BC`.
+  Considerar um `TARGET_VOLTAGE_CA` no YAML se os 3 divisores divergirem.

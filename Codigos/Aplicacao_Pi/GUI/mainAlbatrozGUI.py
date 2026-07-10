@@ -666,6 +666,20 @@ class AlbatrozGUI(QMainWindow):
                 self._t0 = time.time()
             self.time_buffer[idx] = time.time() - self._t0
 
+            # Sample-and-hold (forward-fill): DUAS placas (SIBA+SAME) partilham
+            # ESTE mesmo buffer/ptr/base-de-tempo. Um pacote só traz as variáveis
+            # da SUA placa; sem isto, as variáveis da OUTRA placa ficavam NaN
+            # neste índice, e o pacote seguinte da outra placa preenchia o índice
+            # seguinte — resultado: cada variável ficava real/NaN/real/NaN
+            # intercalado, e o pyqtgraph desenha NaN como buraco → as curvas
+            # "somem" ao plotar as duas ao mesmo tempo (bug em native_sim).
+            # Carregando o último valor conhecido, todo índice tem valor para
+            # toda variável e as curvas ficam contínuas (degrau na mais lenta).
+            if self.ptr > 0:
+                prev = (self.ptr - 1) % self.max_ram
+                for buf in self.value_buffers.values():
+                    buf[idx] = buf[prev]
+
             for var_name, val in decoded_data.items():
                 if var_name in self.value_buffers:
                     self.value_buffers[var_name][idx] = val

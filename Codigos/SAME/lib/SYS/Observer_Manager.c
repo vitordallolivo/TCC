@@ -1,0 +1,429 @@
+/*
+ * Observer_Manager.c — SMO + PLL embarcado no nó SAME.
+ *
+ * Transcrição DIRETA do laço numba de
+ *   ../Aplicacao_Pi/Scripts/test_coeff_auto.py :: run_sim_core
+ * — porém SÓ a parte do OBSERVADOR (SMO + PLL + reconstrução/torque). A
+ * planta (inversor 6-passos, dinâmica mecânica, geração de BEMF) é o motor
+ * REAL sob ensaio: a SAME não a simula, ela MEDE u_αβ/i_αβ pelos 2 ADCs
+ * (Clarke feito no HAL) e alimenta este passo.
+ *
+ * DESEMPENHO (pedido do projeto — roda a até ~333 kSps por canal):
+ *   - Tudo em `float` (precisão simples): o CH32V307 tem FPU single-precision;
+ *     `double`/sin() cairiam em soft-float lentíssimo. Usa-se sinf/tanhf/etc.
+ *   - O estado e as constantes são carregados em variáveis LOCAIS `register`
+ *     no início de Observer_Step e regravados no fim — o compilador mantém o
+ *     laço quente inteiro em registradores de FP, sem reler a struct a cada
+ *     amostra (mesmo padrão do laço numba, que só usa escalares locais).
+ *   - Constantes de discretização são pré-calculadas (Observer_Recompute),
+ *     não no caminho quente.
+ *   - Helpers marcados always_inline; Observer_Step marcado hot+flatten.
+ *
+ * RECONFIGURAÇÃO = REINÍCIO: um CMD que muda um parâmetro/ganho chama um
+ * Observer_Set_* na thread da same_wq, que só grava em `pending` e levanta um
+ * flag atômico. A thread do ADC chama Observer_Apply_Pending() no topo do
+ * laço: recalcula as constantes e ZERA o estado dinâmico — o observador
+ * "reinicia" ao mudar uma variável dele (não arrasta transitório do modelo
+ * antigo). Caminho quente fica sem lock; o lock só ocorre quando um CMD chega.
+ */
+
+#include "Observer_Manager.h"
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <math.h>
+
+LOG_MODULE_REGISTER(observer, LOG_LEVEL_INF);
+
+/* A libc mínima do Zephyr não define M_PI (não é padrão C). */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define TWO_PI       6.283185307179586f
+#define INV_TWO_PI   0.15915494309189535f
+#define TWO_PI_3     2.0943951023931953f   /* 2π/3 */
+#define FOUR_PI_3    4.1887902047863905f   /* 4π/3 */
+#define INV_SQRT3    0.5773502691896258f
+#define PLL_WN       (TWO_PI * 150.0f)      /* ω_n = 2π·150 (fixo, ver CLAUDE.md) */
+#define PLL_ZETA     0.707f
+
+/* Seletor da função de comutação (igual ao SMO_SWITCH_FUNC do script). */
+enum { SW_SAT = 0, SW_TANH = 1, SW_SIGMOID = 2 };
+
+/* ---- Defaults de fábrica (referência test_coeff_auto.py) ---------------- */
+#define DEF_POLE_PAIRS   7.0f
+#define DEF_RS           17.3e-3f
+#define DEF_LS           7.0e-6f
+#define DEF_KV           (310.0f / 1.7320508075688772f)  /* Kv já em estrela (Y) */
+#define DEF_GAMMA1       5.0f      /* Ks1·Ts = 500000·10µs  (Γ_s1 > 0) */
+#define DEF_GAMMA2      (-1.0f)    /* Ks2·Ts = -100000·10µs (Γ_s2 < 0) */
+#define DEF_GAMMAT       0.05f     /* Kt·Ts  = 5000·10µs    (Γ_t  > 0) */
+#define DEF_TORQUE_LPF   10000.0f  /* fc_torque do script */
+#define DEF_BEMF_LPF     0.0f      /* 0 = desligado → PLL usa ê direto (== script) */
+#define DEF_TS           10.0e-6f  /* 10 µs */
+#define DEF_BL           18.0f
+#define DEF_SWITCH       SW_TANH
+#define DEF_BEMF_KIND    1         /* 1 = senoidal, 0 = trapezoidal */
+
+/* ---- Parâmetros configuráveis (valores "crus" vindos por CMD) ----------- */
+typedef struct {
+    float pole_pairs;
+    float Rs;
+    float Ls;
+    float Kv;
+    float gamma1;      /* Γ_s1 (usado direto: î += Γ_s1·s) */
+    float gamma2;      /* Γ_s2 (usado direto: ê += Γ_s2·s) */
+    float gammat;      /* Γ_t  (Φ_e = 1 − Γ_t) */
+    float torque_lpf;  /* fc do LPF de torque [Hz] */
+    float bemf_lpf;    /* fc do LPF de BEMF antes da PLL [Hz]; ≤0 = desligado */
+    float ts;          /* passo de amostragem [s] */
+    float bl;          /* camada de contorno */
+    int   switch_func;
+    int   bemf_kind;
+} obs_params;
+
+/* ---- Constantes de discretização (pré-calculadas de obs_params) --------- */
+typedef struct {
+    float Phi_i;       /* 1 − Rs·Ts/Ls */
+    float Gamma_v;     /* Ts/Ls */
+    float Gamma_s1;    /* = gamma1 */
+    float Gamma_s2;    /* = gamma2 */
+    float Phi_e;       /* 1 − gammat */
+    float alpha_tq;    /* LPF de torque */
+    float alpha_bemf;  /* LPF de BEMF (0 = desligado) */
+    float Kp_pll;      /* 2ζω_n */
+    float Ki_pll;      /* ω_n² */
+    float Ke;          /* Ke_mec/p */
+    float inv_p;       /* 1/p */
+    float ts;          /* cópia rápida do passo */
+    float bl;
+    int   switch_func;
+    int   bemf_kind;
+} obs_const;
+
+/* ---- Estado dinâmico (zerado no reinício) ------------------------------- */
+typedef struct {
+    float i_hat_al, i_hat_be;   /* î_αβ */
+    float e_hat_al, e_hat_be;   /* ê_αβ */
+    float e_lpf_al, e_lpf_be;   /* ê filtrado (se bemf_lpf ativo) */
+    float integral_pll;         /* integrador da PLL */
+    float th_est;               /* θ̂ elétrico */
+    float tq_lpf;               /* torque filtrado */
+} obs_state;
+
+/* Cópia AO VIVO usada só pela thread do ADC (sem lock). */
+static obs_params live_params;
+static obs_const  live_const;
+static obs_state  live_state;
+
+/* Saídas do último passo (lidas na mesma thread do ADC). */
+static float out_rpm;
+static float out_te;
+static float out_torque_helice;
+
+/* Reconfiguração pendente: escrita pela same_wq, aplicada pela thread do ADC. */
+static obs_params    pending_params;
+static atomic_t      reconfig_pending;
+static struct k_mutex cfg_mutex;
+
+/* ======================================================================== *
+ * Helpers (always_inline, float puro)                                      *
+ * ======================================================================== */
+
+/* Forma normalizada (±1) da BEMF da fase A — igual a f_shape() do script. */
+static inline float __attribute__((always_inline))
+f_shape(float theta, int kind)
+{
+    if (kind == 1) {
+        return sinf(theta);
+    }
+    /* trapezoidal: normaliza para [0,2π) */
+    float th = theta - TWO_PI * floorf(theta * INV_TWO_PI);
+    if (th < (float)(M_PI / 6.0))         return (6.0f / (float)M_PI) * th;
+    else if (th < (float)(5.0*M_PI/6.0))  return 1.0f;
+    else if (th < (float)(7.0*M_PI/6.0))  return -(6.0f/(float)M_PI) * (th - (float)M_PI);
+    else if (th < (float)(11.0*M_PI/6.0)) return -1.0f;
+    else                                  return (6.0f/(float)M_PI) * (th - TWO_PI);
+}
+
+/* Função de comutação s(e) com camada de contorno inv_bl = 1/BL. */
+static inline float __attribute__((always_inline))
+switch_fn(float e, float inv_bl, int kind)
+{
+    float x = e * inv_bl;
+    if (kind == SW_TANH) {
+        return tanhf(x);
+    } else if (kind == SW_SAT) {
+        if (x > 1.0f) return 1.0f;
+        if (x < -1.0f) return -1.0f;
+        return x;
+    } else { /* sigmoide algébrica */
+        return x / (1.0f + fabsf(x));
+    }
+}
+
+/* Envolve ângulo em [0,2π) sem laço (trata transitório grande). */
+static inline float __attribute__((always_inline))
+wrap_2pi(float th)
+{
+    th -= TWO_PI * floorf(th * INV_TWO_PI);
+    return th;
+}
+
+/* ======================================================================== *
+ * Recalcula constantes de discretização a partir de `p` (obs_params)       *
+ * ======================================================================== */
+static void Observer_Recompute(const obs_params *p, obs_const *c)
+{
+    const float ts = p->ts;
+    c->ts       = ts;
+    c->Phi_i    = 1.0f - (p->Rs * ts / p->Ls);
+    c->Gamma_v  = ts / p->Ls;
+    c->Gamma_s1 = p->gamma1;               /* Γ usados DIRETO (ver CLAUDE.md) */
+    c->Gamma_s2 = p->gamma2;
+    c->Phi_e    = 1.0f - p->gammat;
+
+    float wt = TWO_PI * p->torque_lpf * ts;
+    c->alpha_tq = wt / (1.0f + wt);
+
+    if (p->bemf_lpf > 0.0f) {
+        float wb = TWO_PI * p->bemf_lpf * ts;
+        c->alpha_bemf = wb / (1.0f + wb);
+    } else {
+        c->alpha_bemf = 0.0f;              /* desligado → PLL usa ê direto */
+    }
+
+    c->Kp_pll = 2.0f * PLL_ZETA * PLL_WN;
+    c->Ki_pll = PLL_WN * PLL_WN;
+
+    float ke_mec = (p->Kv > 0.0f) ? (60.0f / (TWO_PI * p->Kv)) : 0.0f;
+    c->inv_p = (p->pole_pairs > 0.0f) ? (1.0f / p->pole_pairs) : 0.0f;
+    c->Ke    = ke_mec * c->inv_p;
+
+    c->bl          = p->bl;
+    c->switch_func = p->switch_func;
+    c->bemf_kind   = p->bemf_kind;
+}
+
+/* ======================================================================== *
+ * API                                                                      *
+ * ======================================================================== */
+
+void Observer_Reset(void)
+{
+    live_state = (obs_state){0};
+    out_rpm = out_te = out_torque_helice = 0.0f;
+}
+
+void Observer_Init(void)
+{
+    k_mutex_init(&cfg_mutex);
+
+    live_params = (obs_params){
+        .pole_pairs = DEF_POLE_PAIRS,
+        .Rs         = DEF_RS,
+        .Ls         = DEF_LS,
+        .Kv         = DEF_KV,
+        .gamma1     = DEF_GAMMA1,
+        .gamma2     = DEF_GAMMA2,
+        .gammat     = DEF_GAMMAT,
+        .torque_lpf = DEF_TORQUE_LPF,
+        .bemf_lpf   = DEF_BEMF_LPF,
+        .ts         = DEF_TS,
+        .bl         = DEF_BL,
+        .switch_func = DEF_SWITCH,
+        .bemf_kind   = DEF_BEMF_KIND,
+    };
+    pending_params = live_params;
+    Observer_Recompute(&live_params, &live_const);
+    Observer_Reset();
+    atomic_clear(&reconfig_pending);
+
+    LOG_INF("Observer init: p=%d Rs=%.4f L=%.2eH Kv=%.1f Ts=%.1fus",
+            (int)live_params.pole_pairs, (double)live_params.Rs,
+            (double)live_params.Ls, (double)live_params.Kv,
+            (double)(live_params.ts * 1e6f));
+}
+
+/* Default de fábrica de cada target (para VALUE_RESET_DEFAULT). */
+static bool default_for_target(target_type t, float *out)
+{
+    switch (t) {
+        case TARGET_POLES_PAIRS:          *out = DEF_POLE_PAIRS; return true;
+        case TARGET_RESISTANCE:           *out = DEF_RS;         return true;
+        case TARGET_INDUCTANCE:           *out = DEF_LS;         return true;
+        case TARGET_KV_RATING:            *out = DEF_KV;         return true;
+        case TARGET_GAMMA1:               *out = DEF_GAMMA1;     return true;
+        case TARGET_GAMMA2:               *out = DEF_GAMMA2;     return true;
+        case TARGET_GAMMAT:               *out = DEF_GAMMAT;     return true;
+        case TARGET_BEMF_LPF_FREQUENCY:   *out = DEF_BEMF_LPF;   return true;
+        case TARGET_TORQUE_LPF_FREQUENCY: *out = DEF_TORQUE_LPF; return true;
+        case TARGET_TS_ADC:               *out = DEF_TS * 1e6f;  return true; /* em µs */
+        default: return false;
+    }
+}
+
+/* Grava um target em `pending`. Deve ser chamado com cfg_mutex travado. */
+static bool write_pending(target_type t, float value)
+{
+    switch (t) {
+        case TARGET_POLES_PAIRS:          pending_params.pole_pairs = value; break;
+        case TARGET_RESISTANCE:           pending_params.Rs         = value; break;
+        case TARGET_INDUCTANCE:           pending_params.Ls         = value; break;
+        case TARGET_KV_RATING:            pending_params.Kv         = value; break;
+        case TARGET_GAMMA1:               pending_params.gamma1     = value; break;
+        case TARGET_GAMMA2:               pending_params.gamma2     = value; break;
+        case TARGET_GAMMAT:               pending_params.gammat     = value; break;
+        case TARGET_BEMF_LPF_FREQUENCY:   pending_params.bemf_lpf   = value; break;
+        case TARGET_TORQUE_LPF_FREQUENCY: pending_params.torque_lpf = value; break;
+        case TARGET_TS_ADC:               pending_params.ts         = value * 1e-6f; break; /* µs→s */
+        default: return false;
+    }
+    return true;
+}
+
+bool Observer_Set_Param(target_type target, float value)
+{
+    k_mutex_lock(&cfg_mutex, K_FOREVER);
+    bool handled = write_pending(target, value);
+    if (handled) {
+        atomic_set(&reconfig_pending, 1);
+    }
+    k_mutex_unlock(&cfg_mutex);
+    if (handled) {
+        LOG_INF("Observer: target %d <- %.6f (reinício pendente)", target, (double)value);
+    }
+    return handled;
+}
+
+bool Observer_Reset_Param_Default(target_type target)
+{
+    float def;
+    if (!default_for_target(target, &def)) {
+        return false;
+    }
+    /* TS_ADC guarda em µs no default helper; write_pending reconverte. */
+    return Observer_Set_Param(target, def);
+}
+
+void Observer_Apply_Pending(void)
+{
+    if (!atomic_get(&reconfig_pending)) {
+        return;
+    }
+    k_mutex_lock(&cfg_mutex, K_FOREVER);
+    live_params = pending_params;
+    atomic_clear(&reconfig_pending);
+    k_mutex_unlock(&cfg_mutex);
+
+    Observer_Recompute(&live_params, &live_const);
+    Observer_Reset();   /* reinicia o observador ao mudar uma variável dele */
+    LOG_INF("Observer: reconfigurado e reiniciado");
+}
+
+/* ------------------------------------------------------------------------ *
+ * O PASSO. Caminho quente — sem lock, tudo em registradores de FP.         *
+ * ------------------------------------------------------------------------ */
+void __attribute__((hot, flatten))
+Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
+{
+    /* Constantes → registradores */
+    register const float Phi_i    = live_const.Phi_i;
+    register const float Gamma_v  = live_const.Gamma_v;
+    register const float Gamma_s1 = live_const.Gamma_s1;
+    register const float Gamma_s2 = live_const.Gamma_s2;
+    register const float Phi_e    = live_const.Phi_e;
+    register const float alpha_tq = live_const.alpha_tq;
+    register const float a_bemf   = live_const.alpha_bemf;
+    register const float Kp_pll   = live_const.Kp_pll;
+    register const float Ki_pll   = live_const.Ki_pll;
+    register const float Ke       = live_const.Ke;
+    register const float inv_p    = live_const.inv_p;
+    register const float ts       = live_const.ts;
+    register const float inv_bl   = (live_const.bl != 0.0f) ? (1.0f / live_const.bl) : 0.0f;
+    const int sw   = live_const.switch_func;
+    const int kind = live_const.bemf_kind;
+
+    /* Estado → registradores */
+    register float i_hat_al = live_state.i_hat_al;
+    register float i_hat_be = live_state.i_hat_be;
+    register float e_hat_al = live_state.e_hat_al;
+    register float e_hat_be = live_state.e_hat_be;
+    register float integral_pll = live_state.integral_pll;
+    register float th_est   = live_state.th_est;
+    register float tq_lpf   = live_state.tq_lpf;
+
+    /* ── SMO: erro de corrente + comutação ── */
+    register float s_al = switch_fn(i_alpha - i_hat_al, inv_bl, sw);
+    register float s_be = switch_fn(i_beta  - i_hat_be, inv_bl, sw);
+
+    /* ── Observador de corrente (Γ_s1) ── */
+    i_hat_al = Phi_i * i_hat_al + Gamma_v * (v_alpha - e_hat_al) + Gamma_s1 * s_al;
+    i_hat_be = Phi_i * i_hat_be + Gamma_v * (v_beta  - e_hat_be) + Gamma_s1 * s_be;
+
+    /* ── Observador de BEMF (Γ_s2, polo Φ_e) ── */
+    e_hat_al = Phi_e * e_hat_al + Gamma_s2 * s_al;
+    e_hat_be = Phi_e * e_hat_be + Gamma_s2 * s_be;
+
+    /* ── LPF opcional de BEMF antes da PLL (a_bemf==0 → passa direto) ── */
+    register float pll_e_al = e_hat_al;
+    register float pll_e_be = e_hat_be;
+    if (a_bemf > 0.0f) {
+        register float el = live_state.e_lpf_al + a_bemf * (e_hat_al - live_state.e_lpf_al);
+        register float eb = live_state.e_lpf_be + a_bemf * (e_hat_be - live_state.e_lpf_be);
+        live_state.e_lpf_al = el;
+        live_state.e_lpf_be = eb;
+        pll_e_al = el;
+        pll_e_be = eb;
+    }
+
+    /* ── PLL ── */
+    register float amp_E = sqrtf(pll_e_al * pll_e_al + pll_e_be * pll_e_be);
+    register float erro_fase;
+    if (amp_E > 1.0f) {
+        register float g_al = f_shape(th_est, kind);
+        register float g_be = INV_SQRT3 * (f_shape(th_est - TWO_PI_3, kind)
+                                         - f_shape(th_est - FOUR_PI_3, kind));
+        erro_fase = (g_al * pll_e_be - g_be * pll_e_al) / amp_E;
+    } else {
+        erro_fase = 0.0f;
+    }
+
+    integral_pll += erro_fase * ts;
+    register float omega_est_elec = Kp_pll * erro_fase + Ki_pll * integral_pll;
+    th_est = wrap_2pi(th_est + omega_est_elec * ts);
+
+    /* θ_out = θ̂ (compensação de fase do front-end analógico fica desligada
+     * por padrão — ver test_coeff_auto.py phase_mode==3). */
+    register float th_out = th_est;
+
+    /* ── Reconstrução / torque (Te = 1.5·Ke·p·(f_a·î_α + f_b·î_β)) ── */
+    register float fa = f_shape(th_out, kind);
+    register float fb = INV_SQRT3 * (f_shape(th_out - TWO_PI_3, kind)
+                                   - f_shape(th_out - FOUR_PI_3, kind));
+    register float p_pairs = (inv_p > 0.0f) ? (1.0f / inv_p) : 0.0f;
+    register float t_inst = 1.5f * Ke * p_pairs * (fa * i_hat_al + fb * i_hat_be);
+    tq_lpf = alpha_tq * t_inst + (1.0f - alpha_tq) * tq_lpf;
+
+    /* ── Estado de volta à memória ── */
+    live_state.i_hat_al = i_hat_al;
+    live_state.i_hat_be = i_hat_be;
+    live_state.e_hat_al = e_hat_al;
+    live_state.e_hat_be = e_hat_be;
+    live_state.integral_pll = integral_pll;
+    live_state.th_est   = th_est;
+    live_state.tq_lpf   = tq_lpf;
+
+    /* ── Saídas (rad/s elétrico → rpm mecânico) ── */
+    register float omega_mech = omega_est_elec * inv_p;   /* rad/s mecânico */
+    out_rpm = omega_mech * (30.0f / (float)M_PI);          /* rad/s → rpm */
+    out_te  = tq_lpf;
+    /* torque_helice: em regime a carga da hélice = torque eletromagnético
+     * estimado. Quando B/τc (atrito, compartilhados com a SPMM) forem
+     * embarcados, subtrair (B·ω+τc). Por ora, espelha Te. */
+    out_torque_helice = tq_lpf;
+}
+
+float Observer_Get_Rpm(void)            { return out_rpm; }
+float Observer_Get_Te(void)             { return out_te; }
+float Observer_Get_Torque_Helice(void)  { return out_torque_helice; }

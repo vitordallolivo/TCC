@@ -102,6 +102,23 @@ class LinkManager:
         if worker is not None and hasattr(worker, "update_ip") and ip:
             worker.update_ip(ip)
 
+    @staticmethod
+    def _native_loopback(cfg):
+        """IP de loopback DISTINTO por placa para mock/native_sim.
+
+        Mapeia o último octeto do IP real da placa para 127.0.0.<octeto>
+        (SIBA 169.254.97.200 -> 127.0.0.200, SAME .100 -> 127.0.0.100), para
+        as placas não colidirem no mesmo 127.0.0.1 ao rodar juntas. Precisa
+        casar com CONFIG_NET_CONFIG_*_IPV4_ADDR de cada <board>/boards/
+        native_sim.conf. Cai em 127.0.0.1 se o IP não puder ser derivado."""
+        try:
+            octet = int(str(cfg.ip).split(".")[-1])
+            if 1 <= octet <= 254:
+                return f"127.0.0.{octet}"
+        except (ValueError, AttributeError):
+            pass
+        return "127.0.0.1"
+
     # ------------------------------------------------------------------ #
     # Modo 2 — simulador Python (fake)
     # ------------------------------------------------------------------ #
@@ -175,13 +192,19 @@ class LinkManager:
         worker = self.workers.get(board)
         if worker is None:
             return False
-        worker.original_ip = worker.ip
-        if hasattr(worker, "update_ip"):
-            worker.update_ip('127.0.0.1')
-        else:
-            worker.ip = '127.0.0.1'
-
         is_telnet = (cfg.transport == "telnet")
+
+        # Só as placas udp_struct (SIBA/SAME) ganham loopback distinto por
+        # placa — elas se distinguem por IP+porta e podem rodar juntas. A SPMM
+        # (telnet) fica em 127.0.0.1: seu native_sim usa o shell serial (stdin)
+        # e o filtro de udp_log casa 127.0.0.1.
+        worker.original_ip = worker.ip
+        loopback = "127.0.0.1" if is_telnet else self._native_loopback(cfg)
+        if hasattr(worker, "update_ip"):
+            worker.update_ip(loopback)
+        else:
+            worker.ip = loopback
+
         proc = NativeSimProcess(
             board, exe_path,
             extra_args=['-uart_stdinout'] if is_telnet else None,
@@ -197,7 +220,7 @@ class LinkManager:
 
         self.native[board] = proc
         self.native_enabled[board] = True
-        print(f"[NATIVE_SIM] {board} ({cfg.transport}) — comunicação real via 127.0.0.1.")
+        print(f"[NATIVE_SIM] {board} ({cfg.transport}) — comunicação real via {loopback}.")
         return True
 
     def start_native_sim_auto(self, board):

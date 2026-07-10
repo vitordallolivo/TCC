@@ -1,0 +1,8 @@
+# Copyright (c) 2026 SAME
+# SPDX-License-Identifier: Apache-2.0
+if BOARD_SAME_BOARD
+
+config NET_L2_ETHERNET
+	default y
+
+endif # BOARD_SAME_BOARD

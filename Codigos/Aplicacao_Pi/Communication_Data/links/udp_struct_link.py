@@ -47,7 +47,10 @@ class UdpStructLink(BoardLink):
                 #    hardware real filtra pelo IP configurado.
                 try:
                     data, addr = sock.recvfrom(2048)
-                    if addr[0] == self.ip or addr[0] == '127.0.0.1':
+                    # Aceita o IP configurado ou qualquer loopback (native_sim
+                    # mapeia cada placa p/ 127.0.0.<octeto>, mas o kernel pode
+                    # reportar a origem como 127.0.0.1 na rota de loopback).
+                    if addr[0] == self.ip or addr[0].startswith('127.'):
                         self.rx_count += 1
                         self.last_rx_time = time.time()
                         self.callback(self.board_id, data, addr)

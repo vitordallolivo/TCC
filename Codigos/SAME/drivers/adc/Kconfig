@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config ADC_CH32V307
+	bool "Driver ADC para CH32V307 (WCH) com DMA circular"
+	default y
+	depends on DT_HAS_WCH_ADC_ENABLED
+	select ADC
+	help
+	  Driver ADC para CH32V307VTC6.
+	  Usa DMA1 Canal 1 em modo circular + scan contínuo.
+	  Suporta até 16 canais configurados via adc_channel_setup().
+	  Implementa adc_read() síncrono e adc_read_async() (com CONFIG_ADC_ASYNC).
