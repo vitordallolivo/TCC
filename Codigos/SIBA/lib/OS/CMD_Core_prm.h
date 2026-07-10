@@ -47,10 +47,10 @@
     X(SENSOR_ID_LOAD_CELL_3,               1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, CMD_CORE_NO_LIMIT, 0)                              \
     X(SENSOR_ID_LOAD_CELL_4,               1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, CMD_CORE_NO_LIMIT, 0)                              \
     X(SENSOR_ID_LOAD_CELL_5,               1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, CMD_CORE_NO_LIMIT, 0)                              \
-    X(SENSOR_ID_V_BATT,                    1.0f,       0.0f,        0.0f,      72.0f,      ERROR_SEC_VOLTAGE_OUT_OF_RANGE)              \
-    X(SENSOR_ID_I_BATT,                    1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, 60.0f, ERROR_SEC_CURRENT_EXCESSIVE)               \
+    X(SENSOR_ID_V_BATT,                    0.008f,     0.0f,        0.0f,      72.0f,      ERROR_SEC_VOLTAGE_OUT_OF_RANGE)              \
+    X(SENSOR_ID_I_BATT,                    0.020f,     0.0f,       -CMD_CORE_NO_LIMIT, 60.0f, ERROR_SEC_CURRENT_EXCESSIVE)               \
     X(SENSOR_ID_SOC,                       1.0f,       0.0f,        0.0f,       100.0f,     0)                                           \
-    X(SENSOR_ID_TEMPERATURE_BATTERY,       1.0f,       0.0f,       -40.0f,      85.0f,      ERROR_BATT_OVER_TEMPERATURE)                 \
+    X(SENSOR_ID_TEMPERATURE_BATTERY,       0.040f,     0.0f,       -40.0f,      85.0f,      ERROR_BATT_OVER_TEMPERATURE)                 \
     X(SENSOR_ID_AIR_SPEED,                 1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, CMD_CORE_NO_LIMIT, 0)                              \
     X(SENSOR_ID_RPM,                       1.0f,       0.0f,       -CMD_CORE_NO_LIMIT, 20000.0f, ERROR_SEC_RPM_EXCESSIVE)
 

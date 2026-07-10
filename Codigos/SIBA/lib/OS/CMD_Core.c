@@ -6,7 +6,6 @@
 #include "Propeller_Manager.h"
 #include "Security_Manager.h"
 #include "Log_Manager.h"
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -145,7 +144,8 @@ static void handle_func_sensor(const CMD *cmd)
      *              (scale = (raw-tare)/value  =>  leitura passa a valer o peso)
      *   RESET   -> restaura defaults e re-tara (tratado no bloco genérico) */
     if (tid >= SENSOR_ID_LOAD_CELL_0 && tid <= SENSOR_ID_LOAD_CELL_5 &&
-        act != DEFAULT_ACTION_SENSE_RESET_DEFAULT) {
+        (act == DEFAULT_ACTION_SENSE_OFFSET_COEF ||
+         act == DEFAULT_ACTION_SENSE_LINEAR_COEF)) {
         switch (act) {
             case DEFAULT_ACTION_SENSE_OFFSET_COEF:
                 Propeller_Manager_Tare_Cell((uint8_t)tid);
@@ -156,7 +156,7 @@ static void handle_func_sensor(const CMD *cmd)
                 LOG_INF("CMD SENSOR[%d]: calib por peso=%.3f", tid, (double)cmd->value);
                 break;
             default:
-                LOG_WRN("CMD SENSOR: ação %d desconhecida (célula)", act);
+                break;  /* MAX/MIN/RESET tratados no bloco genérico abaixo */
         }
         return;
     }
@@ -164,6 +164,16 @@ static void handle_func_sensor(const CMD *cmd)
     SENSORS *s = &sensor_cfg[tid];
 
     switch (act) {
+        case DEFAULT_ACTION_SENSE_MAX_VALID:
+            s->Max_Valid_Value = cmd->value;
+            LOG_INF("CMD SENSOR[%d]: limite MÁX = %.4f", tid, (double)cmd->value);
+            break;
+
+        case DEFAULT_ACTION_SENSE_MIN_VALID:
+            s->Minimum_Valid_Value = cmd->value;
+            LOG_INF("CMD SENSOR[%d]: limite MÍN = %.4f", tid, (double)cmd->value);
+            break;
+
         case DEFAULT_ACTION_SENSE_LINEAR_COEF: {
             float linear, offset;
             read_sensor_calib(tid, &linear, &offset);
@@ -211,42 +221,33 @@ static void handle_func_reset(const CMD *cmd)
 }
 
 /*
- * CMD_Core_thread_fn
- * Consome fila_cmd, desserializa struct CMD do buffer binário e executa.
+ * CMD_Core_Dispatch
+ * Desserializa struct CMD do buffer binário e executa o handler.
+ * Chamado pelo cmd_dispatch_fn do OSSI (siba_wq).
  */
-void CMD_Core_thread_fn(void *p1, void *p2, void *p3)
+void CMD_Core_Dispatch(const uint8_t *buf, size_t len)
 {
-    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+    if (len < sizeof(CMD)) {
+        LOG_WRN("CMD_Core: pacote curto (%d bytes)", (int)len);
+        return;
+    }
 
-    ossi_msg_t msg;
     CMD cmd;
+    memcpy(&cmd, buf, sizeof(CMD));
 
-    LOG_INF("CMD_Core thread iniciada");
+    LOG_DBG("CMD: func=%d instr=%d target=%d val=%.3f act=%d",
+            cmd.function, cmd.instruction, cmd.target_id,
+            (double)cmd.value, cmd.action_or_status);
 
-    while (1) {
-        if (k_msgq_get(&fila_cmd, &msg, K_FOREVER) != 0) continue;
-
-        if (msg.payload.cmd_req.len < sizeof(CMD)) {
-            LOG_WRN("CMD_Core: pacote curto (%d bytes)", msg.payload.cmd_req.len);
-            continue;
-        }
-
-        memcpy(&cmd, msg.payload.cmd_req.buffer, sizeof(CMD));
-
-        LOG_DBG("CMD: func=%d instr=%d target=%d val=%.3f act=%d",
-                cmd.function, cmd.instruction, cmd.target_id,
-                (double)cmd.value, cmd.action_or_status);
-
-        switch (cmd.function) {
-            case FUNC_START:   handle_func_start(&cmd);   break;
-            case FUNC_STOP:    handle_func_stop(&cmd);    break;
-            case FUNC_RESET:   handle_func_reset(&cmd);   break;
-            case FUNC_SENSOR:  handle_func_sensor(&cmd);  break;
-            case FUNC_ESC:     handle_func_esc(&cmd);     break;
-            case FUNC_BATTERY: handle_func_battery(&cmd); break;
-            default:
-                LOG_WRN("CMD_Core: função %d desconhecida", cmd.function);
-        }
+    switch (cmd.function) {
+        case FUNC_START:   handle_func_start(&cmd);   break;
+        case FUNC_STOP:    handle_func_stop(&cmd);    break;
+        case FUNC_RESET:   handle_func_reset(&cmd);   break;
+        case FUNC_SENSOR:  handle_func_sensor(&cmd);  break;
+        case FUNC_ESC:     handle_func_esc(&cmd);     break;
+        case FUNC_BATTERY: handle_func_battery(&cmd); break;
+        default:
+            LOG_WRN("CMD_Core: função %d desconhecida", cmd.function);
     }
 }
 
@@ -278,9 +279,9 @@ uint32_t CMD_Core_Validate_Sensor(uint32_t id, float value)
 
 void CMD_Core_Init(void)
 {
-    /* Inicializa TODA a tabela de sensores a partir de SIBA_SENSOR_TABLE
-     * (CMD_Core_prm.h) — defaults de calibração + faixa válida, num único
-     * lugar. Vale igual para hardware e native_sim (sem #ifdef POSIX). */
+    /* Inicializa a tabela de sensores a partir de SIBA_SENSOR_TABLE
+     * (CMD_Core_prm.h) — defaults de calibração + faixa válida.
+     * Sem thread — despacho via OSSI_Submit_CMD → siba_wq (ver OSSI.c). */
 #define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)                 \
     sensor_cfg[ID].Linear_Coeff               = (DEF_LIN);          \
     sensor_cfg[ID].Offset_Coeff               = (DEF_OFF);          \
@@ -290,18 +291,6 @@ void CMD_Core_Init(void)
     sensor_cfg[ID].Max_Valid_Value            = (MAXV);
     SIBA_SENSOR_TABLE(X)
 #undef X
-
-    ossi_msg_t req = {
-        .target   = TARGET_TCKEC,
-        .req_type = REQ_TYPE_TCKEC_CREATE_THREAD,
-    };
-    req.payload.tckec_req.thread_id   = CMD_CORE_THREAD_ID;
-    req.payload.tckec_req.entry_point = CMD_Core_thread_fn;
-    req.payload.tckec_req.priority    = CMD_CORE_PRIO;
-    req.payload.tckec_req.p1 = NULL;
-    req.payload.tckec_req.p2 = NULL;
-    req.payload.tckec_req.p3 = NULL;
-    OSSI_Send(&req);
 
     LOG_INF("CMD_Core inicializado");
 }

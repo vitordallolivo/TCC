@@ -40,20 +40,29 @@ enums:
     - TARGET_RESISTANCE
     - TARGET_INDUCTANCE
     - TARGET_KV_RATING
-    # SMO PARAMETERS
-    - TARGET_KS1
-    - TARGET_KS2
+    # SMO PARAMETERS — ganhos na forma Gamma (Γ = K·Ts, invariante ao passo).
+    # O firmware recupera K = Γ/Ts com o seu próprio Ts. NÃO usar Ks* (dependem
+    # de Ts). Ver ../../SAME/CLAUDE.md.
+    - TARGET_GAMMA1
+    - TARGET_GAMMA2
+    - TARGET_GAMMAT
     - TARGET_BEMF_LPF_FREQUENCY
     - TARGET_TORQUE_LPF_FREQUENCY
+    # Tempos de amostragem: ADC (rápido, µs) e telemetria UDP (ms) desacoplados
+    # para o UDP não travar a operação do ADC.
+    - TARGET_TS_ADC
+    - TARGET_TS_UDP
     # Default target, for function like start, stop and reset
     - TARGET_DEFAULT
 
   default_action:
     - DEFAULT_ACTION_NONE # Does nothing
     # Sensor typical actions y = LINEAR_COEFF * x + OFFSET_COEF
-    - DEFAULT_ACTION_SENSE_LINEAR_COEF 
-    - DEFAULT_ACTION_SENSE_OFFSET_COEF 
+    - DEFAULT_ACTION_SENSE_LINEAR_COEF
+    - DEFAULT_ACTION_SENSE_OFFSET_COEF
     - DEFAULT_ACTION_SENSE_RESET_DEFAULT
+    - DEFAULT_ACTION_SENSE_MAX_VALID
+    - DEFAULT_ACTION_SENSE_MIN_VALID
     # Default options for gains and filter (for example of the SMO)
     - DEFAULT_ACTION_SET_VALUE
     - DEFAULT_ACTION_VALUE_RESET_DEFAULT

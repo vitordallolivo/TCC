@@ -7,8 +7,8 @@
  *   - ESC PWM (TIM4 CH1, PB6, 50 Hz)
  *   - RPM counter (TIM3 CH3, PB0, input capture)
  *
- * Todas as threads são criadas pelo TCKEC via OSSI.
- * A comunicação para cima usa OSSI → fila_sys com REQ_TYPE_SYS_UPDATE_SENSOR.
+ * As threads bloqueantes (ADC, HX711) são criadas com k_thread_create.
+ * RPM e estímulo ADC (native_sim) usam k_timer + k_work no siba_wq.
  *
  * PINOS HX711 — AJUSTE CONFORME SEU ESQUEMÁTICO (remapeados para a Porta E
  * de propósito: o ADC1 do CH32V307 só alcança os canais 0-7 / pinos PA0-PA7,
@@ -24,6 +24,7 @@
 #include "HAL.h"
 #include "OSSI.h"
 #include "Log_Manager.h"
+#include "CMD_Core_prm.h"   /* defaults de calibração/faixa por sensor (tabela) */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/adc.h>
@@ -148,6 +149,17 @@ static void hal_adc_calib_init(void)
         adc_calib[i].linear = 1.0f;
         adc_calib[i].offset = 0.0f;
     }
+    /* Semeia os defaults de engenharia (mV->V/A/°C) da tabela central
+     * (CMD_Core_prm.h). Aplicado AQUI (e não só no cache do CMD_Core) porque
+     * HAL_Init roda DEPOIS de CMD_Core_Init — senão v_batt/i_batt sairiam em mV
+     * e a segurança dispararia emergência falsa, congelando o RPM. */
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)          \
+    if ((size_t)(ID) < ARRAY_SIZE(adc_calib)) {              \
+        adc_calib[(ID)].linear = (DEF_LIN);                  \
+        adc_calib[(ID)].offset = (DEF_OFF);                  \
+    }
+    SIBA_SENSOR_TABLE(X)
+#undef X
 }
 
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
@@ -195,8 +207,8 @@ static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 
 #define HAL_SIM_ADC_PERIOD_MS         50U
 
-#define HAL_SIM_VBATT_MV_FULL       3000.0f  /* mV "no pino" — pack cheio   */
-#define HAL_SIM_VBATT_MV_EMPTY      2000.0f  /* mV "no pino" — pack vazio   */
+#define HAL_SIM_VBATT_MV_FULL       3000.0f  /* mV "no pino" — pack cheio (~24V c/ DEF_LINEAR 0.008) */
+#define HAL_SIM_VBATT_MV_EMPTY      2400.0f  /* mV "no pino" — pack "vazio" (~19.2V, ainda na faixa segura) */
 #define HAL_SIM_VBATT_DRAIN_PER_TICK   0.05f /* mV por amostra por (mV de corrente) */
 #define HAL_SIM_VBATT_NOISE           20.0f
 
@@ -227,41 +239,44 @@ static inline int32_t hal_sim_clamp_mv(float mv)
     return (int32_t)mv;
 }
 
-void hal_adc_stimulus_thread_fn(void *p1, void *p2, void *p3)
+static struct k_work adc_stimulus_work;
+
+static void adc_stimulus_work_fn(struct k_work *w)
 {
-    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+    ARG_UNUSED(w);
+    float throttle_pct = (float)atomic_get(&hal_sim_throttle_x100) / 100.0f;
+    float rpm          = HAL_RPM_Get();
+    float th_frac      = throttle_pct / 100.0f;
 
-    LOG_INF("HAL ADC stimulus iniciado (native_sim) — alimenta adc_emul com tendencias diretas em mV");
+    float i_mv = HAL_SIM_I_MV_IDLE
+               + (HAL_SIM_I_MV_MAX - HAL_SIM_I_MV_IDLE) * th_frac * th_frac
+               + hal_sim_noise(HAL_SIM_I_NOISE);
+    if (i_mv < 0.0f) i_mv = 0.0f;
 
-    while (1) {
-        k_sleep(K_MSEC(HAL_SIM_ADC_PERIOD_MS));
+    hal_sim_vbatt_mv -= i_mv * HAL_SIM_VBATT_DRAIN_PER_TICK * 0.01f;
+    if (hal_sim_vbatt_mv < HAL_SIM_VBATT_MV_EMPTY) hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_EMPTY;
+    float v_mv = hal_sim_vbatt_mv + hal_sim_noise(HAL_SIM_VBATT_NOISE);
 
-        float throttle_pct = (float)atomic_get(&hal_sim_throttle_x100) / 100.0f;
-        float rpm          = HAL_RPM_Get();
-        float th_frac      = throttle_pct / 100.0f;
+    float temp_mv = HAL_SIM_TEMP_MV_BASE
+                  + i_mv * HAL_SIM_TEMP_GAIN_MV_PER_MVI
+                  + hal_sim_noise(HAL_SIM_TEMP_NOISE);
 
-        float i_mv = HAL_SIM_I_MV_IDLE
-                   + (HAL_SIM_I_MV_MAX - HAL_SIM_I_MV_IDLE) * th_frac * th_frac
-                   + hal_sim_noise(HAL_SIM_I_NOISE);
-        if (i_mv < 0.0f) i_mv = 0.0f;
+    float air_mv = rpm * HAL_SIM_AIRSPEED_MV_PER_RPM + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
+    if (air_mv < 0.0f) air_mv = 0.0f;
 
-        hal_sim_vbatt_mv -= i_mv * HAL_SIM_VBATT_DRAIN_PER_TICK * 0.01f;
-        if (hal_sim_vbatt_mv < HAL_SIM_VBATT_MV_EMPTY) hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_EMPTY;
-        float v_mv = hal_sim_vbatt_mv + hal_sim_noise(HAL_SIM_VBATT_NOISE);
-
-        float temp_mv = HAL_SIM_TEMP_MV_BASE
-                      + i_mv * HAL_SIM_TEMP_GAIN_MV_PER_MVI
-                      + hal_sim_noise(HAL_SIM_TEMP_NOISE);
-
-        float air_mv = rpm * HAL_SIM_AIRSPEED_MV_PER_RPM + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
-        if (air_mv < 0.0f) air_mv = 0.0f;
-
-        adc_emul_const_value_set(adc_dev, ADC_CH_V_BATT,    (uint32_t)hal_sim_clamp_mv(v_mv));
-        adc_emul_const_value_set(adc_dev, ADC_CH_I_BATT,    (uint32_t)hal_sim_clamp_mv(i_mv));
-        adc_emul_const_value_set(adc_dev, ADC_CH_TEMP_BATT, (uint32_t)hal_sim_clamp_mv(temp_mv));
-        adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_clamp_mv(air_mv));
-    }
+    adc_emul_const_value_set(adc_dev, ADC_CH_V_BATT,    (uint32_t)hal_sim_clamp_mv(v_mv));
+    adc_emul_const_value_set(adc_dev, ADC_CH_I_BATT,    (uint32_t)hal_sim_clamp_mv(i_mv));
+    adc_emul_const_value_set(adc_dev, ADC_CH_TEMP_BATT, (uint32_t)hal_sim_clamp_mv(temp_mv));
+    adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_clamp_mv(air_mv));
 }
+
+static void adc_stimulus_timer_fn(struct k_timer *t)
+{
+    ARG_UNUSED(t);
+    k_work_submit_to_queue(&siba_wq, &adc_stimulus_work);
+}
+
+K_TIMER_DEFINE(adc_stimulus_timer, adc_stimulus_timer_fn, NULL);
 #endif /* HAL_ENABLE_ADC && CONFIG_ARCH_POSIX */
 
 int HAL_ADC_Init(void)
@@ -283,6 +298,14 @@ int HAL_ADC_Init(void)
         }
     }
     LOG_INF("HAL ADC: %d canal(is) configurado(s) — scan circular via DMA", ADC_NUM_CHANNELS);
+#ifdef CONFIG_ARCH_POSIX
+    /* native_sim: arranca o timer de estímulo do adc_emul */
+    k_work_init(&adc_stimulus_work, adc_stimulus_work_fn);
+    k_timer_start(&adc_stimulus_timer,
+                  K_MSEC(HAL_SIM_ADC_PERIOD_MS),
+                  K_MSEC(HAL_SIM_ADC_PERIOD_MS));
+    LOG_INF("HAL ADC: estímulo synthetic (%dms via timer)", HAL_SIM_ADC_PERIOD_MS);
+#endif
 #else
     LOG_INF("HAL ADC: desabilitado via HAL_prm.h (HAL_DISABLE_ADC)");
 #endif
@@ -367,24 +390,11 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
             }
             cnt = 0;
 
-            /* Publica grandezas físicas convertidas no SYS via OSSI
-             * (sensor_id conforme tabela em Log_Manager.h) */
-            struct { uint32_t id; float value; } updates[] = {
-                { SENSOR_ID_V_BATT,             HAL_ADC_Get_VBatt() },
-                { SENSOR_ID_I_BATT,             HAL_ADC_Get_IBatt() },
-                { SENSOR_ID_TEMPERATURE_BATTERY,HAL_ADC_Get_Temperature_Batt() },
-                { SENSOR_ID_AIR_SPEED,          HAL_ADC_Get_Air_Speed() },
-            };
-
-            for (size_t i = 0; i < ARRAY_SIZE(updates); i++) {
-                ossi_msg_t msg = {
-                    .target   = TARGET_SYS,
-                    .req_type = REQ_TYPE_SYS_UPDATE_SENSOR,
-                };
-                msg.payload.sys_req.sensor_id = updates[i].id;
-                msg.payload.sys_req.value     = updates[i].value;
-                OSSI_Send(&msg);
-            }
+            /* Publica grandezas físicas convertidas via siba_wq */
+            OSSI_Submit_Sensor(SENSOR_ID_V_BATT,             HAL_ADC_Get_VBatt());
+            OSSI_Submit_Sensor(SENSOR_ID_I_BATT,             HAL_ADC_Get_IBatt());
+            OSSI_Submit_Sensor(SENSOR_ID_TEMPERATURE_BATTERY,HAL_ADC_Get_Temperature_Batt());
+            OSSI_Submit_Sensor(SENSOR_ID_AIR_SPEED,          HAL_ADC_Get_Air_Speed());
         }
     }
 }
@@ -692,14 +702,7 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
                           / hx711_state[i].scale;
             k_mutex_unlock(&hx711_mutex);
 
-            /* Publica no SYS via OSSI */
-            ossi_msg_t msg = {
-                .target   = TARGET_SYS,
-                .req_type = REQ_TYPE_SYS_UPDATE_SENSOR,
-            };
-            msg.payload.sys_req.sensor_id = (uint32_t)i; /* load_cell_N */
-            msg.payload.sys_req.value     = grams;
-            OSSI_Send(&msg);
+            OSSI_Submit_Sensor((uint32_t)i, grams); /* load_cell_N */
         }
     }
 }
@@ -886,49 +889,49 @@ float HAL_RPM_Get(void)
 #if HAL_ENABLE_RPM
 #ifdef CONFIG_ARCH_POSIX
 
-#define HAL_RPM_SIM_MAX_RPM   9000.0f  /* RPM @ 100% throttle (arbitrário — só p/ exercitar lógica) */
-#define HAL_RPM_SIM_LAG          0.15f /* fração do erro corrigida por amostra (1ª ordem) */
+#define HAL_RPM_SIM_MAX_RPM   9000.0f
+#define HAL_RPM_SIM_LAG          0.15f
 #define HAL_RPM_SIM_NOISE_RPM   20.0f
 
-static float    rpm_sim_current;
+static float rpm_sim_current;
+
+static struct k_work  rpm_sim_work;
+
+static void rpm_sim_work_fn(struct k_work *w)
+{
+    ARG_UNUSED(w);
+    float throttle_pct = (float)atomic_get(&hal_sim_throttle_x100) / 100.0f;
+    float target_rpm   = (throttle_pct / 100.0f) * HAL_RPM_SIM_MAX_RPM;
+
+    rpm_sim_current += (target_rpm - rpm_sim_current) * HAL_RPM_SIM_LAG;
+
+    int32_t noise = (int32_t)(sys_rand32_get() % 2001) - 1000;
+    float   rpm   = rpm_sim_current
+                  + HAL_RPM_SIM_NOISE_RPM * HAL_SIM_NOISE_SCALE * ((float)noise / 1000.0f);
+    if (rpm < 0.0f) rpm = 0.0f;
+
+    atomic_set(&rpm_value, (uint32_t)(rpm * 10.0f));
+    OSSI_Submit_Sensor(SENSOR_ID_RPM, rpm);
+}
+
+static void rpm_sim_timer_fn(struct k_timer *t)
+{
+    ARG_UNUSED(t);
+    k_work_submit_to_queue(&siba_wq, &rpm_sim_work);
+}
+
+K_TIMER_DEFINE(rpm_sim_timer, rpm_sim_timer_fn, NULL);
 
 int HAL_RPM_Init(void)
 {
     rpm_sim_current = 0.0f;
     atomic_set(&rpm_value, 0);
-    LOG_INF("HAL RPM: modo synthetic (native_sim) — sem TIM3");
+    k_work_init(&rpm_sim_work, rpm_sim_work_fn);
+    k_timer_start(&rpm_sim_timer,
+                  K_MSEC(HAL_RPM_SAMPLE_MS),
+                  K_MSEC(HAL_RPM_SAMPLE_MS));
+    LOG_INF("HAL RPM: modo synthetic (native_sim) — timer %dms", HAL_RPM_SAMPLE_MS);
     return 0;
-}
-
-void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
-{
-    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
-
-    LOG_INF("HAL RPM thread iniciada (synthetic)");
-
-    while (1) {
-        k_sleep(K_MSEC(HAL_RPM_SAMPLE_MS));
-
-        float throttle_pct = (float)atomic_get(&hal_sim_throttle_x100) / 100.0f;
-        float target_rpm   = (throttle_pct / 100.0f) * HAL_RPM_SIM_MAX_RPM;
-
-        rpm_sim_current += (target_rpm - rpm_sim_current) * HAL_RPM_SIM_LAG;
-
-        int32_t  noise = (int32_t)(sys_rand32_get() % 2001) - 1000; /* -1000..+1000 */
-        float    rpm   = rpm_sim_current
-                       + HAL_RPM_SIM_NOISE_RPM * HAL_SIM_NOISE_SCALE * ((float)noise / 1000.0f);
-        if (rpm < 0.0f) rpm = 0.0f;
-
-        atomic_set(&rpm_value, (uint32_t)(rpm * 10.0f));
-
-        ossi_msg_t msg = {
-            .target   = TARGET_SYS,
-            .req_type = REQ_TYPE_SYS_UPDATE_SENSOR,
-        };
-        msg.payload.sys_req.sensor_id = SENSOR_ID_RPM;
-        msg.payload.sys_req.value     = rpm;
-        OSSI_Send(&msg);
-    }
 }
 
 #else /* !CONFIG_ARCH_POSIX — siba_board real: TIM3 via MMIO direto */
@@ -962,17 +965,43 @@ static const struct gpio_dt_spec rpm_capture_pin =
 
 #define TIM3_IRQN        45
 
-static atomic_t rpm_pulse_count; /* incrementado na ISR a cada captura     */
+static atomic_t rpm_pulse_count; /* incrementado na ISR a cada captura */
+
+static struct k_work rpm_work;
 
 static void tim3_capture_isr(const void *arg)
 {
     ARG_UNUSED(arg);
-
     if (TIM3_INTFR & TIM_SR_CC3IF) {
-        (void)TIM3_CH3CVR;              /* leitura limpa overcapture (CC3OF) */
-        TIM3_INTFR &= ~TIM_SR_CC3IF;    /* limpa flag de captura             */
+        (void)TIM3_CH3CVR;
+        TIM3_INTFR &= ~TIM_SR_CC3IF;
         atomic_inc(&rpm_pulse_count);
     }
+}
+
+/* Timer a cada 100ms: lê e zera o contador ISR, submete cálculo ao siba_wq */
+static void rpm_timer_fn(struct k_timer *t)
+{
+    ARG_UNUSED(t);
+    k_work_submit_to_queue(&siba_wq, &rpm_work);
+}
+
+K_TIMER_DEFINE(rpm_timer, rpm_timer_fn, NULL);
+
+static void rpm_work_fn(struct k_work *w)
+{
+    ARG_UNUSED(w);
+    /* Lê e zera janela atomicamente (timer já garantiu 100ms) */
+    uint32_t pulses = (uint32_t)atomic_get(&rpm_pulse_count);
+    atomic_clear(&rpm_pulse_count);
+
+    uint32_t rpm10 = (uint32_t)(
+        ((float)pulses / (float)HAL_RPM_PULSES_PER_REV)
+        * (60000.0f / (float)HAL_RPM_SAMPLE_MS)
+        * 10.0f
+    );
+    atomic_set(&rpm_value, rpm10);
+    OSSI_Submit_Sensor(SENSOR_ID_RPM, (float)rpm10 / 10.0f);
 }
 
 int HAL_RPM_Init(void)
@@ -983,7 +1012,6 @@ int HAL_RPM_Init(void)
         return err;
     }
 
-    /* Habilita clock do TIM3 */
     RCC_APB1PCENR |= RCC_APB1_TIM3EN;
 
     TIM3_CTLR1     = 0;
@@ -998,38 +1026,13 @@ int HAL_RPM_Init(void)
     IRQ_CONNECT(TIM3_IRQN, 1, tim3_capture_isr, NULL, 0);
     irq_enable(TIM3_IRQN);
 
-    LOG_INF("HAL RPM: TIM3 CH3 input capture inicializado");
+    k_work_init(&rpm_work, rpm_work_fn);
+    k_timer_start(&rpm_timer,
+                  K_MSEC(HAL_RPM_SAMPLE_MS),
+                  K_MSEC(HAL_RPM_SAMPLE_MS));
+
+    LOG_INF("HAL RPM: TIM3 CH3 input capture + timer %dms", HAL_RPM_SAMPLE_MS);
     return 0;
-}
-
-void HAL_thread_RPM_fn(void *p1, void *p2, void *p3)
-{
-    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
-
-    LOG_INF("HAL RPM thread iniciada");
-
-    while (1) {
-        atomic_clear(&rpm_pulse_count);
-        k_sleep(K_MSEC(HAL_RPM_SAMPLE_MS));
-        uint32_t pulses = (uint32_t)atomic_get(&rpm_pulse_count);
-
-        /* RPM = (pulsos / pólos) * (60000 / janela_ms) */
-        uint32_t rpm10 = (uint32_t)(
-            ((float)pulses / (float)HAL_RPM_PULSES_PER_REV)
-            * (60000.0f / (float)HAL_RPM_SAMPLE_MS)
-            * 10.0f
-        );
-        atomic_set(&rpm_value, rpm10);
-
-        /* Publica no SYS — SENSOR_ID_RPM mapeado para rpm no Log_Manager */
-        ossi_msg_t msg = {
-            .target   = TARGET_SYS,
-            .req_type = REQ_TYPE_SYS_UPDATE_SENSOR,
-        };
-        msg.payload.sys_req.sensor_id = SENSOR_ID_RPM;
-        msg.payload.sys_req.value     = (float)rpm10 / 10.0f;
-        OSSI_Send(&msg);
-    }
 }
 
 #endif /* CONFIG_ARCH_POSIX */
@@ -1210,8 +1213,19 @@ void HAL_DAC_Set_Value(uint16_t value_12bit)
 #endif /* HAL_ENABLE_DAC */
 
 /* ===========================================================
- * HAL_Init — inicializa tudo e registra threads no TCKEC
+ * HAL_Init — inicializa periféricos e cria threads bloqueantes
  * =========================================================== */
+
+#if HAL_ENABLE_ADC
+K_THREAD_STACK_DEFINE(hal_adc_stack, HAL_STACK_SIZE);
+static struct k_thread hal_adc_thread_data;
+#endif
+
+#if HAL_ENABLE_HX711
+K_THREAD_STACK_DEFINE(hal_hx711_stack, HAL_STACK_SIZE);
+static struct k_thread hal_hx711_thread_data;
+#endif
+
 int HAL_Init(void)
 {
     int r;
@@ -1234,59 +1248,23 @@ int HAL_Init(void)
     r = HAL_DAC_Init();
     if (r) return r;
 
-    /* Cada bloco abaixo é independente e só registra sua thread no TCKEC se
-     * o módulo correspondente estiver ativo (ver HAL_prm.h) — módulo
-     * desabilitado não tem entry_point definido, então a thread nem pode
-     * ser referenciada. */
-
 #if HAL_ENABLE_ADC
-    /* Registra thread ADC no TCKEC */
-    {
-        ossi_msg_t req = { .target = TARGET_TCKEC,
-                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
-        req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_ID;
-        req.payload.tckec_req.entry_point = HAL_thread_ADC_fn;
-        req.payload.tckec_req.priority    = HAL_ADC_PRIO;
-        OSSI_Send(&req);
-    }
+    k_thread_create(&hal_adc_thread_data, hal_adc_stack,
+                    K_THREAD_STACK_SIZEOF(hal_adc_stack),
+                    HAL_thread_ADC_fn, NULL, NULL, NULL,
+                    HAL_ADC_PRIO, 0, K_NO_WAIT);
+    k_thread_name_set(&hal_adc_thread_data, "hal_adc");
 #endif
 
 #if HAL_ENABLE_HX711
-    /* Registra thread HX711 no TCKEC */
-    {
-        ossi_msg_t req = { .target = TARGET_TCKEC,
-                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
-        req.payload.tckec_req.thread_id   = HAL_THREAD_HX711_ID;
-        req.payload.tckec_req.entry_point = HAL_thread_HX711_fn;
-        req.payload.tckec_req.priority    = HAL_HX711_PRIO;
-        OSSI_Send(&req);
-    }
+    k_thread_create(&hal_hx711_thread_data, hal_hx711_stack,
+                    K_THREAD_STACK_SIZEOF(hal_hx711_stack),
+                    HAL_thread_HX711_fn, NULL, NULL, NULL,
+                    HAL_HX711_PRIO, 0, K_NO_WAIT);
+    k_thread_name_set(&hal_hx711_thread_data, "hal_hx711");
 #endif
-
-#if HAL_ENABLE_RPM
-    /* Registra thread RPM no TCKEC */
-    {
-        ossi_msg_t req = { .target = TARGET_TCKEC,
-                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
-        req.payload.tckec_req.thread_id   = HAL_THREAD_RPM_ID;
-        req.payload.tckec_req.entry_point = HAL_thread_RPM_fn;
-        req.payload.tckec_req.priority    = HAL_RPM_PRIO;
-        OSSI_Send(&req);
-    }
-#endif
-
-#if HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
-    /* native_sim: alimenta o adc_emul (ver native_sim.overlay) com sinais
-     * sintéticos — sem isso HAL_thread_ADC_fn leria sempre 0mV. */
-    {
-        ossi_msg_t req = { .target = TARGET_TCKEC,
-                           .req_type = REQ_TYPE_TCKEC_CREATE_THREAD };
-        req.payload.tckec_req.thread_id   = HAL_THREAD_ADC_STIMULUS_ID;
-        req.payload.tckec_req.entry_point = hal_adc_stimulus_thread_fn;
-        req.payload.tckec_req.priority    = HAL_ADC_PRIO;
-        OSSI_Send(&req);
-    }
-#endif
+    /* RPM: ISR contadora + timer 100ms → siba_wq (ver HAL_RPM_Init) */
+    /* ADC stimulus native_sim: timer 50ms → siba_wq (ver HAL_ADC_Init) */
 
     LOG_INF("HAL_Init concluído");
     return 0;

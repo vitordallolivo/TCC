@@ -83,24 +83,19 @@ typedef struct __attribute__((packed)) {
  * API do Log Manager (implementação manual em lib/SYS/Log_Manager.c)
  * =========================================================== */
 
-/* Inicializa o log e registra thread no TCKEC */
+/* Inicializa o log e arranca o timer de TX 10 Hz */
 void Log_Manager_Init(void);
 
 /* Atualiza um campo do log a partir do sensor_id */
 void Log_Manager_Update(uint32_t sensor_id, float value);
 
-/* Entry point da thread (registrada no TCKEC) */
-void Log_Manager_thread_fn(void *p1, void *p2, void *p3);
-
 /* Retorna cópia thread-safe do último log */
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
 
-/* Serializa e envia o snapshot atual via OSSI→NCI (chamado por
- * Sys_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
+/* Serializa e envia o snapshot atual via NCI_Transmit (chamado pelo
+ * timer interno a cada LOG_MANAGER_PERIOD_MS) */
 void Log_Manager_Transmit(void);
 
-#define LOG_MANAGER_THREAD_ID   40
-#define LOG_MANAGER_PRIO         6
 #define LOG_MANAGER_PERIOD_MS  100   /* 10 Hz */
 
 #endif /* LOG_MANAGER_H */

@@ -119,6 +119,8 @@ commands:
         linear: { help: "Define ganho de calibração (Scale/Linear)" }
         offset: { help: "Define o zero do sensor (Tara/Offset)" }
         reset:  { help: "Reseta para valores padrão de fábrica" }
+        max:    { help: "Define o limite MÁXIMO válido do sensor" }
+        min:    { help: "Define o limite MÍNIMO válido do sensor" }
 
       # Alvos de Força e Pressão (Células de Carga e Pitot)
       load_cell_0: *siba_sensor_cmds

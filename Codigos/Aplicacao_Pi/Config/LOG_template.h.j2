@@ -4,7 +4,7 @@
 #include "Common_Types.h"
 #include <stdint.h>
 
-/* Auto-generated — edite SIBA.yaml, não este arquivo */
+/* Auto-generated — edite {{ board_yaml }}, não este arquivo */
 
 /* ===========================================================
  * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
@@ -20,7 +20,7 @@
 {%- endfor %}
 
 /* ===========================================================
- * Structs geradas a partir do SIBA.yaml
+ * Structs geradas a partir do {{ board_yaml }}
  * =========================================================== */
 typedef struct __attribute__((packed)) {
 {% for field in structs.SENSORS %}

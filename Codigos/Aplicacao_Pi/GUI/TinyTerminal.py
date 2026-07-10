@@ -739,7 +739,7 @@ class TinyTerminal(QWidget):
                     # de bateria (SOC poly/temp/relé), que NÃO usam offset/linear,
                     # vão para FUNC_BATTERY.
                     sub = parts[3].upper() if len(parts) > 3 else ""
-                    if sub in ("LINEAR", "OFFSET", "RESET"):
+                    if sub in ("LINEAR", "OFFSET", "RESET", "MAX", "MIN"):
                         search_func = "FUNC_SENSOR"
                     else:
                         bat_keywords = ["TEMP", "RELAY", "SOC", "P0", "P1", "P2", "P3", "P4"]

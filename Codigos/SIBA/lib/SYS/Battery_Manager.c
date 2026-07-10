@@ -1,5 +1,4 @@
 #include "Battery_Manager.h"
-#include "OSSI.h"
 #include "Security_Manager.h"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -185,11 +184,7 @@ void Battery_Manager_Update(uint32_t sensor_id, float value)
             Security_Manager_Error_Erase(ERROR_BATT_LOW_SOC);
         }
 
-        ossi_msg_t msg = { .target = TARGET_SYS,
-                           .req_type = REQ_TYPE_SYS_UPDATE_SENSOR };
-        msg.payload.sys_req.sensor_id = SENSOR_ID_SOC;
-        msg.payload.sys_req.value     = soc;
-        OSSI_Send(&msg);
+        Log_Manager_Update(SENSOR_ID_SOC, soc);
 
         // LOG_DBG("Battery: V=%.2f SOC=%.1f%%", (double)v_batt, (double)soc);
     }

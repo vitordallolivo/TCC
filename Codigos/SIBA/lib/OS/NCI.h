@@ -1,27 +1,18 @@
 #ifndef NCI_H
 #define NCI_H
 
-#include <zephyr/kernel.h>
 #include <stdbool.h>
-#include "OSSI.h" 
+#include <stddef.h>
 
-/* Prioridades das threads da rede */
-#define NCI_TX_PRIORITY 5
-#define NCI_RX_PRIORITY 5
-
-/* IDs lógicos para o TCKEC identificar essas threads internamente */
-#define NCI_TX_THREAD_ID 10
-#define NCI_RX_THREAD_ID 11
-
-/**
- * @brief Solicita ao TCKEC (via OSSI) a criação das threads de rede (TX e RX).
- */
+/* Cria o socket TX e arranca a thread RX (recvfrom bloqueante). */
 void NCI_Init(void);
 
-/**
- * @brief Atualiza a flag interna que permite/bloqueia o tráfego de dados.
- * * @param status true = online (envia/recebe), false = offline (descarta).
- */
+/* Atualiza a flag que permite/bloqueia o tráfego de dados.
+ * false = offline (descarta TX, ignora RX). */
 void NCI_Set_Connection_Status(bool status);
 
-#endif // NCI_H
+/* Envia `len` bytes de `buf` via UDP ao peer configurado.
+ * Thread-safe; chamado pelo Log_Manager a cada 10 Hz (siba_wq). */
+void NCI_Transmit(const void *buf, size_t len);
+
+#endif /* NCI_H */

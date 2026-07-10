@@ -22,10 +22,12 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
-    QRadioButton, QSpinBox, QVBoxLayout,
+    QRadioButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from Communication_Data import spmm_analysis as sa
+from Communication_Data import motor_math as mm
+from Communication_Data import motor_config as mc
 
 
 class SPMMEnsaioDialog(QDialog):
@@ -52,7 +54,31 @@ class SPMMEnsaioDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def _build_ui(self):
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        # Parâmetros vão numa área ROLÁVEL (são muitos grupos); CSV/controles/log
+        # ficam fixos no rodapé.
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        container = QWidget(); root = QVBoxLayout(container)
+
+        # Fonte dos dados do ensaio: a bancada SPMM (Telnet+UDP) ou SIBA (RPM) +
+        # SAME (correntes→torque). Substitui o antigo diálogo "Configuração
+        # SIBA+SAME" (agora integrado aqui, no fluxo do SPMM).
+        fonte = QGroupBox("Fonte dos dados")
+        fl = QVBoxLayout(fonte)
+        rbrow = QHBoxLayout()
+        self.rb_src_spmm = QRadioButton("Bancada SPMM")
+        self.rb_src_ss = QRadioButton("SIBA (RPM) + SAME (correntes)")
+        src = ((self.gui.prefs.get("motor_source") or {}).get("source"))
+        (self.rb_src_ss if src == "SIBA_SAME" else self.rb_src_spmm).setChecked(True)
+        self.rb_src_spmm.toggled.connect(self._on_source_changed)
+        rbrow.addWidget(self.rb_src_spmm); rbrow.addWidget(self.rb_src_ss)
+        fl.addLayout(rbrow)
+        # Com SIBA+SAME o torque do ensaio é Kt·Iq calculado das correntes de fase
+        # (não o torque estimado da SAME, que depende de Kt). Isso é feito
+        # AUTOMATICAMENTE ao "Rodar Ensaio" — o usuário não precisa saber.
+        fl.addWidget(QLabel("<i>SIBA+SAME: o torque é calculado das correntes "
+                            "automaticamente ao rodar.</i>"))
+        root.addWidget(fonte)
 
         modo = QGroupBox("Tipo de ensaio")
         ml = QHBoxLayout(modo)
@@ -105,29 +131,70 @@ class SPMMEnsaioDialog(QDialog):
         fb.addRow("τc [N·m]:", self.sp_tc)
         root.addWidget(self.g_btc)
 
-        # CSV + controles
+        root.addStretch()
+        scroll.setWidget(container)
+        outer.addWidget(scroll, 1)
+
+        # CSV + controles — FORA da área rolável, sempre visíveis.
         arq = QHBoxLayout()
         self.ed_csv = QLineEdit()
         self.ed_csv.setPlaceholderText("nome do arquivo .csv (obrigatório)...")
         btn_csv = QPushButton("..."); btn_csv.clicked.connect(self._pick_csv)
         arq.addWidget(QLabel("CSV:")); arq.addWidget(self.ed_csv, 1); arq.addWidget(btn_csv)
-        root.addLayout(arq)
+        outer.addLayout(arq)
 
         ctrl = QHBoxLayout()
         self.btn_run = QPushButton("▶ Rodar Ensaio"); self.btn_run.clicked.connect(self._start)
         self.btn_stop = QPushButton("■ Parar (seguro)"); self.btn_stop.setEnabled(False); self.btn_stop.clicked.connect(self._stop)
         self.lbl_rep = QLabel("Repetições: 0")
         ctrl.addWidget(self.btn_run); ctrl.addWidget(self.btn_stop); ctrl.addStretch(); ctrl.addWidget(self.lbl_rep)
-        root.addLayout(ctrl)
+        outer.addLayout(ctrl)
 
         self.log = QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(2000)
         self.log.setStyleSheet("background:#0F0F0F; color:#DCDCDC; font-family:monospace; font-size:9pt;")
-        root.addWidget(self.log, 1)
+        outer.addWidget(self.log, 1)
         self.lbl_result = QLabel("—"); self.lbl_result.setStyleSheet("font-weight:bold;")
         self.lbl_result.setWordWrap(True)
-        root.addWidget(self.lbl_result)
+        outer.addWidget(self.lbl_result)
 
         self._toggle_params()
+
+    def _atrito_series(self):
+        """(t, rpm[rpm], te[N·m]) para o ensaio de atrito, conforme a fonte:
+        - SPMM: ω do `rpm` e Te do `te` (torque da bancada).
+        - SIBA+SAME: ω do RPM da SIBA e **Te = Kt·Iq calculado das correntes de
+          fase** (não do torque estimado da SAME, que depende de Kt do motor).
+        Roda na thread do ensaio — só funções puras + buffers (thread-safe)."""
+        if self._cfg.get("source") == "SIBA_SAME":
+            t, ys = self.gui.snapshot_series(["rpm_same", "rpm", "i_a", "i_b", "i_c"])
+            rpm = ys.get("rpm_same")
+            if rpm is None or rpm.size == 0 or np.all(np.isnan(rpm)):
+                rpm = ys.get("rpm")
+            ia, ib, ic = ys.get("i_a"), ys.get("i_b"), ys.get("i_c")
+            if rpm is None or ia is None or ib is None or ic is None or not t.size:
+                return t, rpm, None
+            mot = self._cfg.get("motor", {})
+            P = int(mot.get("pole_pairs") or (int(mot.get("poles", 0)) // 2) or 7)
+            kt = mc.ke_kt_from_kv(mot.get("kv_rating", 0), P, mot.get("connection", "Y"))["kt"]
+            theta = mm.electrical_angle_from_speed(t, np.nan_to_num(rpm), P)
+            _id, iq, *_ = mm.dq_from_phases(np.nan_to_num(ia), np.nan_to_num(ib),
+                                            np.nan_to_num(ic), theta)
+            return t, rpm, kt * iq
+        # padrão: bancada SPMM
+        t, ys = self.gui.snapshot_series(["rpm", "te"])
+        return t, ys.get("rpm"), ys.get("te")
+
+    def _on_source_changed(self, *_):
+        """Persiste a fonte de dados escolhida (SPMM × SIBA+SAME) no user_prefs.
+        O ensaio lê isso para decidir de onde vêm ω (RPM) e o torque (Iq da SAME
+        vs. torque da bancada)."""
+        ms = dict(self.gui.prefs.get("motor_source") or {})
+        ms["source"] = "SPMM" if self.rb_src_spmm.isChecked() else "SIBA_SAME"
+        self.gui.prefs["motor_source"] = ms
+        try:
+            self.gui.save_user_prefs()
+        except Exception:
+            pass
 
     _DIAG_ATRITO = (
         "<b>Atrito (B, τc) — patamares em regime permanente</b><br>"
@@ -200,6 +267,11 @@ class SPMMEnsaioDialog(QDialog):
             "dur": self.sp_dur.value(),
             "B": self.sp_B.value(),
             "tc": self.sp_tc.value(),
+            # Fonte dos dados + perfil do motor (lidos na main thread). Com
+            # SIBA+SAME o ensaio calcula o torque de Iq internamente — o usuário
+            # não precisa saber, só clicar "Rodar".
+            "source": (self.gui.prefs.get("motor_source") or {}).get("source"),
+            "motor": dict(self.gui.prefs.get("same_config") or {}),
         }
 
         self._running = True
@@ -251,8 +323,9 @@ class SPMMEnsaioDialog(QDialog):
             self._spmm("throttle 1000")
 
             # Fim: lê os buffers (mesmos do CSV) e usa só o que está nas janelas.
-            t, ys = self.gui.snapshot_series(["rpm", "te"])
-            rpm, te = ys.get("rpm"), ys.get("te")
+            # A fonte (SPMM ou SIBA+SAME) define de onde vêm ω e Te — com
+            # SIBA+SAME o Te é Kt·Iq calculado das correntes (transparente ao usuário).
+            t, rpm, te = self._atrito_series()
             pares, rows = [], []
             if rpm is not None and te is not None and t.size:
                 for us, t0, t1 in janelas:

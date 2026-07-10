@@ -62,9 +62,13 @@ enums:
     # Sensor typical actions y = LINEAR_COEFF *x + OFFSET_COEF
     # Serves for sensor like current, voltage, ESC, pitot and Load Cells
     # For load cells Linear coeff = Calibrate, and Offset coeff = Tare
-    - DEFAULT_ACTION_SENSE_LINEAR_COEF 
-    - DEFAULT_ACTION_SENSE_OFFSET_COEF 
+    - DEFAULT_ACTION_SENSE_LINEAR_COEF
+    - DEFAULT_ACTION_SENSE_OFFSET_COEF
     - DEFAULT_ACTION_SENSE_RESET_DEFAULT
+    # Limites de validade/segurança por sensor (usados pelos managers p/ reagir).
+    # `value` = novo limite máximo/mínimo do sensor.
+    - DEFAULT_ACTION_SENSE_MAX_VALID
+    - DEFAULT_ACTION_SENSE_MIN_VALID
 
   battery_action:
     # Overwrites polynomial

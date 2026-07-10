@@ -1,12 +1,5 @@
 #ifndef SYS_H
 #define SYS_H
-
-#include "OSSI.h"
-
-void Sys_Init(void);
-void Sys_thread_fn(void *p1, void *p2, void *p3);
-
-#define SYS_MANAGER_THREAD_ID  50
-#define SYS_MANAGER_PRIO        5
-
+/* Sys thread eliminada. Despacho de sensores ocorre no sensor_dispatch_fn
+ * do OSSI (siba_wq). Timer de log TX 10 Hz no Log_Manager_Init. */
 #endif /* SYS_H */

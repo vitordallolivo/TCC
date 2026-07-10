@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Auto-generated — edite SIBA.yaml, não este arquivo */
+/* Auto-generated — edite {{ board_yaml }}, não este arquivo */
 
 {% for enum_name, enum_values in enums.items() %}
 typedef enum{% if enum_name in packed_enums|default([]) %} __attribute__((packed)){% endif %} {

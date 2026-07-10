@@ -1,26 +1,26 @@
 #ifndef CMD_CORE_H
 #define CMD_CORE_H
 
-#include "OSSI.h"
-#include "Log_Manager.h"        /* SENSORS */
-#include "Security_Manager.h"   /* siba_error_bit_t */
+#include "Log_Manager.h"
+#include "Security_Manager.h"
 #include <stdint.h>
+#include <stddef.h>
 
+/* Inicializa a tabela de calibração/limites dos sensores (SIBA_SENSOR_TABLE). */
 void CMD_Core_Init(void);
-void CMD_Core_thread_fn(void *p1, void *p2, void *p3);
+
+/* Despacha um pacote CMD serializado (buf[len]) para o handler correspondente.
+ * Chamado pelo cmd_dispatch_fn do OSSI (siba_wq) — serializado com o
+ * despacho de sensores, sem concorrência com Battery/Propeller/Security. */
+void CMD_Core_Dispatch(const uint8_t *buf, size_t len);
 
 /* Configuração/limites do sensor `id` (fonte: CMD_Core_prm.h). Devolve NULL
- * para id fora da faixa. Usado pelos managers p/ ler a MESMA faixa [min,max]
+ * para id fora da faixa. Usado pelos managers p/ ler a faixa [min,max]
  * sem hardcode espalhado. */
 const SENSORS *CMD_Core_Get_Sensor_Cfg(uint32_t id);
 
 /* Valida `value` do sensor `id` contra a faixa [min,max] da tabela.
- * Retorna o bit de erro (siba_error_bit_t) configurado se estiver FORA da
- * faixa, ou 0 se dentro (ou sensor sem verificação). Não altera estado —
- * quem seta/limpa o bit e loga na borda é o manager (Security). */
+ * Retorna o bit de erro se estiver FORA da faixa, ou 0 se dentro. */
 uint32_t CMD_Core_Validate_Sensor(uint32_t id, float value);
-
-#define CMD_CORE_THREAD_ID  60
-#define CMD_CORE_PRIO        4
 
 #endif /* CMD_CORE_H */

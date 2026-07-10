@@ -4,8 +4,9 @@ Fluxo pedido: botão "Estimar" (menu Motor) -> este popout, que:
 - recebe R e L (indutância/resistência usadas na bancada) + Ts/maxiter/popsize;
 - pergunta se deseja PLOTAR o resultado final (checkbox -> --plot);
 - mostra em TEMPO REAL quantas iterações/avaliações rodaram e o custo atual/melhor;
-- ao terminar, mostra o RESULTADO final (Ks1/Ks2/Kt) e pergunta antes de gravar
-  no SAME.yaml.
+- ao terminar, mostra o RESULTADO final na forma Γ (Gamma_s1/s2/t — invariante
+  ao passo; é o que o firmware da SAME recebe) e pergunta antes de gravar no
+  SAME.yaml. Ks* ficam só como referência @ Ts_sim.
 
 Roda `Scripts/autotune_cost.py` via EstimationRunner e parseia o stdout
 (linhas PROGRESS/GEN/RESULT). O parsing roda na thread do subprocesso e é
@@ -209,9 +210,12 @@ class EstimationDialog(QDialog):
 
     def _on_result(self, d):
         self._result = d
+        # Mostra os ganhos na forma Γ (Gamma = K·Ts, invariante ao passo) — é o
+        # que se configura no firmware da SAME. Ks* dependem de Ts (só referência).
         self.lbl_result.setText(
-            f"<b>Ks1</b>={d.get('Ks1', 0):,.0f}  <b>Ks2</b>={d.get('Ks2', 0):,.0f}  "
-            f"<b>Kt</b>={d.get('Kt', 0):,.1f}  |  custo={d.get('cost', 0):.4f}")
+            f"<b>Γ1</b>={d.get('Gamma_s1', 0):.4f}  "
+            f"<b>Γ2</b>={d.get('Gamma_s2', 0):.4f}  "
+            f"<b>Γt</b>={d.get('Gamma_t', 0):.5f}  |  custo={d.get('cost', 0):.4f}")
         self.btn_apply.setEnabled(True)
 
     def _on_done(self, rc):
@@ -233,19 +237,23 @@ class EstimationDialog(QDialog):
         resp = QMessageBox.question(
             self, "Aplicar ganhos",
             f"Gravar no SAME.yaml (bloco smo_gains)?\n\n"
-            f"Ks1 = {r.get('Ks1', 0):,.1f}\nKs2 = {r.get('Ks2', 0):,.1f}\n"
-            f"Kt  = {r.get('Kt', 0):,.1f}",
+            f"Ganhos Γ (invariantes ao passo — é o que o firmware recebe):\n"
+            f"Γ1 (Gamma_s1) = {r.get('Gamma_s1', 0):.5f}\n"
+            f"Γ2 (Gamma_s2) = {r.get('Gamma_s2', 0):.5f}\n"
+            f"Γt (Gamma_t)  = {r.get('Gamma_t', 0):.6f}",
             QMessageBox.Yes | QMessageBox.No)
         if resp != QMessageBox.Yes:
             return
         try:
             data = yaml.safe_load(open(self.same_yaml_path)) or {}
+            # Γ é o primário (o que vai por CMD p/ TARGET_GAMMA1/2/T). Ks* ficam
+            # só como referência @ Ts_sim (dependem do passo).
             data["smo_gains"] = {
-                "Ks1": float(r.get("Ks1", 0)), "Ks2": float(r.get("Ks2", 0)),
-                "Kt": float(r.get("Kt", 0)),
                 "Gamma_s1": float(r.get("Gamma_s1", 0)), "Gamma_s2": float(r.get("Gamma_s2", 0)),
                 "Gamma_t": float(r.get("Gamma_t", 0)),
-                "Ts": float(r.get("Ts", 0)), "cost": float(r.get("cost", 0)),
+                "Ks1_ref": float(r.get("Ks1", 0)), "Ks2_ref": float(r.get("Ks2", 0)),
+                "Kt_ref": float(r.get("Kt", 0)),
+                "Ts_sim": float(r.get("Ts", 0)), "cost": float(r.get("cost", 0)),
                 "R": float(self.ed_R.text()), "L": float(self.ed_L.text()),
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             }

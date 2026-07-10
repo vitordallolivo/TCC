@@ -5,21 +5,9 @@
 #include <zephyr/kernel.h>
 #include "HAL_prm.h"
 
-/* ===========================================================
- * IDs de Thread para o TCKEC
- * =========================================================== */
-#define HAL_THREAD_ADC_ID    30
-#define HAL_THREAD_HX711_ID  31
-#define HAL_THREAD_RPM_ID    32
-/* Só registrada em native_sim (CONFIG_ARCH_POSIX) — alimenta o adc_emul
- * com sinais sintéticos (ver HAL.c::hal_adc_stimulus_thread_fn /
- * native_sim.overlay). Usa um slot do pool TCKEC (folga de 3, ver CLAUDE.md). */
-#define HAL_THREAD_ADC_STIMULUS_ID 33
-
-#define HAL_ADC_PRIO         7
-#define HAL_HX711_PRIO       6
-#define HAL_RPM_PRIO         6
-#define HAL_STACK_SIZE       2048
+#define HAL_ADC_PRIO     7
+#define HAL_HX711_PRIO   6
+#define HAL_STACK_SIZE   2048
 
 /* ===========================================================
  * HX711 — 6 células de carga
@@ -181,9 +169,5 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count);
 int  HAL_DAC_Init(void);
 void HAL_DAC_Set_Value(uint16_t value_12bit);
 
-/* Entry points das threads (registradas no TCKEC) */
-void HAL_thread_ADC_fn  (void *p1, void *p2, void *p3);
-void HAL_thread_HX711_fn(void *p1, void *p2, void *p3);
-void HAL_thread_RPM_fn  (void *p1, void *p2, void *p3);
 
 #endif /* HAL_H */

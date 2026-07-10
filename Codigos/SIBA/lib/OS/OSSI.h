@@ -2,68 +2,35 @@
 #define OSSI_H
 
 #include <zephyr/kernel.h>
+#include <stdint.h>
 
-/* Destinos baseados no fluxo do roteador OSSI */
-typedef enum {
-    TARGET_CMD = 0,     // Para o CMD Core Interpreter
-    TARGET_TCKEC,       // Para o TCKEC / HAL
-    TARGET_SYS,         // Para o System Manager (Propeller, Battery, etc)
-    TARGET_NETWORK      // Para o NCI TX (Telemetria/Logs)
-} ossi_target_t;
+/* siba_wq — única fila de trabalho do sistema. Toda a lógica de despacho
+ * (sensores, CMDs, log TX) roda como k_work items nessa fila, numa thread
+ * dedicada de prioridade 5.
+ *
+ * Threads de I/O bloqueante (NCI RX, HAL ADC, HAL HX711) continuam como
+ * threads Zephyr normais porque precisam bloquear em primitivas de hardware
+ * (recvfrom, k_poll/adc_read_async, bit-bang GPIO). Tudo o mais vira
+ * k_work item aqui — sem polling, sem contexto de thread desnecessário.
+ *
+ * Substitui o modelo anterior de 4 k_msgq + 5 threads de polling (TCKEC,
+ * Sys, CMD_Core, NCI TX, HAL RPM) — economiza ~23 KB de RAM:
+ *   - 20 KB pool TCKEC (managed_stacks[10][2048]) → eliminado
+ *   - 11 KB buffers dos 4 k_msgq grandes (ossi_msg_t 136B × 20 itens × 4)
+ *   - substituídos por 8 KB de stacks estáticas (4 threads × 2048B) +
+ *     ~400 B de filas pequenas (sensor_queue 40×8 + cmd_queue 4×12) */
+extern struct k_work_q siba_wq;
 
-/* Tipos de Request genéricos (podem ser expandidos por módulo) */
-typedef enum {
-    REQ_TYPE_CMD_PARSE = 0,
-    REQ_TYPE_TCKEC_CREATE_THREAD,
-    REQ_TYPE_TCKEC_KILL_THREAD,
-    REQ_TYPE_SYS_UPDATE_SENSOR,
-    REQ_TYPE_NET_SEND_TELEMETRY
-} ossi_req_type_t;
+/* Inicializa e inicia o siba_wq. Chamar em main() antes de qualquer Init. */
+void OSSI_Init(void);
 
-/* Estrutura unificada do OSSI (Tamanho Fixo) */
-typedef struct {
-    ossi_target_t target;   
-    uint32_t req_type;      
-    
-    union {
-        
-        struct {
-            uint8_t buffer[64];
-            size_t len;
-        } cmd_req;
+/* Submete atualização de sensor para despacho pelos managers (Log, Battery,
+ * Propeller, Security). Thread-safe e ISR-safe — pode ser chamada de
+ * qualquer contexto (thread HAL, ISR de timer). */
+void OSSI_Submit_Sensor(uint32_t sensor_id, float value);
 
-        /* Payload para o System Manager */
-        struct {
-            uint32_t sensor_id;
-            float value;
-        } sys_req;
+/* Submete pacote CMD recebido pela rede para despacho pelo CMD_Core.
+ * `buf` é copiado internamente. Thread-safe. */
+void OSSI_Submit_CMD(const uint8_t *buf, size_t len);
 
-        struct {
-            uint32_t thread_id;             // ID único para a thread
-            k_thread_entry_t entry_point;   // Função thread 
-            void *p1;                       // Parâmetros opcionais
-            void *p2;
-            void *p3;
-            int priority;                   // Prioridade da thread
-        } tckec_req;
-
-        
-        uint8_t raw[128]; 
-    } payload;
-} ossi_msg_t;
-
-/* * Declaração das Filas (Queues) expostas para os consumidores.
- * Cada thread consumidora vai dar um k_msgq_get na sua respectiva fila.
- */
-extern struct k_msgq fila_cmd;    //
-extern struct k_msgq fila_tckec;  //
-extern struct k_msgq fila_sys;    //
-extern struct k_msgq fila_nci;    //
-
-/*
- * OSSI_Send: Função central de roteamento do OSSI.
- * Retorna 0 em caso de sucesso ou código de erro negativo.
- */
-int OSSI_Send(ossi_msg_t *msg);
-
-#endif // OSSI_H
+#endif /* OSSI_H */

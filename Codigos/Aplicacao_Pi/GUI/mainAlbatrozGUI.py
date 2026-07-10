@@ -34,6 +34,8 @@ from GUI.HeliceDialog import HeliceDialog
 from GUI.LoadCellDialog import LoadCellDialog
 from GUI.SPMMEnsaioDialog import SPMMEnsaioDialog
 from GUI.ErrorPanelDialog import ErrorPanelDialog
+from GUI.SensorConfigDialog import SensorConfigDialog
+from GUI.InfoDialog import InfoDialog
 
 # Mapeamento de tipos para o struct.unpack (C -> Python)
 TYPE_MAP = {
@@ -443,7 +445,8 @@ class AlbatrozGUI(QMainWindow):
         for act in list(mb.actions()):
             mb.removeAction(act)
 
-        # --- Motor (topo) — só Carregar/Criar (estimativas foram para menu próprio) ---
+        # --- Motor (topo) — Carregar/Criar (a fonte SIBA+SAME do ensaio foi para
+        #     o diálogo de Ensaios SPMM, onde se escolhe a fonte de dados). ---
         self.ui.menuMotor.setTitle("Motor")
         mb.addMenu(self.ui.menuMotor)
 
@@ -466,22 +469,30 @@ class AlbatrozGUI(QMainWindow):
         self.menu_cells.addAction(self.action_calib_load_cell)
         mb.addMenu(self.menu_cells)
 
-        # --- Gerenciador de Placas (topo) ---
-        self.menu_boards = QMenu("Gerenciador de Placas", mb)
-        self.menu_boards.addAction(self.action_board_manager)
-        mb.addMenu(self.menu_boards)
-
-        # --- Diagnóstico (topo) — painel de erros/alarmes ---
+        # --- Opções (topo) — agrupa Configuração de Sensores, Gerenciador de
+        #     Placas, Painel de Erros e a Ajuda num único menu. ---
+        self.action_sensor_config = QAction("Configuração de Sensores", self)
+        self.action_sensor_config.triggered.connect(self.open_sensor_config)
         self.action_error_panel = QAction("Painel de Erros e Alarmes", self)
         self.action_error_panel.triggered.connect(self.open_error_panel)
-        self.menu_diag = QMenu("Diagnóstico", mb)
-        self.menu_diag.addAction(self.action_error_panel)
-        mb.addMenu(self.menu_diag)
+        self.action_info = QAction("Guia do Usuário (Sobre)", self)
+        self.action_info.triggered.connect(self.open_info)
 
-        # --- Ajuda (topo, mantém tema/infos) ---
-        if getattr(self.ui, "menuHelp", None) is not None:
-            self.ui.menuHelp.setTitle("Ajuda")
-            mb.addMenu(self.ui.menuHelp)
+        self.menu_options = QMenu("Opções", mb)
+        self.menu_options.addAction(self.action_sensor_config)
+        self.menu_options.addAction(self.action_board_manager)
+        self.menu_options.addAction(self.action_error_panel)
+        self.menu_options.addSeparator()
+        # A Ajuda do .ui (tema/infos) vira SUBMENU de Opções + o guia do usuário.
+        help_menu = getattr(self.ui, "menuHelp", None)
+        if help_menu is not None:
+            help_menu.setTitle("Ajuda")
+            help_menu.addSeparator()
+            help_menu.addAction(self.action_info)
+            self.menu_options.addMenu(help_menu)
+        else:
+            self.menu_options.addAction(self.action_info)
+        mb.addMenu(self.menu_options)
 
     @Slot(str, bytes, tuple)
     def process_network_data(self, protocol, data, addr):
@@ -532,6 +543,22 @@ class AlbatrozGUI(QMainWindow):
         self._error_panel.show()
         self._error_panel.raise_()
         self._error_panel.activateWindow()
+
+    def open_sensor_config(self):
+        """Abre o diálogo de configuração de sensores (ganho/offset/mín/máx)."""
+        if not hasattr(self, "_sensor_cfg_dlg") or self._sensor_cfg_dlg is None:
+            self._sensor_cfg_dlg = SensorConfigDialog(self, self)
+        self._sensor_cfg_dlg.show()
+        self._sensor_cfg_dlg.raise_()
+        self._sensor_cfg_dlg.activateWindow()
+
+    def open_info(self):
+        """Abre o guia do usuário (Sobre/Ajuda)."""
+        if not hasattr(self, "_info_dlg") or self._info_dlg is None:
+            self._info_dlg = InfoDialog(self)
+        self._info_dlg.show()
+        self._info_dlg.raise_()
+        self._info_dlg.activateWindow()
 
     def _check_error_code(self, protocol, decoded):
         """Decodifica o `error_code` (bitfield) da telemetria e reporta as
