@@ -1,13 +1,15 @@
 """SensorConfigDialog — ajusta ganho, offset e limites (mín/máx) de TODOS os
-sensores da SIBA num só lugar.
+sensores da SIBA e da SAME num só lugar.
 
-Cada célula editável vira um comando `siba set <sensor> <linear|offset|min|max>
-<valor>` (reaproveitando o parser do TinyTerminal). Só as células que o usuário
-EDITAR são enviadas ao clicar em "Aplicar" — assim não se tara/recalibra um
-sensor sem querer.
+Cada célula editável vira um comando `<siba|same> set <sensor> <linear|offset|
+min|max> <valor>` (reaproveitando o parser do TinyTerminal) endereçado à placa
+DONA daquele sensor. Só as células que o usuário EDITAR são enviadas ao clicar
+em "Aplicar" — assim não se tara/recalibra um sensor sem querer.
 
 Limites mín/máx: o firmware guarda em sensor_cfg[] (CMD_Core_prm.h) e os managers
-(Security) reagem quando o valor sai da faixa — ver Communication_Data/errors.py.
+(Security, só na SIBA) reagem quando o valor sai da faixa — ver
+Communication_Data/errors.py. A SAME não tem Security_Manager (ver
+SAME/CLAUDE.md), então lá mín/máx só ficam registrados, sem alarme.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -15,11 +17,17 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 
-# Sensores calibráveis/monitoráveis (soc e rpm não têm ganho/offset próprios).
+# Sensores calibráveis/monitoráveis, por placa (soc e rpm não têm ganho/offset
+# próprios). SAME: V_c fica de fora — o ADC lê 3 fases mas só há calibração p/
+# 2 tensões de linha (VOLTAGE_AB/BC); o firmware reusa a de V_b (BC) também
+# p/ V_c (ver SAME/CLAUDE.md "Calibração de tensão").
 _SENSORS = [
-    "load_cell_0", "load_cell_1", "load_cell_2", "load_cell_3",
-    "load_cell_4", "load_cell_5", "v_batt", "i_batt",
-    "temperature_battery", "air_speed",
+    ("SIBA", "load_cell_0"), ("SIBA", "load_cell_1"), ("SIBA", "load_cell_2"),
+    ("SIBA", "load_cell_3"), ("SIBA", "load_cell_4"), ("SIBA", "load_cell_5"),
+    ("SIBA", "v_batt"), ("SIBA", "i_batt"),
+    ("SIBA", "temperature_battery"), ("SIBA", "air_speed"),
+    ("SAME", "i_a"), ("SAME", "i_b"), ("SAME", "i_c"),
+    ("SAME", "V_a"), ("SAME", "V_b"),
 ]
 
 # Coluna -> (título, sub-ação do CMD)
@@ -46,29 +54,34 @@ class SensorConfigDialog(QDialog):
         self._loading = False
 
     # ------------------------------------------------------------------ #
-    def _friendly(self, var):
-        """Legenda dos gráficos (FX/FY/…) se existir; senão o próprio nome."""
+    def _friendly(self, board, var):
+        """Legenda dos gráficos (FX/FY/…) se existir; senão o próprio nome,
+        prefixado com a placa dona do sensor (SIBA/SAME têm sensores distintos,
+        mas o prefixo deixa claro pra onde cada comando vai)."""
         for info in (self.gui.plot_config.get("plots_mapping", {}) or {}).values():
             for v, leg in (info.get("vars") or {}).items():
                 if v == var and leg:
-                    return f"{leg}  ({var})"
-        return var
+                    return f"{board}: {leg}  ({var})"
+        return f"{board}: {var}"
 
     def _build_ui(self):
         root = QVBoxLayout(self)
 
         info = QLabel(
             "Digite um valor numa célula e clique <b>Aplicar</b> — só as células "
-            "editadas (destacadas) são enviadas.<br>"
+            "editadas (destacadas) são enviadas, cada uma pra placa dona daquele "
+            "sensor (SIBA ou SAME).<br>"
             "⚠ <b>Células de carga</b>: <i>Ganho</i> = calibrar pelo PESO conhecido; "
-            "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta)."
+            "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta).<br>"
+            "⚠ <b>SAME — V_c</b>: não aparece porque o firmware reusa a calibração "
+            "de V_b (só há 2 alvos de tensão de linha pras 3 fases medidas)."
         )
         info.setWordWrap(True)
         root.addWidget(info)
 
         self.table = QTableWidget(len(_SENSORS), len(_COLS))
         self.table.setHorizontalHeaderLabels([c[0] for c in _COLS])
-        self.table.setVerticalHeaderLabels([self._friendly(s) for s in _SENSORS])
+        self.table.setVerticalHeaderLabels([self._friendly(b, s) for b, s in _SENSORS])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QAbstractItemView.AllEditTriggers)
         for r in range(len(_SENSORS)):
@@ -125,20 +138,23 @@ class SensorConfigDialog(QDialog):
             self.lbl_status.setStyleSheet("color: #f0ad4e;")
             self.lbl_status.setText("Nada para aplicar — edite alguma célula primeiro.")
             return
-        # Garante o link SIBA para o TX acontecer.
-        if "SIBA" not in self.gui.eth.workers:
-            self.gui.eth.start_link("SIBA")
+        # Garante o link de cada placa envolvida pra o TX acontecer (só sobe
+        # a(s) que realmente tiver(em) alguma célula pendente).
+        boards_pending = {_SENSORS[r][0] for (r, _c) in self._pending}
+        for board in boards_pending:
+            if board not in self.gui.eth.workers:
+                self.gui.eth.start_link(board)
 
         sent, failed = 0, 0
         for (r, c) in sorted(self._pending):
-            sensor = _SENSORS[r]
+            board, sensor = _SENSORS[r]
             action = _COLS[c][1]
             try:
                 value = float(self.table.item(r, c).text().replace(",", "."))
             except ValueError:
                 failed += 1
                 continue
-            parts = ["siba", "set", sensor, action, f"{value:.6f}"]
+            parts = [board.lower(), "set", sensor, action, f"{value:.6f}"]
             try:
                 self.gui.terminal._handle_hardware_command(parts)
                 sent += 1
