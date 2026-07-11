@@ -1,0 +1,319 @@
+\section{SAME - Sistema de Aquisição do Motor Elétrico}
+\label{sec:same}
+
+O desenvolvimento do Sistema de Aquisição do Motor Elétrico (SAME) teve como
+foco o projeto de um hardware dedicado para medição elétrica e a execução
+embarcada do Observador por Modos Deslizantes (SMO). A seleção de componentes e
+o roteamento da placa de circuito impresso (PCB) foram orientados por três
+critérios metodológicos fundamentais:
+
+\begin{enumerate}
+    \item \textbf{Custo global da solução:} priorizou-se a seleção de
+    componentes com alto grau de integração, reduzindo a necessidade de
+    circuitos de condicionamento externos e minimizando o número de camadas da
+    PCB, o que viabilizou a prototipagem iterativa.
+
+    \item \textbf{Espaço ocupado (\textit{Footprint}):} as restrições de área na
+    bancada exigiram a adoção de componentes de montagem em superfície (SMD) e
+    roteamento de alta densidade. O módulo precisava ser compacto o suficiente
+    para ser posicionado próximo às fases do motor sem interferir no escoamento
+    de ar gerado pela hélice.
+
+    \item \textbf{Disponibilidade de mercado:} a consolidação da lista de
+    materiais (BOM --- \textit{Bill of Materials}) foi atrelada aos estoques
+    ativos de fornecedores e linhas de montagem (PCBA), mitigando o risco de
+    atrasos por escassez de silício ou componentes passivos críticos.
+\end{enumerate}
+
+A cadeia de medição foi dividida em dois caminhos independentes --- corrente e
+tensão de fase ---, cada um projetado para entregar ao conversor
+analógico-digital (ADC) do CH32V307 um sinal na faixa de entrada do periférico,
+preservando a coerência de fase entre os dois caminhos exigida pelo observador
+(\autoref{sec:same_condicionamento}).
+
+
+\subsection{Medição de Tensão e Corrente de Fase}
+\label{sec:same_tensao}
+
+O sistema de aquisição utiliza dois conversores ADC operando em paralelo no CH32V307 com frequência de clock ADC de 14~MHz, conforme Tabela~4-40 do datasheet \cite{ch32v307_datasheet}. Cada módulo opera a taxa máxima de 1~MSps, com ADC1 digitalizando as três tensões de fase e ADC2 capturando as três correntes de fase de forma entrelançada, alcançando aproximadamente 333~kSps por canal. Esta taxa é escolhida para amostrar bem acima da frequência de chaveamento do ESC (16~kHz) e capturar a dinâmica do motor em operação, garantindo que o teorema de amostragem de Nyquist seja satisfeito \cite{oppenheim2009}.
+
+\begin{table}[h]
+\centering
+\caption{Características do ADC 12-bit do CH32V307.}
+\label{tab:adc_specs}
+\begin{tabular}{lccccc}
+\hline
+\textbf{Parâmetro} & \textbf{Símbolo} & \textbf{Min.} & \textbf{Typ.} & \textbf{Máx.} & \textbf{Unidade} \\
+\hline
+Frequência de clock ADC & $f_{ADC}$ & -- & -- & 14 & MHz \\
+Taxa de amostragem & $f_S$ & 0,05 & -- & 1 & MHz \\
+Tensão de referência & $V_{REF+}$ & 2,4 & -- & $V_{DDA}$ & V \\
+Faixa de conversão & $V_{AIN}$ & 0 & -- & $V_{REF+}$ & V \\
+Corrente de referência & $I_{VREF}$ & 160 & 220 & -- & $\mu$A \\
+Corrente de alimentação & $I_{DDA}$ & 480 & 530 & -- & $\mu$A \\
+Impedância de entrada externa & $R_{AIN}$ & -- & -- & 50 & k$\Omega$ \\
+Tempo de calibração & $t_{CAL}$ & -- & 40 & -- & $1/f_{ADC}$ \\
+Tempo de amostragem & $t_s$ & 1,5 & -- & 239,5 & $1/f_{ADC}$ \\
+Tempo total de conversão & $t_{CONV}$ & 14 & -- & 252 & $1/f_{ADC}$ \\
+\hline
+\multicolumn{6}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
+\end{tabular}
+\end{table}
+
+Com clock de 14~MHz, o tempo total de conversão varia entre 1~$\mu$s (14 ciclos) e 18~$\mu$s (252 ciclos). Como o período de PWM em 16~kHz é de 62,5~$\mu$s e cada ADC realiza apenas 3 conversões por período, há folga suficiente para adotar tempo de amostragem $t_s$ elevado, priorizando o assentamento do sinal em detrimento da velocidade bruta.
+
+A impedância de entrada externa $R_{AIN}$ deve ser limitada para garantir que o erro de amostragem permaneça abaixo de 1/4 LSB, conforme a \autoref{eq:rain_max} \cite{ch32v307_datasheet}.
+
+\begin{equation}
+R_{AIN} < \frac{t_s}{f_{ADC} \cdot C_{ADC} \cdot \ln(2^{N+2})} - R_{ADC}
+\label{eq:rain_max}
+\end{equation}
+
+onde $N = 12$~bits, $C_{ADC} = 8$~pF e $R_{ADC} \approx 0{,}8$~k$\Omega$. Esta relação é determinante para o projeto do divisor de tensão: a impedância equivalente de Thévenin vista pela entrada do ADC ($R_1 \parallel R_2$) deve respeitar os limites da Tabela~\ref{tab:rain_max}. Adotando $t_s = 55{,}5$~ciclos (3,96~$\mu$s), $R_{AIN}$ pode chegar a 50~k$\Omega$, relaxando a escolha dos resistores; já com $t_s = 13{,}5$~ciclos, o divisor precisa apresentar impedância abaixo de 11,4~k$\Omega$ sob pena de erro de conversão.
+
+\begin{table}[h]
+\centering
+\caption{Impedância máxima de entrada externa em função do tempo de amostragem.}
+\label{tab:rain_max}
+\begin{tabular}{ccc}
+\hline
+\textbf{$t_s$ (ciclos)} & \textbf{$t_s$ ($\mu$s)} & \textbf{$R_{AIN}^{\text{máx}}$ (k$\Omega$)} \\
+\hline
+1,5 & 0,11 & 0,4 \\
+7,5 & 0,54 & 5,9 \\
+13,5 & 0,96 & 11,4 \\
+28,5 & 2,04 & 25,2 \\
+41,5 & 2,96 & 37,2 \\
+55,5 & 3,96 & 50,0 \\
+\hline
+\multicolumn{3}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
+\end{tabular}
+\end{table}
+
+Os erros inerentes ao ADC de 12 bits são especificados na Tabela~\ref{tab:adc_error}. O offset de ±2~LSB é tipicamente removível via calibração, enquanto as não-linearidades diferenciais e integrais representam limitações do circuito integrado. Para $R_{AIN} < 10$~k$\Omega$, o erro total esperado é de aproximadamente ±4~LSB em condição de pior caso.
+
+\begin{table}[h]
+\centering
+\caption{Erros de conversão do ADC 12-bit em operação típica.}
+\label{tab:adc_error}
+\begin{tabular}{lccc}
+\hline
+\textbf{Parâmetro} & \textbf{Símbolo} & \textbf{Typ.} & \textbf{Máx.} \\
+\hline
+Erro de offset & $E_O$ & 0 & ±2 LSB \\
+Não-linearidade diferencial & $E_D$ & -- & ±3 LSB \\
+Não-linearidade integral & $E_L$ & -- & ±4 LSB \\
+\hline
+\multicolumn{4}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
+\end{tabular}
+\end{table}
+
+\subsubsection{Condicionamento de Sinal}
+\label{sec:same_condicionamento}
+
+A tensão de barramento (até 25~V em bateria 6S) é reduzida através de um divisor resistivo para cair na faixa de entrada do ADC (0--3,3 V), conforme a Equação~\eqref{eq:divisor_tensao} \cite{analog_signal_conditioning}:
+
+\begin{equation}
+V_{ADC} = V_{fase} \cdot \frac{R_2}{R_1 + R_2}
+\label{eq:divisor_tensao}
+\end{equation}
+
+Um filtro RC antialiasing de primeira ordem é posicionado na saída do divisor com frequência de corte:
+
+\begin{equation}
+f_c = \frac{1}{2\pi RC}
+\label{eq:fc_antialiasing}
+\end{equation}
+
+escolhida em torno de 40--50~kHz. O objetivo é atenuar componentes de frequência acima da frequência de Nyquist ($f_{\text{Ny}} = f_s / 2 \approx 56~\text{kHz}$) que não contêm informação útil sobre o motor mas carregam ruído de chaveamento (16~kHz e seus harmônicos). A atenuação de ~40 dB/década do filtro de primeira ordem elimina efetivamente o ruído PWM mantendo a banda passante dinâmica do motor intacta, um compromisso clássico em acionamentos de potência \cite{franco_opamps}.
+
+A corrente de fase é medida por sensor Hall, que fornece uma tensão proporcional à corrente \cite{allegro_hall_sensors}:
+
+\begin{equation}
+V_{out} = V_{ref} + S_H \cdot I_{fase}
+\label{eq:hall_corrente}
+\end{equation}
+
+onde $V_{ref}$ é o nível de repouso e $S_H$ é a sensibilidade em mV/A. A saída do sensor é acoplada diferencialmente ao ADC2 para rejeição de ruído de modo comum dos cabos de potência, uma prática padrão em acionamentos trifásicos \cite{bldc_control}.
+
+Na Figura~\ref{fig:sampling_adc}, os pontos vermelhos representam as amostras discretas capturadas pelo ADC, cujo código de saída varia entre 0 e $2^{12}-1 = 4095$. As linhas verticais (\textit{stems}) evidenciam a natureza discreta da amostragem: a cada instante de conversão, o sinal analógico contínuo (linha azul) é quantizado em um valor digital inteiro.
+
+\begin{figure}[h]
+\centering
+\caption{Ilustração da amostragem dos ADCs.}
+\label{fig:sampling_adc}
+\begin{tikzpicture}[scale=1.2, thick]
+
+  % Parametros: sinal centrado em 2048, amplitude 1600, faixa 0..4095
+  % Eixo Y normalizado: 0 -> 0 ; 4095 -> 4 (escala grafica)
+  % valor_grafico = (codigo/4095)*4
+
+  % Eixos
+  \draw[->] (0, 0) -- (12, 0) node[below right, font=\small] {Tempo};
+  \draw[->] (0, 0) -- (0, 4.6) node[left, font=\small] {};
+
+  % Marcas do eixo Y (0, 2048, 4095)
+  \foreach \yval/\label in {0/0, 2/2048, 4/4095} {
+    \draw (-0.1, \yval) -- (0.1, \yval);
+    \node[left, font=\tiny] at (-0.15, \yval) {\label};
+  }
+
+  % Linha tracejada no meio de escala (2048)
+  \draw[gray, dashed, thin] (0, 2) -- (12, 2);
+
+  % Sinal contínuo original (referência, cinza claro)
+  \draw[blue!30, thick, smooth, samples=400, domain=0:11.5]
+    plot (\x, {2 + 1.6*sin((\x) * 60)});
+
+  % Stems (linhas verticais até cada amostra) + pontos vermelhos
+  \foreach \t in {0.25, 0.75, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.25, 8.75, 9.25, 9.75, 10.25, 10.75} {
+    \draw[red, thin] (\t, 0) -- (\t, {2 + 1.6*sin((\t) * 60)});
+    \filldraw[red, mark size=1.5pt] (\t, {2 + 1.6*sin((\t) * 60)}) circle (0.08);
+  }
+
+\end{tikzpicture}
+
+{\small \textit{Fonte: Autor (2026)}}
+\end{figure}
+
+
+
+
+\begin{equation}
+\text{LSB} = \frac{3.3~\text{V}}{2^{12}} \approx 0.805~\text{mV}
+\label{eq:lsb}
+\end{equation}
+
+A resolução em unidades físicas (tensão ou corrente) é determinada pela relação de divisão do resistor e pela sensibilidade do sensor Hall, respectivamente. Entretanto, a resolução nominal de 0,805~mV é degradada pelos erros da Tabela~\ref{tab:adc_error}: com não-linearidade integral de até ±4~LSB, a incerteza efetiva de conversão sobe para $\approx 4 \times 0{,}805 = 3{,}2$~mV em pior caso. O erro de offset (±2~LSB) é compensado por calibração via rotina interna do CH32V307 (tempo $t_{CAL} = 40$~ciclos).
+
+\subsection{Arquitetura de \textit{Firmware} do Observador}
+\label{sec:same_firmware}
+
+A SAME segue as mesmas três camadas lógicas da SIBA
+(\autoref{sec:padronizacao_placas}), com os módulos de cada uma resumidos na
+\autoref{fig:blocos_same}: a camada \textit{Vcore - OS} (OSSI, NCI, HAL,
+CMD\_Core) é idêntica entre as duas placas, com a mesma fila de trabalho
+única do OSSI mediando a passagem para a camada \textit{System}
+(\autoref{fig:arquitetura_fila_unica}); essa camada \textit{System} se
+reduz a dois gerenciadores de domínio --- o \textit{Observer Manager}
+(SMO + PLL) e o \textit{Log Manager} (telemetria) --- já que a SAME não
+gerencia bateria, hélice ou segurança; e a camada \textit{Application} não
+expõe \textit{shell} de diagnóstico via UART como a SIBA --- todo ajuste de
+parâmetro é feito exclusivamente pelo protocolo de rede. Diferente da SIBA
+(\autoref{fig:blocos_siba}), porém, o HAL aqui chama o \textit{Observer
+Manager} diretamente a cada conversão do ADC, sem passar pelo OSSI --- motivo
+detalhado a seguir e ilustrado na \autoref{fig:sequencia_same}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Camadas do \textit{firmware} da SAME e módulos de cada uma}
+    \label{fig:blocos_same}
+    \begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, rounded corners, minimum width=9.2cm, minimum height=1.7cm},
+        mod/.style={draw, rounded corners, align=center, minimum height=0.7cm, minimum width=1.9cm, fill=white},
+        title/.style={font=\bfseries\small},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[layer, fill=black!5]  (app) at (0,4.15) {};
+        \node[title] at (app.north)  [yshift=-0.3cm] {Application};
+        \node[mod] (main) at (0,3.85) {\texttt{main.c}};
+
+        \node[layer, fill=black!10] (sys) at (0,2.1) {};
+        \node[title] at (sys.north)  [yshift=-0.3cm] {System};
+        \node[mod] (obs) at (-1.6,1.8) {\textit{Observer}\\\textit{Manager}};
+        \node[mod] (log) at (1.6,1.8)  {\textit{Log}\\\textit{Manager}};
+
+        \node[layer, fill=black!15] (os) at (0,-0.15) {};
+        \node[title] at (os.north)  [yshift=-0.3cm] {Vcore - OS};
+        \node[mod] (ossi) at (-3.2,-0.45) {OSSI};
+        \node[mod] (nci)  at (-1.05,-0.45) {NCI};
+        \node[mod] (hal)  at (1.05,-0.45) {HAL};
+        \node[mod] (cmd)  at (3.2,-0.45) {CMD\_Core};
+
+        \draw[arrow] (app.south) -- (sys.north);
+        \draw[arrow] (sys.south) -- (os.north) node[midway, right]{via OSSI};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Diferente da SIBA, a SAME concentra toda a sua fonte de dados em um único
+evento --- a conversão simultânea dos dois ADCs --- e por isso seu
+\textit{firmware} emprega apenas duas \textit{threads} bloqueantes (a
+aquisição dos ADCs e a recepção de rede), além da fila de trabalho
+\texttt{same\_wq} comum ao padrão descrito na
+\autoref{sec:padronizacao_placas}. A diferença metodológica mais relevante
+frente a esse padrão genérico (\autoref{fig:arquitetura_fila_unica}) é que o
+passo do observador \textbf{não} é delegado à fila de trabalho: ele executa
+diretamente dentro da \textit{thread} de aquisição (HAL), imediatamente após
+cada conversão dos ADCs, como resume a \autoref{fig:sequencia_same}. Essa
+escolha decorre da natureza do SMO como um observador discretizado no tempo
+(\autoref{sec:param_smo}): cada atualização de seu estado interno pressupõe
+um intervalo de amostragem $T_s$ constante, que ficaria comprometido se o
+passo tivesse que esperar sua vez numa fila compartilhada com o despacho de
+comandos e o envio de telemetria.
+
+\begin{figure}[H]
+    \centering
+    \caption{Sequência de processamento da SAME, da aquisição à telemetria}
+    \label{fig:sequencia_same}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        actor/.style={draw, rounded corners, align=center, minimum width=2.1cm, minimum height=0.7cm},
+        lifeline/.style={dashed, gray},
+        msg/.style={-{Latex}, thick}
+    ]
+        \node[actor] (hal) at (0,0)   {HAL};
+        \node[actor] (obs) at (2.3,0) {Observador};
+        \node[actor] (wq)  at (4.6,0) {\texttt{same\_wq}\\\scriptsize(fila única)};
+        \node[actor] (nci) at (6.9,0) {NCI};
+        \node[actor] (pc)  at (9.2,0) {PC};
+
+        \foreach \n in {hal,obs,wq,nci,pc}
+            \draw[lifeline] (\n.south) -- ++(0,-9.4);
+
+        \draw[msg] (0,-1.0)  -- (2.3,-1.0) node[midway, above]{Clarke + passo SMO/PLL};
+        \draw[msg] (2.3,-2.0) -- (4.6,-2.0) node[midway, above]{publica (decimado)};
+        \node[gray] at (4.6,-2.9) {\textit{temporizador 100 ms}};
+        \draw[msg] (4.6,-3.8) -- (6.9,-3.8) node[midway, above]{\texttt{TELEMETRY\_LOG}};
+        \draw[msg] (6.9,-4.8) -- (9.2,-4.8) node[midway, above]{UDP 4445};
+
+        \draw[msg] (9.2,-6.2) -- (6.9,-6.2) node[midway, above]{UDP 4444, \texttt{CMD}};
+        \draw[msg] (6.9,-7.2) -- (4.6,-7.2) node[midway, above]{\textit{dispatch}};
+        \draw[msg] (4.6,-8.2) -- (2.3,-8.2) node[midway, above]{marca reconfig pendente};
+        \draw[msg] (0,-9.0) -- (2.3,-9.0) node[midway, above]{aplica reconfig};
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O resultado de cada passo (rotação, torque e as demais grandezas da
+telemetria) só é publicado ao \texttt{same\_wq} de tempos em tempos --- não a
+cada amostra --- para não sobrecarregar a fila; diferente da SIBA, aqui não
+há gerenciador de domínio a acionar, o \texttt{same\_wq} apenas copia o valor
+para o pacote de telemetria e, a cada 100~ms, um temporizador aciona sua
+transmissão pelo NCI. Um comando de rede que altera um parâmetro do
+observador (ganho, resistência, indutância) percorre o caminho inverso, mas
+não modifica o estado interno diretamente ao ser recebido: ele apenas marca
+um sinalizador de
+reconfiguração pendente. É a própria \textit{thread} de aquisição, no topo de
+cada iteração, que verifica esse
+sinalizador e, havendo alteração pendente, recalcula as constantes de
+discretização e \textbf{zera todo o estado interno} do observador (correntes e
+BEMF estimadas, integrador do PLL). Zerar o estado evita que o observador
+continue acumulando, junto de constantes novas, um regime transitório
+calculado com as constantes antigas --- o que produziria um transitório
+artificial na estimativa, passível de ser confundido com um evento real do
+motor.
+
+O comando (\texttt{CMD}) da SAME segue o mesmo formato genérico da
+\autoref{fig:yaml_example_config}, ajustando calibração das grandezas
+elétricas, parâmetros físicos do motor (pares de polos, resistência,
+indutância, $K_v$) e os três ganhos do observador na forma invariante ao
+passo $\Gamma_{s1}$, $\Gamma_{s2}$, $\Gamma_t$ (\autoref{sec:param_smo}). O
+pacote de telemetria devolve as seis grandezas elétricas medidas, suas
+componentes $\alpha\beta$ e as três saídas do observador --- rotação, torque
+eletromagnético e torque na hélice --- a 10~Hz.

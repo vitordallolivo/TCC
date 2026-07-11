@@ -1,0 +1,175 @@
+\section{SIBA - Sistema Integrado da Bancada Aerodinâmica}
+\label{sec:siba}
+O SIBA atua como o nó central de aquisição da bancada, sendo responsável pela interface com os sensores aerodinâmicos, gestão da energia e coordenação da rede de dados. Sua metodologia de desenvolvimento foi dividida em infraestrutura de \textit{hardware} e lógica de controle embarcada.
+
+\subsection{\textit{Hardware}}
+
+A SIBA é construída em torno do microcontrolador CH32V307VCT6
+(\autoref{sec:padronizacao_placas}), com a distribuição de periféricos
+apresentada na \autoref{tab:pinagem_siba}. O ADC1 do dispositivo só alcança
+fisicamente os pinos PA0--PA7 --- limitação do multiplexador analógico interno
+do chip, não de configuração --- de modo que as seis células de carga foram
+alocadas na Porta E, deixando a Porta A livre para os canais analógicos.
+
+\begin{table}[h]
+\centering
+\caption{Distribuição de periféricos da SIBA no CH32V307VCT6.}
+\label{tab:pinagem_siba}
+\begin{tabular}{lll}
+\hline
+\textbf{Pino} & \textbf{Periférico} & \textbf{Função} \\
+\hline
+PA0 / PA1 / PA2 & ADC1, canais 0/1/2 & Tensão, corrente e temperatura da bateria \\
+PA6 & ADC1, canal 6 & Velocidade do ar --- tubo de Pitot \\
+PA9 / PA10 & USART1 TX / RX & Console e \textit{shell} de diagnóstico (115200 8N1) \\
+PB0 & TIM3, canal 3 (captura) & Contador de pulsos de RPM \\
+PB6 & TIM4, canal 1 (PWM) & Sinal do ESC (50 Hz, 1000--2000 µs) \\
+PB8 / PB9 & I2C1 SCL / SDA & Barramento de uso geral (100 kHz) \\
+PB15 & GPIO saída & Relé de potência da bateria \\
+PC6--PC9 & Ethernet (MAC interno) & Transceptor Ethernet embutido no chip \\
+PE2--PE13 & GPIO saída/entrada & Clock e dado das 6 células de carga (HX711) \\
+\hline
+\end{tabular}
+
+\vspace{0.2cm}
+\small Fonte: Autor (2026)
+\end{table}
+
+\subsection{\textit{Firmware}}
+
+A \autoref{fig:blocos_siba} situa as camadas da \autoref{sec:padronizacao_placas}
+dentro do \textit{firmware} da SIBA. A passagem de \textit{System} para
+\textit{Vcore - OS} é sempre mediada pelo OSSI, cujo mecanismo de fila de
+trabalho única já foi detalhado na \autoref{fig:arquitetura_fila_unica}. O
+\textit{shell} de diagnóstico (\texttt{Test\_Shell.c}) é a única exceção a
+esse barramento único: por rodar já dentro do \textit{firmware} e não
+depender da rede, ele fala direto com os gerenciadores de domínio, evitando
+serializar e desserializar um comando que nunca sai da placa.
+
+\begin{figure}[H]
+    \centering
+    \caption{Camadas do \textit{firmware} da SIBA e módulos de cada uma}
+    \label{fig:blocos_siba}
+    \begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, rounded corners, minimum width=9.2cm, minimum height=1.7cm},
+        mod/.style={draw, rounded corners, align=center, minimum height=0.7cm, minimum width=1.9cm, fill=white},
+        title/.style={font=\bfseries\small},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[layer, fill=black!5]  (app) at (0,4.15) {};
+        \node[title] at (app.north)  [yshift=-0.3cm] {Application};
+        \node[mod] (main)  at (-1.5,3.85) {\texttt{main.c}};
+        \node[mod] (shell) at (1.5,3.85)  {\texttt{Test\_Shell.c}};
+
+        \node[layer, fill=black!10] (sys) at (0,2.1) {};
+        \node[title] at (sys.north)  [yshift=-0.3cm] {System};
+        \node[mod] (bat)  at (-3.2,1.8) {\textit{Battery}\\\textit{Manager}};
+        \node[mod] (prop) at (-1.05,1.8) {\textit{Propeller}\\\textit{Manager}};
+        \node[mod] (sec)  at (1.05,1.8) {\textit{Security}\\\textit{Manager}};
+        \node[mod] (log)  at (3.2,1.8) {\textit{Log}\\\textit{Manager}};
+
+        \node[layer, fill=black!15] (os) at (0,-0.15) {};
+        \node[title] at (os.north)  [yshift=-0.3cm] {Vcore - OS};
+        \node[mod] (ossi) at (-3.2,-0.45) {OSSI};
+        \node[mod] (nci)  at (-1.05,-0.45) {NCI};
+        \node[mod] (hal)  at (1.05,-0.45) {HAL};
+        \node[mod] (cmd)  at (3.2,-0.45) {CMD\_Core};
+
+        \draw[arrow] (app.south) -- (sys.north);
+        \draw[arrow] (sys.south) -- (os.north) node[midway, right]{via OSSI};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A camada \textit{System} concentra a lógica de negócios do sistema --- os
+gerenciadores de domínio listados a seguir, sem nenhuma \textit{thread}
+própria: eles são chamados diretamente pela função de despacho da fila de
+trabalho única do OSSI (\autoref{sec:padronizacao_placas}), nunca ao mesmo
+tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição desses gerenciadores:
+
+\begin{itemize}
+    \item \textbf{\textit{Propeller Manager}:} Gerencia os parâmetros da hélice, como a medição de RPM (utilizando o modo \textit{Input Capture} --- captura por temporizador --- dos temporizadores em \textit{hardware} puro) e o cálculo de tração via célula de carga.
+    \item \textbf{\textit{Battery Manager}:} Realiza o monitoramento da interface de alimentação, processando dados de tensão e corrente para estimativa de potência de entrada.
+    \item \textbf{\textit{Security Manager}:} Monitora continuamente os limites de operação (como sobrecorrente ou temperaturas críticas), garantindo o desligamento ou limitação de potência em situações de risco.
+    \item \textbf{\textit{Log Manager}:} Responsável pela telemetria do sistema. Emprega a técnica de agregação de dados (\textit{batching}) para empacotar respostas de comandos e leituras de sensores em um único vetor, otimizando o uso da banda de rede ao enviar os dados de volta para a estação de controle.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \caption{Diagrama de blocos do \textit{System}}
+    \includegraphics[width=0.6\linewidth]{Textuais/Imgs/Metodologia/SystemManager.png}
+    \label{fig:Metodologia_SystemManager_Siba}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Aplicando o padrão de fila de trabalho única descrito na
+\autoref{sec:padronizacao_placas} (\autoref{fig:arquitetura_fila_unica}), a
+SIBA implementa apenas três \textit{threads} que de fato bloqueiam esperando
+\textit{hardware} ou rede --- a aquisição do ADC, o \textit{bit-banging} das
+células de carga e a recepção UDP ---, todas com prioridade Zephyr numérica
+mais baixa (menos precedência) que a fila de trabalho \texttt{siba\_wq}. A
+\autoref{fig:sequencia_siba} resume os dois caminhos que convergem nessa fila
+--- um sensor lido virando telemetria, e um comando recebido virando ação ---
+deixando explícito que os dois nunca rodam ao mesmo tempo.
+
+\begin{figure}[H]
+    \centering
+    \caption{Sequência de processamento de um sensor e de um comando na SIBA}
+    \label{fig:sequencia_siba}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        actor/.style={draw, rounded corners, align=center, minimum width=2.1cm, minimum height=0.7cm},
+        lifeline/.style={dashed, gray},
+        msg/.style={-{Latex}, thick}
+    ]
+        \node[actor] (hal) at (0,0)    {HAL};
+        \node[actor] (q)   at (2.3,0)  {Fila};
+        \node[actor] (wq)  at (4.6,0)  {\texttt{siba\_wq}\\\scriptsize(fila única)};
+        \node[actor] (cmd) at (6.9,0)  {CMD\_Core};
+        \node[actor] (mg)  at (9.2,0)  {Gerenciadores};
+        \node[actor] (nci) at (11.5,0) {NCI};
+        \node[actor] (pc)  at (13.8,0) {PC};
+
+        \foreach \n in {hal,q,wq,cmd,mg,nci,pc}
+            \draw[lifeline] (\n.south) -- ++(0,-12.2);
+
+        \draw[msg] (0,-1.0)  -- (2.3,-1.0)  node[midway, above]{\texttt{Submit sensor}};
+        \draw[msg] (2.3,-2.0) -- (4.6,-2.0) node[midway, above]{\textit{dispatch}};
+        \draw[msg] (4.6,-3.0) -- (9.2,-3.0) node[midway, above]{Log, Sec, Batt, Prop};
+        \node[gray] at (9.2,-4.0) {\textit{temporizador 100 ms}};
+        \draw[msg] (9.2,-5.0) -- (11.5,-5.0) node[midway, above]{\texttt{TELEMETRY\_LOG}};
+        \draw[msg] (11.5,-6.0) -- (13.8,-6.0) node[midway, above]{UDP 5555};
+
+        \draw[msg] (13.8,-7.4) -- (11.5,-7.4) node[midway, above]{UDP 5000, \texttt{CMD}};
+        \draw[msg] (11.5,-8.4) -- (2.3,-8.4)  node[midway, above]{\texttt{Submit CMD}};
+        \draw[msg] (2.3,-9.4) -- (4.6,-9.4)   node[midway, above]{\textit{dispatch}};
+        \draw[msg] (4.6,-10.4) -- (6.9,-10.4) node[midway, above]{\texttt{CMD\_Core\_Dispatch}};
+        \draw[msg] (6.9,-11.3) -- (0,-11.3)   node[midway, above, font=\tiny]{ação direta (ESC, calibração)};
+        \draw[msg] (6.9,-12.0) -- (9.2,-12.0) node[midway, above, font=\tiny]{ação via gerenciador};
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
+\end{figure}
+
+No caminho do sensor, o \textit{Log Manager} e o \textit{Security Manager}
+são chamados \textbf{sempre}, enquanto o \textit{Battery Manager} e o
+\textit{Propeller Manager} só são chamados quando o valor lido pertence a
+eles (tensão/corrente/temperatura da bateria, ou corrente do motor/célula de
+carga, respectivamente).
+
+O comando (\texttt{CMD}) segue o formato genérico apresentado na
+\autoref{fig:yaml_example_config}, com o campo \texttt{function} selecionando
+entre parada de emergência, ajuste de calibração de sensor, solicitação de
+\textit{throttle} (limitada pelo \textit{Propeller Manager}) e ajuste de
+parâmetros de bateria. Em sentido inverso, o pacote de telemetria concentra
+todas as condições de alarme --- SOC baixo, sobrecorrente, temperatura
+excessiva --- em um único campo de 32 bits com um bit por condição, evitando a
+necessidade de um campo booleano dedicado a cada novo alarme criado ao longo
+do desenvolvimento.
+
+Por fim, a camada de \textbf{\textit{Application}} opera isolada no \textit{User Space} (espaço de usuário). No ambiente do RTOS \textit{Zephyr} executado na arquitetura RISC-V, este isolamento é garantido por \textit{hardware} através da unidade de Proteção de Memória Física (PMP - \textit{Physical Memory Protection}). Essa restrição de níveis de privilégio assegura que a Aplicação não possua acesso direto aos registradores físicos ou aos endereços de memória restritos das camadas \textit{System} e \textit{Vcore - OS}. Qualquer interação ou requisição para as camadas inferiores ocorre estritamente de forma segura e controlada através do barramento central de comunicação (OSSI), o que garante que eventuais falhas na camada de aplicação não comprometam a estabilidade do núcleo do sistema.

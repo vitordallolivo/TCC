@@ -1,0 +1,285 @@
+\section{Interface de Usuário e de Comunicação}
+
+A comunicação do sistema é realizada via rede Ethernet estruturada com o auxílio de um \textit{switch}, conforme ilustrado na \autoref{fig:arquitetura_hardware}. A padronização do método de transmissão baseia-se no uso de endereçamento IP estático para as placas de aquisição e controle, o que simplifica a identificação dos dispositivos na rede e a integração com a interface. O protocolo adotado para a troca de pacotes é o UDP (\textit{User Datagram Protocol}), escolhido por sua baixa latência e menor sobrecarga de cabeçalho, características fundamentais para o monitoramento de telemetria em tempo real.
+
+\begin{figure}[htbp]
+    \centering
+    \caption{Diagrama de Arquitetura de Comunicação e \textit{hardware}.}
+    \resizebox{0.9\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance=1.5cm and 2cm,
+        font=\sffamily,
+        % Estilos das caixas principais
+        box/.style={draw=black, thick, rounded corners, align=center, fill=none},
+        % Estilos das caixas internas do Computador
+        innerbox/.style={draw=black, thick, rounded corners, align=center, minimum height=1.2cm, fill=none},
+        % Estilo das setas duplas
+        arrow/.style={<->, >=stealth, thick, draw=black}
+    ]
+
+        % ==========================================
+        % LADO ESQUERDO: SIBA e SAME
+        % ==========================================
+        \node[box, text width=4cm, minimum height=2.8cm] (siba) {
+            \textbf{SIBA}\\[0.3cm]
+            Monitoramento\\da Bancada e\\Bateria
+        };
+
+        \node[box, text width=4cm, minimum height=2.8cm, below=0.5cm of siba] (same) {
+            \textbf{SAME}\\[0.3cm]
+            Monitoramento\\do motor
+        };
+
+        % ==========================================
+        % CENTRO: SWITCH DE REDE
+        % ==========================================
+        % Pega o ponto central entre SIBA e SAME para alinhar o Switch
+        \path (siba) -- (same) coordinate[midway] (midLeft);
+
+        \node[box, right=3cm of midLeft, minimum height=6.1cm, minimum width=1.0cm] (switch) {
+            \rotatebox{90}{\textbf{SWITCH DE REDE}}
+        };
+
+        % ==========================================
+        % LADO DIREITO: COMPUTADOR PYTHON E NÓS INTERNOS
+        % ==========================================
+        % Título do PC
+        \node[right=2.5cm of switch, yshift=2cm, align=center, font=\sffamily\Large\bfseries] (pctitle) {Computador};
+
+        % Bloco Observador
+        \node[innerbox, text width=5cm, below=0.8cm of pctitle] (obs) {Interface de Usuário};
+
+        % Blocos Plot, CSV, Terminal (Centralizados pelo CSV)
+        \node[innerbox, minimum width=1.5cm, below=0.8cm of obs] (csv) {CSV};
+        \node[innerbox, minimum width=1.5cm, left=0.3cm of csv] (plot) {Plot};
+        \node[innerbox, minimum width=1.5cm, right=0.3cm of csv] (Terminal) {Terminal};
+
+        % Caixa externa que engloba tudo do Computador
+        \node[draw=black, thick, rounded corners, inner sep=0.6cm, fit=(pctitle) (obs) (plot) (csv) (Terminal)] (pc) {};
+
+        % ==========================================
+        % CONEXÕES (SETAS)
+        % ==========================================
+        % Seta SIBA <-> Switch (alinhada com o meio da SIBA)
+        \draw[arrow] (siba.east) -- (switch.west |- siba.east);
+
+        % Seta SAME <-> Switch (alinhada com o meio da SAME)
+        \draw[arrow] (same.east) -- (switch.west |- same.east);
+
+        % Seta Switch <-> Computador (alinhada com o meio do Switch)
+        \draw[arrow] (switch.east) -- (pc.west |- switch.east);
+
+    \end{tikzpicture}
+    }
+    \label{fig:arquitetura_hardware}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Para evitar o congelamento da interface durante a recepção de dados em alta
+frequência, a aplicação de PC divide suas responsabilidades em quatro camadas
+com função única cada, apresentadas na \autoref{fig:gui_metodologia} e
+detalhadas a seguir.
+
+\begin{figure}[H]
+    \centering
+    \caption{Camadas de responsabilidade única da aplicação de supervisão}
+    \label{fig:gui_metodologia}
+    \begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, rounded corners, minimum width=6cm, minimum height=1cm, align=center}
+    ]
+        \node[layer, fill=black!5] (apresentacao) {\textbf{Apresentação}};
+        \node[layer, below=0.8cm of apresentacao, fill=black!10] (servico) {\textbf{Serviço}};
+        \node[layer, below=0.8cm of servico, fill=black!15] (dominio) {\textbf{Domínio}};
+        \node[layer, below=0.8cm of dominio, fill=black!20] (transporte) {\textbf{Transporte}};
+
+        \draw[<->, thick] (apresentacao.south) -- (servico.north);
+        \draw[<->, thick] (servico.south) -- (dominio.north);
+        \draw[<->, thick] (dominio.south) -- (transporte.north);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A camada de \textbf{Transporte} define um contrato único de \textit{thread} de
+entrada/saída, implementado de forma distinta para cada protocolo (UDP
+estruturado na SIBA/SAME, Telnet + UDP na bancada simplificada usada para os
+ensaios mecânicos --- \autoref{sec:atrito_viscoso}); a de \textbf{Domínio}
+concentra funções puras --- sem rede, sem \textit{thread}, sem estado global ---
+que traduzem \textit{bytes} e arquivos YAML em valores com significado físico
+(codificação de pacotes, perfis de motor, transformadas de Clarke/Park); a de
+\textbf{Serviço} orquestra o ciclo de vida das conexões e a execução dos
+\textit{scripts} de estimação em segundo plano; e a de \textbf{Apresentação}
+contém a janela principal, o terminal embutido e os diálogos de calibração.
+Com essa divisão, quem gerencia uma conexão não precisa saber se está falando
+com uma placa por UDP ou por Telnet --- a implementação concreta de cada
+protocolo cuida disso isoladamente, e um pacote recebido dispara eventos
+(\textit{callbacks}) que atualizam os \textit{buffers} visuais e os registros
+de \textit{log} sem bloquear a interface gráfica.
+
+Para viabilizar a instrumentação e o controle da bancada, foi desenvolvida uma Interface de Operação e Supervisão utilizando o ecossistema \textit{PyQt}, integrando a ferramenta de \textit{design} gráfico \textit{Qt Designer} à linguagem \textit{Python}. A interface foi projetada para atuar como um centro de controle unificado, cumprindo os seguintes requisitos operacionais essenciais:
+
+\begin{itemize}
+    \item \textbf{Monitoramento em Tempo Real:} Visualização dinâmica de variáveis críticas para o diagnóstico imediato do comportamento dos motores e sensores;
+    \item \textbf{Parametrização Interativa:} Capacidade de ajuste dinâmico dos parâmetros de controle das placas de processamento durante a operação, sem a necessidade de interrupção ou de novos \textit{uploads} de código;
+    \item \textbf{Otimização do Desenvolvimento:} Fornecimento de um ambiente de abstração que simplifique a interação com os diversos nós (\textit{boards}) do sistema, acelerando os processos de teste e validação de \textit{hardware}.
+\end{itemize}
+
+A barra de menus organiza essas funcionalidades por tarefa, conforme a
+\autoref{fig:menu_gui}: o menu \textbf{Motor} carrega ou cria perfis do motor
+sob ensaio; \textbf{Estimativas} agrupa os três procedimentos de ajuste
+descritos ao longo deste capítulo (ganhos do SMO, \autoref{sec:param_smo};
+coeficiente da hélice; e os ensaios mecânicos da bancada simplificada,
+\autoref{sec:atrito_viscoso}); \textbf{Bateria} e \textbf{Células de Carga}
+concentram o monitoramento e a calibração desses sensores da SIBA; e
+\textbf{Opções} reúne as telas de diagnóstico (configuração de sensores,
+gerenciador de placas, painel de erros). Um combo à parte, fora da barra de
+menus, seleciona o Modo de Operação (\texttt{SPMM}/\texttt{SIBA}/
+\texttt{SAME}/\texttt{SIBA+SAME}), que decide quais placas se conectam e quais
+gráficos ficam visíveis na tela principal.
+
+\begin{figure}[H]
+    \centering
+    \caption{Estrutura da barra de menus da aplicação de supervisão}
+    \label{fig:menu_gui}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=0.7cm, minimum width=1.7cm, text width=1.5cm},
+        arrow/.style={-{Latex}}
+    ]
+        % folhas (nivel 2)
+        \node[box] (carregar) at (0,-1.4)    {Carregar};
+        \node[box] (criar)    at (1.9,-1.4)  {Criar};
+        \node[box] (smo)      at (3.8,-1.4)  {Ganhos SMO};
+        \node[box] (helice)   at (5.7,-1.4)  {Hélice};
+        \node[box] (ensaios)  at (7.6,-1.4)  {Ensaios mec.};
+        \node[box] (calibrar) at (11.4,-1.4) {Calibrar};
+        \node[box] (sensores) at (13.3,-1.4) {Sensores};
+        \node[box] (placas)   at (15.2,-1.4) {Placas};
+        \node[box] (erros)    at (17.1,-1.4) {Erros};
+
+        % nivel 1
+        \node[box] (motor) at (0.95,0)  {Motor};
+        \node[box] (estim) at (5.7,0)   {Estimativas};
+        \node[box] (bat)   at (9.5,0)   {Bateria};
+        \node[box] (cel)   at (11.4,0)  {Células};
+        \node[box] (opc)   at (15.2,0)  {Opções};
+
+        % raiz
+        \node[box, minimum width=3cm, text width=2.6cm] (raiz) at (8.55,1.4) {Barra de menus};
+
+        \foreach \p/\c in {motor/carregar, motor/criar, estim/smo, estim/helice, estim/ensaios, cel/calibrar, opc/sensores, opc/placas, opc/erros}
+            \draw[arrow] (\p) -- (\c);
+        \foreach \p in {motor,estim,bat,cel,opc}
+            \draw[arrow] (raiz) -- (\p);
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Além da barra de menus, a aplicação embute um \textbf{\textit{TinyTerminal}}
+--- um terminal de texto que fala com as placas pela mesma rede que o
+restante da interface usa, servindo tanto para ações rápidas de diagnóstico
+quanto para inspecionar, em hexadecimal, o pacote exato de cada comando antes
+de enviá-lo. Ao digitar um comando, a \autoref{fig:tinyterminal_fluxo}
+resume como o texto é interpretado: as palavras digitadas são usadas para
+procurar um método Python correspondente, do mais específico ao mais
+genérico (por exemplo, \texttt{siba mock start} procura primeiro
+\texttt{\_cmd\_siba\_mock\_start}, depois \texttt{\_cmd\_siba\_mock}, depois
+\texttt{\_cmd\_siba}); se nenhum método for encontrado e o comando começar
+por \texttt{siba} ou \texttt{same}, o terminal monta o \texttt{CMD} binário na
+hora, traduzindo os nomes digitados para os índices dos \textit{enums} do
+YAML daquela placa.
+
+\begin{figure}[H]
+    \centering
+    \caption{Resolução de comandos no \textit{TinyTerminal}}
+    \label{fig:tinyterminal_fluxo}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=0.8cm, minimum width=2.6cm},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[box] (in) {Texto digitado};
+        \node[box, right=1cm of in] (split) {Divide em\\palavras};
+        \node[box, right=1cm of split] (try) {Procura método\\específico $\to$ genérico};
+        \node[box, above right=0.6cm and 1cm of try] (run) {Executa\\método Python};
+        \node[box, below right=0.6cm and 1cm of try] (parse) {Monta \texttt{CMD}\\binário};
+        \node[box, right=1cm of parse] (send) {Mostra \textit{hex} +\\tradução, envia};
+
+        \draw[arrow] (in) -- (split);
+        \draw[arrow] (split) -- (try);
+        \draw[arrow] (try) -- node[above, sloped, font=\tiny]{achou} (run);
+        \draw[arrow] (try) -- node[below, sloped, font=\tiny]{não achou, raiz siba/same} (parse);
+        \draw[arrow] (parse) -- (send);
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A \autoref{fig:telas_gui} reserva o espaço para capturas de tela de cada
+janela da aplicação, a serem inseridas a partir dos ensaios em bancada.
+
+\begin{figure}[H]
+    \centering
+    \caption{Telas e diálogos da interface de supervisão (espaços reservados para capturas de tela)}
+    \label{fig:telas_gui}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        slot/.style={draw, dashed, align=center, minimum width=4.4cm, minimum height=2.6cm, text width=4cm}
+    ]
+        \node[slot] (s1) at (0,0)     {Tela principal};
+        \node[slot] (s2) at (4.7,0)   {\textit{TinyTerminal}};
+        \node[slot] (s3) at (9.4,0)   {Gerenciador de Placas};
+        \node[slot] (s4) at (0,-2.9)  {Calibrar Célula de Carga};
+        \node[slot] (s5) at (4.7,-2.9){Configuração de Sensores};
+        \node[slot] (s6) at (9.4,-2.9){Painel de Erros e Alarmes};
+        \node[slot] (s7) at (0,-5.8)  {Estimar Ganhos do SMO};
+        \node[slot] (s8) at (4.7,-5.8){Estimar Coeficiente da Hélice};
+        \node[slot] (s9) at (9.4,-5.8){Motor --- Carregar/Criar};
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Para que essa parametrização interativa e o monitoramento operem com alta confiabilidade, mitigando erros de interpretação de dados entre diferentes plataformas, o sistema adota uma estratégia de padronização baseada na linguagem de serialização YAML (\textit{YAML Ain't Markup Language}). A implementação utiliza arquivos de descrição que definem as estruturas fundamentais de telemetria (\textit{logs}), comandos (\textit{CMD}) e configurações da interface.
+
+Como ilustrado na \autoref{fig:yaml_example_config}, essa abordagem estabelece os arquivos YAML (\textit{commands.yaml}, \textit{user\_prefs.yaml}, \textit{SAME.yaml} e \textit{SIBA.yaml}) como a fonte única da verdade do projeto. Enquanto a aplicação de alto nível em \textit{Python} consome esses arquivos para moldar a GUI e gerar os comandos padronizados, um \textit{script} auxiliar (\textit{generate.py}) processa as configurações exclusivas das placas (SAME e SIBA) para compilar automaticamente os arquivos de cabeçalho (\textit{headers} em C). Dessa forma, o \textit{firmware} dos microcontroladores e a aplicação \textit{desktop} compartilham a mesma lógica estrutural. Garante-se, assim, que qualquer alteração nos dados trafegados seja refletida instantaneamente em todas as instâncias do sistema, assegurando a integridade da comunicação.
+
+O comando (\texttt{CMD}) resultante dessa geração, comum às placas SIBA e SAME,
+é uma estrutura compacta de 8 \textit{bytes}, reproduzida a seguir:
+
+\begin{verbatim}
+typedef struct __attribute__((packed)) {
+    func_type      function;         // o que fazer
+    instruct_type  instruction;      // como fazer
+    int8_t         target_id;        // em quem
+    float          value;            // o dado
+    int8_t         action_or_status; // acao ou status
+} CMD;
+\end{verbatim}
+
+O atributo \texttt{packed} elimina o preenchimento que o compilador
+normalmente insere entre campos, e o lado \textit{Python} empacota o mesmo
+formato com \texttt{struct.pack("<BBBfb", ...)} --- o \texttt{<} força
+\textit{little-endian}, a ordem de \textit{bytes} nativa do RISC-V de destino.
+O pacote de telemetria (\texttt{TELEMETRY\_LOG}) enviado em sentido inverso
+segue a mesma lógica de geração, com campos específicos por placa.
+
+\begin{figure}[H]
+    \centering
+    \caption{Fluxo de uso dos arquivos YAML para configuração integrada da GUI e do \textit{firmware}.}
+    \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Metodologia/YAML_uso.drawio.png}
+    \label{fig:yaml_example_config}
+
+
+    Fonte: Autor (2026).
+\end{figure}
+

@@ -1,0 +1,81 @@
+\section{Ferramentas e Validação de \textit{Software}}
+\label{sec:ferramentas_software}
+
+Por período considerável, o \textit{firmware} e a aplicação de supervisão
+precisaram ser escritos e depurados antes de as placas SIBA e SAME estarem
+fabricadas e validadas em bancada. Esta seção resume as ferramentas adotadas
+para viabilizar esse desenvolvimento desacoplado do \textit{hardware} físico.
+
+Os esquemáticos e o roteamento das placas de circuito impresso foram
+desenvolvidos no \textit{KiCad} (\textit{software} de CAD eletrônico de código
+aberto); o \textit{front-end} analógico de medição de corrente e tensão de
+fase da SAME (\autoref{sec:same_tensao}) foi previamente simulado no
+\textit{LTspice} antes da fabricação, reduzindo o número de iterações físicas
+em placas de fenolite (\autoref{sec:padronizacao_placas}).
+
+Para o \textit{firmware}, o \textit{Zephyr RTOS} oferece um alvo de compilação
+alternativo chamado \textit{native\_sim} (\textit{simulação nativa}): em vez de
+gerar um binário para o núcleo RISC-V da placa, o mesmo código de aplicação é
+compilado diretamente para a arquitetura do computador de desenvolvimento e
+roda como um processo comum do Linux --- sem emulação de processador. A rede
+permanece real (o processo abre \textit{sockets} UDP de verdade, em
+\textit{loopback}), e os periféricos físicos ausentes (ADC, PWM do ESC,
+contadores de RPM) são substituídos por geradores de valor sintético dentro do
+mesmo arquivo de \textit{hardware} usado na placa real, sob diretiva de
+compilação condicional --- nunca em uma cópia paralela. Essa prática permitiu
+encontrar, ainda em desenvolvimento, defeitos de protocolo que só apareceriam
+na integração física: um exemplo concreto foi a divergência do tamanho da
+estrutura de comando (\texttt{CMD}) entre o compilador do microcontrolador
+(\textit{enums} de 1 \textit{byte}) e o do computador hospedeiro (\textit{enums}
+de 4 \textit{bytes} por padrão), detectada justamente ao validar contra o
+\textit{native\_sim}. A limitação da técnica é não exercitar nada que dependa
+do comportamento físico do \textit{hardware} (temporização de periférico, DMA,
+pinagem); ausência de defeito nesse modo não substitui a validação final em
+bancada.
+
+A mesma restrição levou a aplicação de supervisão a suportar três formas
+alternativas de conexão com cada placa, escolhidas em tempo de execução sem
+alterar o restante do código da interface, conforme a
+\autoref{fig:modos_conexao} e a \autoref{tab:modos_conexao}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Transições entre os modos de conexão da aplicação de supervisão}
+    \label{fig:modos_conexao}
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=0.9cm, minimum width=2.6cm},
+    ]
+        \node[box] (sem) {Nenhum \textit{link}\\ativo};
+        \node[box, above right=0.4cm and 2.6cm of sem] (hw) {\textit{Hardware} real};
+        \node[box, right=2.6cm of sem] (mock) {Simulador\\(\textit{mock})};
+        \node[box, below right=0.4cm and 2.6cm of sem] (nat) {\textit{native\_sim}};
+
+        \draw[<->, thick] (sem) -- (hw) node[midway, above, sloped, font=\tiny]{conectar / desconectar};
+        \draw[<->, thick] (sem) -- (mock) node[midway, above, font=\tiny]{\textit{mock start}/\textit{stop}};
+        \draw[<->, thick] (sem) -- (nat) node[midway, below, sloped, font=\tiny]{\textit{native start}/\textit{stop}};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{Modos de conexão da aplicação de supervisão com as placas.}
+\label{tab:modos_conexao}
+\begin{tabular}{p{2.2cm}p{4.4cm}p{5.6cm}}
+\hline
+\textbf{Modo} & \textbf{Onde executa} & \textbf{Uso metodológico} \\
+\hline
+\textit{Hardware} real & Placa física, via Ethernet & Validação final e ensaios de bancada \\
+Simulador Python (\textit{mock}) & \textit{Thread} que finge o protocolo por correspondência de nomes & Ajuste de interface sem placa disponível; não valida o protocolo real \\
+\textit{native\_sim} & \textit{Firmware} real, compilado para POSIX, em \textit{loopback} & Validação do protocolo e da lógica do \textit{firmware} sem bancada \\
+\hline
+\end{tabular}
+\end{table}
+
+Por fim, todo o código do trabalho --- projetos de \textit{hardware} (KiCad),
+\textit{firmware} (C/Zephyr) e aplicação de supervisão (Python) --- é mantido
+em um único repositório Git, o que simplifica a rastreabilidade de mudanças
+que afetam simultaneamente os dois lados do protocolo de rede
+(\autoref{fig:yaml_example_config}).
