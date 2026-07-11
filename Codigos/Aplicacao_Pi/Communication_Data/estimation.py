@@ -35,14 +35,35 @@ class EstimationRunner:
     def script_path(self, name):
         return os.path.join(self.equations_dir, name)
 
+    def _invocation(self, script_name):
+        """Monta o comando pra rodar `script_name`.
+
+        Em dev, `self.python_exe` (= sys.executable por padrão) é um Python
+        de verdade — roda o .py direto. Num build congelado (PyInstaller),
+        `sys.executable` É O PRÓPRIO APP — passar um caminho de .py pra ele
+        só reabre a GUI inteira (ignorando o argumento), não roda o script.
+        Nesse caso cada script precisa ter sido empacotado como seu PRÓPRIO
+        executável (ver build.py), em Scripts/_bin/<nome>/<nome> — pasta
+        própria por helper pra não misturar as libs internas (numpy/scipy
+        bundled) de um com o do outro. Os .py originais (autotune_cost.py,
+        test_coeff_auto.py, ...) continuam soltos direto em Scripts/, porque
+        autotune_cost.py/helice_coeff.py carregam test_coeff_auto.py via
+        importlib com caminho RELATIVO — resolvido pelo cwd=equations_dir
+        que run() usa no Popen (independente de onde o .exe do helper está)."""
+        if not getattr(sys, "frozen", False):
+            return [self.python_exe, self.script_path(script_name)]
+        name = os.path.splitext(script_name)[0]
+        exe_name = name + (".exe" if sys.platform.startswith("win") else "")
+        return [os.path.join(self.equations_dir, "_bin", name, exe_name)]
+
     def run(self, script_name, args=None, on_line=None, on_done=None):
         """Roda um script em subprocesso. Relay de stdout via thread; chama
         `on_line(raw_line)` por linha (p/ a GUI parsear PROGRESS/RESULT) e
         `on_done(returncode)` ao terminar. Retorna True se iniciou."""
         args = args or []
-        path = self.script_path(script_name)
-        if not os.path.exists(path):
-            self.log_fn(f"[ESTIM] Script não encontrado: {path}")
+        cmd = self._invocation(script_name)
+        if not os.path.exists(cmd[0]):
+            self.log_fn(f"[ESTIM] Executável não encontrado: {cmd[0]}")
             return False
         if script_name in self._procs:
             self.log_fn(f"[ESTIM] {script_name} já está rodando.")
@@ -50,7 +71,7 @@ class EstimationRunner:
 
         try:
             proc = subprocess.Popen(
-                [self.python_exe, path, *map(str, args)],
+                [*cmd, *map(str, args)],
                 cwd=self.equations_dir,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1,

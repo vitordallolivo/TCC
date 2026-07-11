@@ -50,8 +50,15 @@ class AlbatrozGUI(QMainWindow):
         super().__init__()
         
         # 1. Pastas e Caminhos
-        self.script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.root_dir = os.path.dirname(self.script_dir) if self.script_dir.endswith('GUI') else self.script_dir
+        if getattr(sys, "frozen", False):
+            # Congelado (PyInstaller): __file__ apontaria pro _MEIPASS (pasta
+            # temp apagada ao fechar) — usa a pasta do executável de verdade,
+            # senão perfis de motor/SAME.yaml/preferências não persistem.
+            self.root_dir = os.path.dirname(os.path.abspath(sys.executable))
+            self.script_dir = os.path.join(self.root_dir, "GUI")
+        else:
+            self.script_dir = os.path.dirname(os.path.abspath(__file__))
+            self.root_dir = os.path.dirname(self.script_dir) if self.script_dir.endswith('GUI') else self.script_dir
         self.config_dir = os.path.join(self.root_dir, "Config")
         self.gui_dir = os.path.join(self.root_dir, "GUI")
         

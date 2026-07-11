@@ -349,8 +349,15 @@ def otimizar():
         plot_sensibilidade(cost, r.x)
         plot_fft_comparacao(t_opt, prof, unpack(x0), K, seg)
     if RODAR_PLOT_PI and os.path.exists("plot_pi.py"):
-        print("\nrodando plot_pi.py...")
-        subprocess.run([sys.executable, "plot_pi.py"], check=True)
+        if getattr(sys, "frozen", False):
+            # Build empacotado: sys.executable é o próprio autotune_cost
+            # (não um Python genérico) — reabriria a si mesmo em vez de
+            # rodar plot_pi.py. Figura opcional, só pula com aviso.
+            print("\n[plot_pi] pulado: build empacotado não tem Python "
+                  "genérico pra rodar plot_pi.py como subprocesso.")
+        else:
+            print("\nrodando plot_pi.py...")
+            subprocess.run([sys.executable, "plot_pi.py"], check=True)
     return gamma, K
 
 if __name__ == "__main__":

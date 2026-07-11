@@ -6,8 +6,14 @@ import subprocess
 from pathlib import Path
 from packaging.requirements import Requirement
 
-# Configuração de diretório para evitar erros de caminho relativo
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Configuração de diretório para evitar erros de caminho relativo.
+# Se congelado (PyInstaller), __file__ apontaria pro _MEIPASS (pasta temp
+# apagada ao fechar o app) — Config/*.yaml precisa ficar ao lado do
+# executável de verdade pra perfis/preferências persistirem entre execuções.
+if getattr(sys, "frozen", False):
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)

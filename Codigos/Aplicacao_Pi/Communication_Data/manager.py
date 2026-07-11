@@ -7,8 +7,10 @@ para migração sem quebra — o antigo `EthernetManager` vira um alias em
 `Ethernet.py`.
 """
 import os
+import platform
 import socket
 import subprocess
+import sys
 import time
 
 from Communication_Data import codecs
@@ -153,9 +155,19 @@ class LinkManager:
     # Modo 3 — firmware real via native_sim (subprocesso)
     # ------------------------------------------------------------------ #
     def native_exe_path(self, board):
-        """Resolve o binário native_sim da placa: ../<board>/build_native_sim/
-        zephyr/zephyr.exe (as placas são pastas irmãs de Aplicacao_Pi)."""
+        """Resolve o binário native_sim da placa.
+
+        Em dev, as placas (SIBA/SAME/SPMM) são pastas irmãs de Aplicacao_Pi
+        dentro do repo git: ../<board>/build_native_sim/zephyr/zephyr.exe.
+        Num build empacotado (PyInstaller) esse repo não existe na máquina
+        de destino — os 3 `zephyr.exe` precisam ter sido copiados PRA DENTRO
+        do próprio bundle em build-time (--add-binary, ver build/pyinstaller),
+        então aí a busca é relativa ao executável, não ao git.
+        """
         board = board.upper()
+        if getattr(sys, "frozen", False):
+            base = os.path.dirname(os.path.abspath(sys.executable))
+            return os.path.join(base, "native_sim_bin", board, "zephyr.exe")
         base = self.config_dir or "."
         # config_dir = Aplicacao_Pi/Config -> sobe 2 níveis até Codigos/
         board_dir = os.path.normpath(os.path.join(base, "..", "..", board))
@@ -246,11 +258,20 @@ class LinkManager:
     # Diagnóstico e conectividade
     # ------------------------------------------------------------------ #
     def check_connectivity(self, ip):
-        """Ping ICMP — verifica se o hardware responde no barramento."""
+        """Ping ICMP — verifica se o hardware responde no barramento.
+
+        Flags do `ping` divergem por SO: Windows usa `-n`/`-w` (timeout em ms);
+        Linux/macOS usam `-c`/`-W` (timeout em segundos no Linux; macOS aceita
+        `-W` em ms, mas 1000 também funciona como "não trava por muito tempo").
+        """
         print(f"[NET] Verificando link com {ip}...")
+        if platform.system() == "Windows":
+            cmd = ["ping", "-n", "1", "-w", "1000", ip]
+        else:
+            cmd = ["ping", "-c", "1", "-W", "1", ip]
         try:
             res = subprocess.run(
-                ["ping", "-c", "1", "-W", "1", ip],
+                cmd,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             return res.returncode == 0
