@@ -1,0 +1,130 @@
+
+% ---
+% inserir lista de ilustrações
+% ---
+\pdfbookmark[0]{\listfigurename}{lof}
+\listoffigures*
+\cleardoublepage
+% ---
+
+% ---
+% inserir lista de quadros
+% ---
+%\pdfbookmark[0]{\listofquadrosname}{loq}
+%\listofquadros*
+%\cleardoublepage
+% ---
+
+
+% ---
+% inserir lista de tabelas
+% ---
+\pdfbookmark[0]{\listtablename}{lot}
+\listoftables*
+\cleardoublepage
+% ---
+
+% ---
+% inserir lista de abreviaturas e siglas
+% ---
+\begin{siglas}
+	\item[ADC] \textit{Analog-to-Digital Converter} (Conversor Analógico-Digital)
+	\item[ARP] \textit{Address Resolution Protocol}
+	\item[BEMF] \textit{Back Electromotive Force} (Força Contraeletromotriz)
+	\item[BLDC] \textit{Brushless Direct Current}
+	\item[BMS] \textit{Battery Management Systems} (Sistemas de Gerenciamento de Baterias)
+	\item[CCT] Centro de Ciências Tecnológicas
+	\item[CMD] \textit{Command} (Comandos)
+	\item[CSV] \textit{Comma-Separated Values}
+	\item[DLL] \textit{Data Link Layer} (Camada de Enlace de Dados)
+	\item[DMA] \textit{Direct Memory Access}
+	\item[DTC] \textit{Devicetree Compiler}
+	\item[ECM] \textit{Equivalent Circuit Models} (Modelos de Circuito Equivalente)
+	\item[EKF] \textit{Extended Kalman Filter} (Filtro de Kalman Estendido)
+	\item[ESC] \textit{Electronic Speed Controller} (Controlador Eletrônico de Velocidade)
+	\item[FEM] Força Contraeletromotriz
+	\item[FW] \textit{Field Weakening} (Enfraquecimento de Campo)
+	\item[GUI] \textit{Graphical User Interface} (Interface Gráfica de Usuário)
+	\item[HAL] \textit{Hardware Abstraction Layer} (Camada de Abstração de Hardware)
+	\item[IP] \textit{Internet Protocol}
+	\item[IPC] \textit{Inter-Process Communication} (Comunicação Interprocessos)
+	\item[ISO] Organização Internacional de Padronização (\textit{International Organization for Standardization})
+	\item[LAN] \textit{Local Area Network}
+	\item[LiPo] Polímero de Lítio
+	\item[LLC] \textit{Logical Link Control} (Controle de Enlace Lógico)
+	\item[LQG] Regulador Linear Quadrático Gaussiano
+	\item[MAC] \textit{Media Access Control} (Controle de Acesso ao Meio)
+	\item[MTU] \textit{Maximum Transmission Unit} (Unidade Máxima de Transmissão)
+	\item[NCI] \textit{Network Core Interface}
+	\item[OCV] \textit{Open Circuit Voltage} (Tensão de Circuito Aberto)
+	\item[OSI] \textit{Open Systems Interconnection}
+	\item[OSSI] \textit{Operating System Standard Interface}
+	\item[PCB] \textit{Printed Circuit Board} (Placa de Circuito Impresso)
+	\item[PCI] Placa de Circuito Impresso
+	\item[PI] Proporcional-Integral
+	\item[PLL] \textit{Phase-Locked Loop} (Malha de Captura de Fase)
+	\item[PMP] \textit{Physical Memory Protection} (Proteção de Memória Física)
+	\item[RFC] \textit{Request for Comments}
+	\item[RPM] Rotações Por Minuto
+	\item[RTOS] \textit{Real-Time Operating System} (Sistema Operacional de Tempo Real)
+	\item[SAE] \textit{Society of Automotive Engineers} (SAE BRASIL)
+	\item[SAME] Sistema de Aquisição do Motor Elétrico
+	\item[SEI] \textit{Solid Electrolyte Interphase}
+	\item[SIBA] Sistema Integrado da Bancada Aerodinâmica
+	\item[SMO] \textit{Sliding Mode Observer} (Observador por Modos Deslizantes)
+	\item[SOC] \textit{State of Charge} (Estado de Carga)
+	\item[SPM] \textit{Surface Permanent Magnet} (Ímãs Montados na Superfície)
+	\item[TCC] Trabalho de Conclusão de Curso
+	\item[TCKEC] \textit{Thread Create Kill Executive Control}
+	\item[TCP] \textit{Transmission Control Protocol}
+	\item[TLS] \textit{Transport Layer Security}
+	\item[UDESC] Universidade do Estado de Santa Catarina
+	\item[UDP] \textit{User Datagram Protocol}
+	\item[YAML] \textit{YAML Ain't Markup Language}
+	\item[ZCP] \textit{Zero Crossing Point} (Ponto de Passagem por Zero)
+\end{siglas}
+% ---
+
+% ---
+% inserir lista de símbolos
+% ---
+\begin{simbolos}
+	\item[$\alpha, \beta$] Referencial estacionário bidimensional ortogonal (Transformada de Clarke)
+	\item[$B$] Coeficiente de atrito viscoso
+	\item[$C_P$] Coeficiente de potência da hélice
+	\item[$C_Q$] Coeficiente de torque da hélice
+	\item[$C_T$] Coeficiente de tração da hélice
+	\item[$D_{prop}$] Diâmetro da hélice
+	\item[$d, q$] Referencial síncrono girante ortogonal (Transformada de Park)
+	\item[$e_k, e_a, e_b, e_c$] Força contraeletromotriz induzida de fase
+	\item[$\epsilon$] Deformação mecânica unitária (extensometria)
+	\item[$i_k, i_a, i_b, i_c$] Correntes elétricas de fase
+	\item[$J$] Momento de inércia do rotor
+	\item[$J_{prop}$] Razão de avanço da hélice
+	\item[$K$] \textit{Gauge Factor} (Fator de sensibilidade à deformação)
+	\item[$K_e$] Constante de força contraeletromotriz
+	\item[$K_t$] Constante de torque eletromagnético
+	\item[$K_v$] Constante de velocidade do motor
+	\item[$L, L_s$] Indutância própria / indutância síncrona da fase
+	\item[$P$] Passo da hélice (\textit{pitch})
+	\item[$p$] Número de pares de polos da máquina
+	\item[$P_s$] Pressão estática local do escoamento
+	\item[$P_t$] Pressão de estagnação (\textit{impacto})
+	\item[$R$] Resistência elétrica do enrolamento de fase
+	\item[$R_0$] Resistência ôhmica interna instantânea da bateria
+	\item[$R_1$] Resistência de polarização (difusão) da bateria
+	\item[$R_{ar}$] Constante específica do ar ideal
+	\item[$\rho$] Densidade volumétrica do ar
+	\item[$T_e, \tau_e$] Torque eletromagnético gerado
+	\item[$T_L, \tau_L$] Torque de carga mecânica
+	\item[$T_{prop}$] Força de tração gerada pela hélice
+	\item[$T_s$] Período de amostragem de tempo discreto
+	\item[$\tau_c$] Torque de atrito de Coulomb
+	\item[$\theta_e$] Posição angular elétrica do rotor
+	\item[$v_k, v_a, v_b, v_c$] Tensões elétricas aplicadas aos terminais de fase
+	\item[$V_\infty$] Velocidade de escoamento livre do fluido
+	\item[$\omega_e$] Velocidade angular elétrica
+	\item[$\omega_m$] Velocidade angular mecânica do rotor
+\end{simbolos}
+% ---
+% ---

@@ -1,0 +1,702 @@
+\chapter{Resultados e Discussões}
+\label{cap:resultados}
+
+\section{Medição de Parâmetros}
+
+
+\subsection{Resistência}
+A resistência de linha foi obtida pelo método de quatro terminais (Kelvin),
+aplicando corrente entre dois terminais e medindo a queda de tensão sobre $A$ e
+$B$, com $R_{eq} = V_{AB}/I$. Obteve-se $R_{LL} = 17{,}37\ \text{m}\Omega$
+(desvio padrão $0{,}02\ \text{m}\Omega$), correspondendo a
+$R_{Y} = R_{LL}/2 = 8{,}69\ \text{m}\Omega$ no modelo em estrela equivalente.
+
+\begin{table}[htb]
+    \centering
+    \caption{Medição da resistência equivalente de linha do motor.}
+    \label{tab:resistencia_motor}
+    \sisetup{output-decimal-marker={,}}
+    \begin{tabular}{
+        S[table-format=2.3]
+        S[table-format=1.3]
+        S[table-format=2.2]
+    }
+        \toprule
+        {$V_{AB}$ [\si{\milli\volt}]} & {$I$ [\si{\ampere}]} & {$R_{eq}$ [\si{\milli\ohm}]} \\
+        \midrule
+        3,654  & 0,210 & 17,40 \\
+        7,172  & 0,412 & 17,41 \\
+        9,629  & 0,554 & 17,38 \\
+        11,407 & 0,657 & 17,36 \\
+        12,714 & 0,732 & 17,37 \\
+        14,314 & 0,824 & 17,37 \\
+        16,145 & 0,930 & 17,36 \\
+        18,150 & 1,046 & 17,35 \\
+        19,871 & 1,145 & 17,35 \\
+        20,810 & 1,199 & 17,36 \\
+        22,645 & 1,306 & 17,34 \\
+        24,715 & 1,426 & 17,33 \\
+        \midrule
+        \multicolumn{2}{r}{Média $R_{eq}$} & 17,37 \\
+        \multicolumn{2}{r}{Desvio padrão} & 0,02 \\
+        \multicolumn{2}{r}{$R_{Y}=R_{LL}/2$} & 8,69 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Indutância}
+A indutância foi determinada pelo método da ressonância, associando capacitores
+de capacitância conhecida em paralelo aos terminais do motor e excitando o
+circuito $LC$ com um gerador em modo de varredura (\textit{AC sweep}). Na
+ressonância, $f_{res} = 1/(2\pi\sqrt{LC})$, de onde $L = 1/[(2\pi f_{res})^2 C]$.
+A frequência de cada pico foi refinada manualmente. O uso de diferentes
+capacitores, medidos individualmente, fornece estimativas independentes de $L$
+para o mesmo conjunto, e a convergência entre elas valida a medição. Obteve-se $L_{LL} = 13{,}90 \pm 0{,}14\ \mu\text{H}$ e
+$L_{Y} = L_{LL}/2 = 6{,}95 \pm 0{,}07\ \mu\text{H}$.
+
+\begin{table}[H]
+    \centering
+    \caption{Determinação da indutância do motor pelo método da ressonância,
+    para diferentes valores de capacitância.}
+    \label{tab:indutancia_motor}
+    \sisetup{output-decimal-marker={,}}
+    \begin{tabular}{
+        S[table-format=1.3]
+        S[table-format=2.1]
+        S[table-format=2.2]
+        S[table-format=1.2]
+    }
+        \toprule
+        {$C$ [\si{\micro\farad}]} & {$f_{res}$ [\si{\kilo\hertz}]} &
+        {$L_{LL}$ [\si{\micro\henry}]} & {$L_{Y}$ [\si{\micro\henry}]} \\
+        \midrule
+        2,200 & 28,9 & 13,79 & 6,89 \\
+        4,443 & 20,3 & 13,84 & 6,92 \\
+        6,700 & 16,4 & 14,06 & 7,03 \\
+        \midrule
+        \multicolumn{2}{r}{Média} & {\SI{13,90}{\micro\henry}} & {\SI{6,95}{\micro\henry}} \\
+        \multicolumn{2}{r}{Desvio padrão} & {\SI{0,14}{\micro\henry}} & {\SI{0,07}{\micro\henry}} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+\subsection{Coeficientes Mecânicos}
+aaa
+
+\section{Modelagem do SMO}
+
+Durante a modelagem do controle \textit{sensorless}, a implementação da
+topologia clássica do Observador por Modos Deslizantes (SMO) apresentou falhas
+de convergência em ambiente de simulação sob dinâmicas de desaceleração. O
+método convencional, que extrai a posição angular via função arco-tangente
+($\arctan2$) diretamente das forças contraeletromotrizes (BEMF) estimadas,
+demonstrou alta sensibilidade ao \textit{chattering} numérico. A aplicação de
+filtros passa-baixas para atenuar esse ruído introduziu atrasos de fase que
+corromperam o sincronismo do estimador durante as rampas negativas de
+velocidade, resultando em erros de inversão de torque estimado e instabilidade
+no rastreamento do RPM sintético.
+
+Diferentemente das etapas preliminares, em que o modelo operou sobre
+parâmetros arbitrados, esta validação emprega os coeficientes obtidos na
+caracterização experimental do motor (\autoref{tab:parametros_simulacao}). A
+arquitetura geral do sistema é apresentada na \autoref{fig:diagrama_blocos_smo}.
+A \autoref{fig:diagrama_planta} detalha a planta computacional do inversor de
+seis passos, responsável por gerar os dados de referência. Para fins de
+distinção gráfica, os resultados provenientes desta planta física simulada são
+denominados ``dados reais'', enquanto as variáveis de software são tratadas
+como estimativas. A malha de estimação de corrente do SMO, ilustrada na
+\autoref{fig:diagrama_smo}, fornece as componentes brutas da BEMF
+($\hat{e}_{raw}$), enquanto os ganhos deslizantes ($K_{s1}$, $K_{s2}$) e o polo
+do estimador ($K_t$) foram determinados pelo procedimento de ajuste automático
+descrito na \autoref{sec:autotuning}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Parametros para simulação}
+    \label{tab:parametros_simulacao}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Parâmetro} & \textbf{Símbolo} & \textbf{Valor} \\
+        \midrule
+        Resistência de fase     & $R_s$    & \num{17,3} \si{m\Omega} \\
+        Indutância de fase      & $L_s$    & \num{7} \si{\micro\henry} \\
+        Polos                   & $P$      & \num{14} \\
+        Pares de polos          & $p$      & \num{7} \\
+        Constante de velocidade & $K_v$    & $\frac{310}{\sqrt{3}}$ \si{RPM/V} \\
+        Momento de inércia      & $J$      & \num{0,0001} \si{kg.m^2} \\
+        Coef. de carga da hélice\footnotemark
+                                & $k_{Q}$  & \num{2e-5} \si{N.m/(rad/s)^2} \\
+        Tensão do barramento    & $V_{bus}$& \num{30} \si{V} \\
+        Período de amostragem   & $T_s$    & \num{10e-6} \si{s} \\
+        Tempo de simulação      & $t_{end}$& \num{10} \si{s} \\
+        \bottomrule
+    \end{tabular}
+
+    \footnotetext{Coeficiente aerodinâmico de carga
+    ($T_{carga}=k_Q\,\omega_m^2$), ajustado ao propulsor efetivamente ensaiado.}
+
+    Fonte: Autor (2026)
+\end{table}
+
+A adoção da estratégia de reconstrução analítica justifica-se pela natureza
+intrínseca do observador por modos deslizantes. Devido à sua característica de
+controle descontínuo, o SMO impõe uma dinâmica semelhante a um chaveamento de
+alta frequência, a fim de forçar a convergência do erro de predição de
+corrente. Esse processo, embora robusto, injeta um espectro harmônico severo no
+sinal da \textit{Back-EMF} estimada ($\hat{e}_{\alpha\beta}$). Diferentemente
+de filtros passa-baixas convencionais, que inseririam atrasos de fase, a
+reconstrução analítica utiliza o erro de estimação estritamente para o
+sincronismo do ângulo elétrico ($\theta_e$) via PLL, o que permite recompor
+amplitudes de \textit{Back-EMF} comparáveis às da dinâmica real.
+
+\begin{figure}[H]
+    \centering
+    \caption{Diagrama de blocos do sistema de estimação híbrido com reconstrução analítica de BEMF.}
+    \label{fig:diagrama_blocos_smo}
+    \vspace{0.3cm}
+    \begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, text width=3.5cm, text centered, minimum height=1.5cm, font=\small},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}},
+        coord/.style={coordinate}
+    ]
+        \node [block] (motor) {Planta Dinâmica \\ Máquina BLDC};
+        \node [block, right=2cm of motor] (clarke) {Transformada \\ de Clarke};
+        \node [block, right=2cm of clarke] (smo) {Observador \\ Modos Deslizantes \\ (SMO)};
+        \node [block, below=1.5cm of smo] (pll) {Extrator de Fase \\ (PLL)};
+        \node [block, left=2cm of pll] (recon) {Reconstrutor \\ Analítico BEMF};
+        \node [block, left=2cm of recon] (torque) {Cálculo de \\ Torque ($\hat{T}_e$)};
+        \draw [line] (motor) -- node [above] {$i_{a,b,c}$} (clarke);
+        \draw [line] (clarke) -- node [above] {$i_{\alpha}, i_{\beta}$} (smo);
+        \draw [line] (smo) -- node [right] {$\hat{e}_{\alpha, raw}, \hat{e}_{\beta, raw}$} (pll);
+        \draw [line] (pll) -- node [above] {$\hat{\theta}, \hat{\omega}$} (recon);
+        \draw [line] (recon) -- node [above] {$\hat{e}_{\alpha, cln}, \hat{e}_{\beta, cln}$} (torque);
+        \coordinate (mid_clarke_smo) at ($(clarke.east)!0.5!(smo.west)$);
+        \draw [line, dashed] (mid_clarke_smo) -- ++(0,-1.5) -| node [near end, left] {$\hat{i}_{\alpha}, \hat{i}_{\beta}$} (torque.north);
+    \end{tikzpicture}
+    \vspace{0.3cm} \\
+    \small Fonte: Autor (2026).
+\end{figure}
+
+O \autoref{alg:sim_core} resume o laço de simulação executado a cada passo
+$T_s$, evidenciando como o controlador de velocidade, a planta do inversor e o
+observador se encadeiam para produzir as séries temporais utilizadas nas
+análises subsequentes.
+
+\begin{algorithm}[H]
+\caption{Algoritmo da simulação planta, controle PI e observador SMO}
+\label{alg:sim_core}
+\begin{algorithmic}[1]
+\Require $N$, $T_s$, perfil $\Omega_{\mathrm{ref}}[\cdot]$, ganhos $(K_{s1},K_{s2},K_t)$, modo de fase
+\State Inicializa estados da planta, do PI, do SMO e do PLL em zero
+\For{$k = 0$ \textbf{to} $N-1$}
+    \State $(V_{\mathrm{cmd}}) \gets$ \Call{ControladorPI}{$\Omega_{\mathrm{ref}}[k]$, $\omega_m$}
+    \State $(i_a,i_b,i_c,\theta_e,\omega_m,u_{\alpha\beta},i_{\alpha\beta}) \gets$ \Call{InversorPlanta}{$V_{\mathrm{cmd}},\theta_e,\omega_m$}
+    \State $(u_{\alpha\beta},i_{\alpha\beta}) \gets$ \Call{FiltroAmpop}{$u_{\alpha\beta},i_{\alpha\beta}$} \Comment{polo de 1ª ordem, se modo $>0$}
+    \State $(\hat{\imath}_{\alpha\beta},\hat{e}_{\alpha\beta}) \gets$ \Call{SMO}{$u_{\alpha\beta},i_{\alpha\beta},\hat{\imath}_{\alpha\beta},\hat{e}_{\alpha\beta}$}
+    \State $(\hat{\theta},\hat{\omega}) \gets$ \Call{PLL}{$\hat{e}_{\alpha\beta}$}
+    \State $\hat{T}_e \gets$ \Call{ReconstroiTorque}{$\hat{\theta},\hat{\omega},\hat{\imath}_{\alpha\beta}$}
+    \State Registra $(\omega_m,\hat{\omega},T_e,\hat{T}_e,\theta_e,\hat{\theta},\dots)$ em $\mathbf{res}[:,k]$
+\EndFor
+\State \Return $\mathbf{res}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[htbp]
+    \centering
+    \caption{Planta do inversor somente para simulação.}
+    \label{fig:diagrama_planta}
+    \vspace{0.3cm}
+    \begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (input) {};
+        \node [sum, right=1.5cm of input] (sum1) {$\Sigma$};
+        \node [block, right=1cm of sum1] (pi) {Controlador PI (Vel.) \\ $V_{cmd} = K_{pw} e + K_{iw} \int e\, dt$};
+        \node [block, right=1cm of pi] (inv) {Inversor (6-Passos) \\ Aplica $V_{act}$ ou $0$ a partir de $f_{PWM}$ e $\theta_e$};
+        \node [block, below=1cm of inv] (motor) {Modelo BLDC (Elétrico)};
+        \node [block, left=1cm of motor] (mec) {Dinâmica Mecânica};
+        \draw [line] (input) -- node {$\omega_{ref}$} (sum1);
+        \draw [line] (sum1) -- node {$e_\omega$} (pi);
+        \draw [line] (pi) -- node {$V_{cmd}$} (inv);
+        \draw [line] (inv) -- node {$v_{abc}$} (motor);
+        \draw [line] (motor) -- node [above] {$T_e$} (mec);
+        \draw [line] (mec) -| node [near end, right] {$\omega_m$} (sum1);
+        \coordinate (out_i) at ($(motor.east) + (1cm, 0)$);
+        \draw [line] (motor.east) -- node [above] {$i_{abc}$} (out_i);
+        \draw [line, dashed] (mec.south) -- ++(0,-0.5) -| node [near start, below] {$\theta_e, \omega_m \rightarrow e_{abc}$} (motor.south);
+    \end{tikzpicture}
+    \vspace{0.3cm} \\
+    \small Fonte: Autor (2026).
+\end{figure}
+
+Na \autoref{fig:inversor_sim} é possível visualizar a dinâmica do controlador
+PI do inversor. Os Algoritmos~\ref{alg:pi} e~\ref{alg:planta} detalham,
+respectivamente, a malha de velocidade com anti-\textit{windup} e a comutação
+de seis passos que alimenta a dinâmica eletromecânica.
+
+\begin{algorithm}[H]
+\caption{ControladorPI — velocidade $\to$ tensão (com anti-windup e PWM)}
+\label{alg:pi}
+\begin{algorithmic}[1]
+\Function{ControladorPI}{$\Omega_{\mathrm{ref}},\ \omega_m$}
+    \State $\Omega_{\mathrm{set}} \gets$ limita rampa de $\Omega_{\mathrm{set}}$ em direção a $\Omega_{\mathrm{ref}}$ \Comment{slew-rate}
+    \State $e_\omega \gets \Omega_{\mathrm{set}} - \omega_m$
+    \State $V_{\mathrm{raw}} \gets K_p\, e_\omega + K_i\, \sigma$ \Comment{$\sigma$: integrador}
+    \State $V_{\mathrm{cmd}} \gets \mathrm{sat}(V_{\mathrm{raw}},\,0,\,V_{\mathrm{bus}})$
+    \State $\sigma \gets \sigma + \big(e_\omega + K_a\,(V_{\mathrm{cmd}}-V_{\mathrm{raw}})\big)\,T_s$ \Comment{anti-windup back-calculation}
+    \State $V_{\mathrm{act}} \gets$ PWM$(V_{\mathrm{cmd}}/V_{\mathrm{bus}})$ \Comment{comutação em $f_{\mathrm{pwm}}$}
+    \State \Return $V_{\mathrm{act}}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{InversorPlanta — comutação 6 passos e dinâmica eletromecânica}
+\label{alg:planta}
+\begin{algorithmic}[1]
+\Function{InversorPlanta}{$V_{\mathrm{act}},\ \theta_e,\ \omega_m$}
+    \State $e_a,e_b,e_c \gets K_{e,\mathrm{mec}}\,\omega_m \cdot f_{\mathrm{shape}}(\theta_e - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$
+    \State Seleciona setor de $60^\circ$ a partir de $\theta_e \bmod 2\pi$
+    \State Aplica $V_{\mathrm{act}}$ ao par de fases ativas; fase flutuante $\gets 0$
+    \State $\mathrm{d}i/\mathrm{d}t \gets \dfrac{1}{2L_s}\big[(v_x-v_y) - 2R_s i_x - (e_x-e_y)\big]$ \Comment{par ativo $x,y$}
+    \State Atualiza $i_a,i_b,i_c$ por Euler ($i_x \mathrel{+}= \mathrm{d}i\cdot T_s$; $i_y=-i_x$; $i_{\mathrm{flut}}=0$)
+    \State $T_e \gets K_{e,\mathrm{mec}}\sum_{x\in\{a,b,c\}} i_x\, f_{\mathrm{shape}}(\theta_{e,x})$
+    \State $\omega_m \gets \omega_m + \dfrac{1}{J}\big(T_e - k_{\mathrm{load}}\,\omega_m^2\big)T_s$
+    \State $\theta_e \gets (\theta_e + \omega_m\, p\, T_s) \bmod 2\pi$
+    \State Calcula $u_{\alpha\beta}$ (Clarke de $v_{abc}-v_n$) e $i_{\alpha\beta}$ (Clarke de $i_{abc}$)
+    \State \Return $i_a,i_b,i_c,\theta_e,\omega_m,T_e,u_{\alpha\beta},i_{\alpha\beta}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[H]
+    \centering
+    \caption{Controlador PI para o inversor da planta.}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/PI_controle_Inversor.png}
+    \label{fig:inversor_sim}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \caption{Malha de estimação de corrente e Back-EMF.}
+    \label{fig:diagrama_smo}
+    \vspace{0.3cm}
+    \begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (in_i) {};
+        \node [sum, right=1.5cm of in_i] (sum_i) {$\Sigma$};
+        \node [block, right=1cm of sum_i] (sat) {Função de Chaveamento \\ $s_{\alpha\beta} = \tanh\!\left(\frac{e_i}{8{,}0}\right)$};
+        \node [block, right=1cm of sat] (gain_smo) {Ganhos Deslizantes \\ $K_{s1} \cdot T_s, \quad K_{s2} \cdot T_s$};
+        \node [block, below=1cm of gain_smo] (est_i) {Integração da Corrente \\ $\hat{i}_k = \Phi_i \hat{i}_{k-1} + \Gamma_v u + \Gamma_{s1} s$};
+        \node [block, left=1.5cm of est_i] (est_e) {Estimativa BEMF  \\ $\hat{e}_{raw} = \Phi_e \hat{e}_{k-1} + K_{s2} s$};
+        \draw [line] (in_i) -- node {$i_{\alpha\beta}$} (sum_i);
+        \draw [line] (sum_i) -- node {$e_{i}$} (sat);
+        \draw [line] (sat) -- node {$s_{\alpha\beta}$} (gain_smo);
+        \draw [line] ([xshift=1cm]gain_smo.south) -- node [right] {$+ \Gamma_{s1} s$} ([xshift=1cm]est_i.north);
+        \draw [line] ([xshift=-1cm]gain_smo.south) -- ++(0, -0.6cm) coordinate (drop) -- node [above] {$+ K_{s2} s$} (drop -| est_e.north) -- (est_e.north);
+        \draw [line] (est_i.south) -- ++(0,-1.5) -| node [near end, right] {$\hat{i}_{\alpha\beta}$} (sum_i.south);
+        \draw [line] (est_e.east) -- node [above] {$\hat{e}_{raw}$} (est_i.west);
+        \coordinate (out_e) at ($(est_e.south) + (0,-1cm)$);
+        \draw [line] (est_e.south) -- node [right] {$\hat{e}_{\alpha\beta, raw}$ para o PLL} (out_e);
+    \end{tikzpicture}
+    \vspace{0.3cm} \\
+    \small Fonte: Autor (2026).
+\end{figure}
+
+O \autoref{alg:smo} formaliza a malha de estimação de corrente ilustrada na
+\autoref{fig:diagrama_smo}: o erro de predição $\varepsilon_{\alpha\beta}$
+alimenta a função de chaveamento, cuja saída realimenta tanto a integração da
+corrente estimada quanto a estimativa bruta da BEMF.
+
+\begin{algorithm}[H]
+\caption{SMO — observador de modo deslizante em $\alpha\beta$}
+\label{alg:smo}
+\begin{algorithmic}[1]
+\Function{SMO}{$u_{\alpha\beta},\ i_{\alpha\beta},\ \hat{\imath}_{\alpha\beta},\ \hat{e}_{\alpha\beta}$}
+    \State $\varepsilon_{\alpha\beta} \gets i_{\alpha\beta} - \hat{\imath}_{\alpha\beta}$
+    \State $s_{\alpha\beta} \gets \Call{FuncaoComutacao}{\varepsilon_{\alpha\beta}/BL}$ \Comment{sat $\vert$ tanh $\vert$ sigmoide}
+    \State $\hat{\imath}_{\alpha\beta} \gets \Phi_i\,\hat{\imath}_{\alpha\beta} + \Gamma_v\,(u_{\alpha\beta}-\hat{e}_{\alpha\beta}) + \Gamma_{s1}\,s_{\alpha\beta}$
+    \State $\hat{e}_{\alpha\beta} \gets \Phi_e\,\hat{e}_{\alpha\beta} + (K_{s2}T_s)\,s_{\alpha\beta}$
+    \State \Return $\hat{\imath}_{\alpha\beta},\ \hat{e}_{\alpha\beta}$
+\EndFunction
+\Statex
+\Function{FuncaoComutacao}{$x$}
+    \State \Return $\mathrm{sat}(x,-1,1)$ \textbf{ou} $\tanh(x)$ \textbf{ou} $x/(1+|x|)$ \Comment{seleção por \texttt{SMO\_SWITCH\_FUNC}}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+% =====================================================================
+% SUBSEÇÃO NOVA — CONDICIONAMENTO ANALÓGICO E LM358
+% =====================================================================
+\subsection{Condicionamento Analógico e seu Impacto na Reconstrução}
+\label{sec:condicionamento}
+
+A robustez do observador depende diretamente da fidelidade dos sinais de
+tensão e corrente entregues ao algoritmo, uma vez que o SMO extrai a posição
+angular justamente da coerência entre a tensão aplicada e a corrente
+resultante. Dois fatores físicos comprometem essa coerência e motivaram a
+inclusão da dinâmica do estágio de condicionamento na simulação.
+
+O primeiro decorre da própria natureza da força contraeletromotriz. Como sua
+amplitude é proporcional à velocidade ($\hat{e} = K_e\,\hat{\omega}_e$), em
+baixas rotações o sinal de interesse torna-se pequeno frente ao ruído de
+chaveamento do observador, degradando a relação sinal-ruído da reconstrução.
+Esse comportamento explica por que o erro angular é sistematicamente maior no
+patamar de menor velocidade.
+
+O segundo fator é a banda finita do amplificador operacional empregado na
+medição diferencial das tensões de fase. O protótipo utiliza um estágio
+baseado no LM358, cuja resposta em frequência introduz um atraso de fase
+crescente. Esse atraso é particularmente crítico porque o conteúdo espectral
+relevante não se restringe à fundamental elétrica (até cerca de \num{1,2}
+\si{kHz} no envelope considerado), estendendo-se às harmônicas de chaveamento
+do PWM (\num{8} \si{kHz}) e além. Para quantificar o efeito, o estágio foi
+representado por um modelo de polo dominante único, cujo polo efetivo foi
+ajustado para reproduzir o atraso medido em bancada, resultando em
+$f_p \approx \num{45,2}$ \si{kHz} e um atraso de fase de
+$\approx 41{,}5^{\circ}$ em \num{40} \si{kHz}, como sintetizado na
+\autoref{tab:fase_ampop}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Atraso de fase e atenuação do estágio de condicionamento (modelo de polo único, $f_p \approx \num{45,2}$ \si{kHz}).}
+    \label{tab:fase_ampop}
+    \begin{tabular}{ccc}
+        \toprule
+        \textbf{Frequência} $[\si{Hz}]$ & \textbf{Fase} $[^{\circ}]$ & \textbf{Atenuação} $[\si{dB}]$ \\
+        \midrule
+        \num{200}    & \num{0,25}  & \num{0,00}  \\
+        \num{1000}   & \num{1,27}  & \num{0,00}  \\
+        \num{8000}   & \num{10,04} & \num{-0,13} \\
+        \num{24000}  & \num{27,97} & \num{-1,08} \\
+        \num{40000}  & \num{41,53} & \num{-2,51} \\
+        \bottomrule
+    \end{tabular}
+
+    Fonte: Autor (2026)
+\end{table}
+
+Como o caminho de tensão e o caminho de corrente podem apresentar atrasos
+distintos, uma inconsistência de fase entre $u_{\alpha\beta}$ e
+$i_{\alpha\beta}$ propaga-se diretamente para a estimativa de BEMF e, por
+conseguinte, para o ângulo. Por essa razão, a dinâmica do amplificador foi
+incorporada à simulação na forma de um filtro IIR de primeira ordem aplicado
+aos sinais reconstruídos, permitindo avaliar três cenários: tensão atrasada com
+corrente ideal (pior caso de inconsistência), ambos os caminhos atrasados, e
+ambos atrasados com compensação de fase proporcional à velocidade estimada. Os
+ensaios confirmaram que o sincronismo via PLL preserva o rastreamento sob o
+atraso modelado, atestando a tolerância do observador às imperfeições do
+\textit{front-end} analógico antes da tradução para o \textit{firmware}.
+
+% =====================================================================
+% PLL
+% =====================================================================
+Para mitigar os erros observados na extração de fase, integrou-se um
+\textit{Phase-Locked Loop} (PLL) ao algoritmo
+(\autoref{fig:diagrama_pll_recon}). O PLL atua como um filtro dinâmico que
+ignora o ruído harmônico da BEMF bruta e sincroniza a posição estimada
+($\hat{\theta}$) e a velocidade ($\hat{\omega}_e$). O erro de fase é obtido
+pela projeção cruzada da BEMF bruta estimada sobre a referência angular atual,
+formulação que se reduz à expressão clássica em cosseno e seno no caso de BEMF
+senoidal e permanece válida para formas trapezoidais.
+
+\begin{figure}[H]
+    \centering
+    \caption{PLL e reconstrução analítica da Back-EMF.}
+    \label{fig:diagrama_pll_recon}
+    \vspace{0.3cm}
+    \begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (in_e) {};
+        \node [block, right=1.5cm of in_e] (pd) {Detector de Erro de Fase \\ $\epsilon = \frac{g_\alpha \hat{e}_\beta - g_\beta \hat{e}_\alpha}{|\hat{E}|}$};
+        \node [block, right=1cm of pd] (pi_pll) {Filtro de Loop (PI) \\ $\hat{\omega}_e = K_{p,pll} \epsilon + K_{i,pll} \int \epsilon$};
+        \node [block, below=1cm of pi_pll] (integ) {Integrador de Fase \\ $\hat{\theta} = \int \hat{\omega}_e\, dt$};
+        \node [block, left=1cm of integ] (recon) {Reconstrução Analítica \\ $\hat{e}_{\alpha ,\beta} = K_e \hat{\omega}_e f_{\alpha,\beta}(\hat{\theta})$};
+        \node [block, below=1cm of recon] (torque) {Equação de Torque \\ $\hat{T}_e = 1{,}5\, K_e\, p\, (\hat{e}_\alpha i_\alpha + \hat{e}_\beta i_\beta)$};
+        \draw [line] (in_e) -- node [above] {$\hat{e}_{\alpha\beta, raw}$} (pd);
+        \draw [line] (pd) -- node {$\epsilon$} (pi_pll);
+        \draw [line] (pi_pll) -- node [right] {$\hat{\omega}_e$} (integ);
+        \coordinate (loop_up) at ($(integ.east) + (1cm, 0)$);
+        \coordinate (loop_top_right) at (loop_up |- {$(pd.north) + (0, 1.2cm)$});
+        \coordinate (loop_top_left) at ($(pd.north) + (0, 1.2cm)$);
+        \draw [line] (integ.east) -- (loop_up) -- (loop_top_right) -- node [above] {$\hat{\theta}$} (loop_top_left) -- (pd.north);
+        \draw [line] (integ) -- node [above] {$\hat{\theta}$} (recon);
+        \draw [line] (pi_pll.south) ++(-1cm,0) -- node [left] {$\hat{\omega}_e$} ($(recon.north) + (2cm,0)$);
+        \draw [line] (recon) -- node [right] {$\hat{e}_{\alpha\beta, cln}$} (torque);
+        \coordinate (in_i) at ($(torque.west) + (-1.5cm, 0)$);
+        \draw [line, dashed] (in_i) -- node [above] {$\hat{i}_{\alpha\beta}$} (torque.west);
+    \end{tikzpicture}
+    \vspace{0.3cm} \\
+    \small Fonte: Autor (2026).
+\end{figure}
+
+Quando a estimativa do PLL converge para a posição real do rotor, a componente
+ortogonal do produto vetorial é forçada a zero, garantindo que $\hat{\omega}_e$
+e $\hat{\theta}$ reflitam a dinâmica do eixo com forte imunidade ao ruído de
+alta frequência. O \autoref{alg:pll} formaliza essa malha e a etapa de
+reconstrução de torque a partir da BEMF sincronizada. O desempenho do
+sincronismo é apresentado na \autoref{fig:PLL_fig_desenvolvimento}.
+
+\begin{algorithm}[H]
+\caption{PLL e reconstrução de posição/torque}
+\label{alg:pll}
+\begin{algorithmic}[1]
+\Function{PLL}{$\hat{e}_{\alpha\beta}$}
+    \State $A_{\hat{e}} \gets \Vert \hat{e}_{\alpha\beta} \Vert_2$
+    \If{$A_{\hat{e}} > A_{\min}$}
+        \State $g_{\alpha\beta} \gets f_{\mathrm{shape}}(\hat{\theta} - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$ \Comment{forma normalizada estimada}
+        \State $e_{\mathrm{fase}} \gets (g_\alpha \hat{e}_\beta - g_\beta \hat{e}_\alpha)/A_{\hat{e}}$
+    \Else
+        \State $e_{\mathrm{fase}} \gets 0$
+    \EndIf
+    \State $\sigma_{\mathrm{pll}} \gets \sigma_{\mathrm{pll}} + e_{\mathrm{fase}}\,T_s$
+    \State $\hat{\omega}_e \gets K_{p,\mathrm{pll}}\,e_{\mathrm{fase}} + K_{i,\mathrm{pll}}\,\sigma_{\mathrm{pll}}$
+    \State $\hat{\theta} \gets (\hat{\theta} + \hat{\omega}_e\,T_s) \bmod 2\pi$
+    \State \Return $\hat{\theta},\ \hat{\omega}_e/p$
+\EndFunction
+\Statex
+\Function{ReconstroiTorque}{$\hat{\theta},\ \hat{\omega}_e,\ \hat{\imath}_{\alpha\beta}$}
+    \State $\hat{f}_{\alpha\beta} \gets f_{\mathrm{shape}}(\hat{\theta} - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$
+    \State $t_{\mathrm{inst}} \gets \tfrac{3}{2}\,K_e\,p\,(\hat{f}_\alpha \hat{\imath}_\alpha + \hat{f}_\beta \hat{\imath}_\beta)$
+    \State $\hat{T}_e \gets$ filtro passa-baixa de $t_{\mathrm{inst}}$ (IIR 1ª ordem, $f_c=10\,\mathrm{kHz}$)
+    \State \Return $\hat{T}_e$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[H]
+    \centering
+    \caption{Performance do PLL.}
+    \includegraphics[width=0.7\linewidth]{Textuais/Imgs/Desenvolvimento/PLL_angulos.png}
+    \label{fig:PLL_fig_desenvolvimento}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+% =====================================================================
+% AUTOTUNING (subseção)
+% =====================================================================
+\subsection{Ajuste Automático dos Ganhos do Observador}
+\label{sec:autotuning}
+
+Aplicado o procedimento de \textit{autotuning} formulado na
+\autoref{sec:param_smo}, a \autoref{fig:otim_convergencia} apresenta a
+convergência da busca, em que o custo agregado decresce de $J \approx \num{1,47}$
+no ponto inicial para $J \approx \num{0,32}$ até estabilizar. A dispersão entre
+avaliações sucessivas reflete a natureza não-convexa da função-custo já
+antecipada na metodologia. O \autoref{alg:autotuning} formaliza o procedimento.
+
+
+\begin{figure}[H]
+    \centering
+    \caption{Convergência da otimização dos ganhos do observador.}
+    \includegraphics[width=0.85\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_convergencia.png}
+    \label{fig:otim_convergencia}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O procedimento convergiu para os ganhos discretizados $\Gamma_{s1}=\num{28,72}$,
+$\Gamma_{s2}=\num{-8,43}$ e $\Gamma_{t}=\num{0,0264}$, que correspondem, ao passo
+de simulação $T_s=\SI{10}{\micro\second}$, a $K_{s1}=\num{2,87e6}$,
+$K_{s2}=\num{-8,43e5}$ e $K_t=\num{2,64e3}$. A validade da parametrização sobre
+$\Gamma$ foi confirmada repetindo-se a otimização para
+$T_s \in \{2,\ 10,\ 20\}\,\si{\micro\second}$: os valores ótimos de $\Gamma$
+mantiveram-se invariantes, atestando o desacoplamento entre o resultado e o passo
+de integração e, por conseguinte, a transferibilidade direta ao \textit{firmware}.
+
+A \autoref{fig:otim_sensibilidade} apresenta a análise de sensibilidade da
+função-custo, obtida pela varredura unidimensional de cada ganho em torno do
+ótimo, mantendo os demais fixos. Cada parâmetro exibe um mínimo bem definido,
+confirmando que o ponto encontrado constitui um mínimo local em todas as direções
+de busca, e não um platô onde a escolha seria arbitrária.
+
+\begin{figure}[H]
+    \centering
+    \caption{Sensibilidade da função-custo aos ganhos do observador.}
+    \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade.png}
+    \label{fig:otim_sensibilidade}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Em conjunto, os resultados demonstram a eficácia do ajuste automático: partindo
+de um ponto inicial deliberadamente distante, o procedimento reduziu o custo de
+seguimento em mais de uma ordem de grandeza e recuperou ganhos com mínimos bem
+definidos, sem qualquer intervenção manual, consolidando o \textit{autotuning}
+como ferramenta reaplicável a novos conjuntos motopropulsores caracterizados pela
+bancada.
+% =====================================================================
+% RESULTADOS MECÂNICOS E CONCLUSÃO
+% =====================================================================
+
+
+\begin{figure}[H]
+    \centering
+    \caption{Comparação entre RPM e torque real vs. estimado.}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/Torque_rpm.png}
+    \label{fig:desempenho_mecanico}
+
+    Fonte: Autor (2026).
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Correntes e \textit{Back-EMF} nos eixos $\alpha$ e $\beta$.}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/Eixo_alpha_beta.png}
+    \label{fig:eixos_estaticos}
+
+    Fonte: Autor (2026).
+\end{figure}
+
+Em síntese, os resultados de simulação evidenciam a eficácia da topologia
+híbrida adotada para a estimação de estados. A integração do PLL com a
+reconstrução analítica da força contraeletromotriz mostrou-se eficaz para
+mitigar o \textit{chattering} intrínseco ao SMO e para evitar os atrasos
+temporais de filtros passa-baixas convencionais, reduzindo o erro de fase a
+poucos graus ao longo de todo o envelope de velocidade. A incorporação da
+dinâmica do estágio de condicionamento (LM358) ao modelo permitiu verificar a
+tolerância do observador às imperfeições do \textit{front-end} analógico. Esta
+validação computacional encerra a prova de conceito do controle
+\textit{sensorless}, indicando que a modelagem está apta a ser traduzida para
+a linguagem C e embarcada no \textit{firmware} do sistema SAME, restando a
+validação experimental em bancada como etapa subsequente. 
+
+\newpage
+
+\subsection{Identificação dos Coeficientes Aerodinâmicos Globais}
+\label{sec:coef_aero}
+
+Para simplificar o controle embarcado, a modelagem aerodinâmica clássica agrupa
+a densidade do ar, o diâmetro da hélice e o coeficiente estático em uma única
+constante global ($k_Q$). Com isso, o torque mecânico exigido pela hélice passa
+a ser calculado de forma direta, sendo proporcional ao quadrado da velocidade
+angular do motor, conforme $T = k_Q\,\omega_m^2$.
+
+O coeficiente é identificado isolando-se os intervalos em que o motor opera em
+rotação constante (regime permanente)\footnote{Nesta etapa de simulação, a razão
+de avanço da hélice e a variação do vento foram desprezadas para simplificar a
+dinâmica.}. Nessas condições, a inércia mecânica do conjunto atua como um filtro
+natural para as oscilações de alta frequência, de modo que a hélice interage
+apenas com o valor médio contínuo do torque. Por essa razão, adota-se o valor
+médio do torque em cada patamar como referência física para o cálculo do
+coeficiente, tanto para a grandeza real da planta quanto para a estimativa do
+observador. O \autoref{alg:kq_identificacao} formaliza as duas etapas do
+procedimento: a detecção automática dos patamares de regime permanente a
+partir do perfil de referência e o cálculo do coeficiente por patamar.
+
+\begin{algorithm}[H]
+\caption{Identificação do coeficiente aerodinâmico global $k_Q$ por patamar}
+\label{alg:kq_identificacao}
+\begin{algorithmic}[1]
+\Require $\omega_m,\hat{\omega}_e,T_e,\hat{T}_e$ (vetores), $R$ (perfil de RPM), $T_s$, $\tau_{\mathrm{PI}}$, $\mathrm{RPM}_{\min}$
+\Function{DetectaPatamares}{$R$}
+    \State $M \gets (\Delta R = 0) \wedge (R > \mathrm{RPM}_{\min})$
+    \State $P \gets$ pares $(s,e)$ dos blocos contínuos de $M$
+    \State \Return $P$
+\EndFunction
+\Statex
+\Function{CalculaKQ}{$\omega_m,\hat{\omega}_e,T_e,\hat{T}_e,P$}
+    \State $n \gets \tau_{\mathrm{PI}}/T_s$
+    \ForAll{$(s,e) \in P$}
+        \If{$e-s \le n$} 
+        \State \textbf{continue} 
+        \EndIf
+        \State $i,j \gets s+n,\ e-1$
+        \State $k_1 \gets \overline{T_e[i:j]} \,/\, \overline{\omega_m[i:j]}^{\,2}$
+        \State $k_2 \gets \overline{\hat{T}_e[i:j]} \,/\, \overline{\hat{\omega}_e[i:j]}^{\,2}$
+        \State guarda $(k_1,k_2)$ em $K$
+    \EndFor
+    \State $\bar{k}_1,\bar{k}_2 \gets$ médias de $K$
+    \State $\epsilon \gets 100\,|\bar{k}_2-k_{Q,\mathrm{nom}}|/k_{Q,\mathrm{nom}}$
+    \State \Return $K,\ \bar{k}_1,\ \bar{k}_2,\ \epsilon$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+A identificação foi conduzida sob quatro patamares de operação em malha fechada.
+A estimação \textit{sensorless} obteve um erro relativo global de apenas
+\num{3,46}\% em relação ao modelo da planta (\autoref{fig:patamar_coeff_CQ} e
+\autoref{tab:resultado_identificacao_cq}), com os coeficientes estimados por
+patamar concentrados em torno do valor nominal. Na aplicação final, a interface
+gráfica (GUI) integrará essa estimação paramétrica à leitura física da velocidade
+do ar (via tubo de Pitot) e da tração (via célula de carga); o cruzamento desses
+dados permitirá calcular a razão de avanço da hélice e isolar os coeficientes
+aerodinâmicos dinâmicos do conjunto propulsor.
+
+\begin{figure}[H]
+    \centering
+    \caption{Identificação do Coeficiente Global por Patamar}
+    \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Algortimo_Coeficiente_helice.png}
+    \label{fig:patamar_coeff_CQ}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \caption{Identificação do Coeficiente Global $k_Q$ por Patamar de RPM}
+    \label{tab:resultado_identificacao_cq}
+    \begin{tabular}{ccccc}
+        \toprule
+        \textbf{Intervalo (s)} & \textbf{Alvo (RPM)} &
+        \textbf{$\bar{T}$ Real (N.m)} & \textbf{$\hat{\bar{T}}$ SMO (N.m)} &
+        \textbf{$k_{Q,real}$ / $\hat{k}_{Q,smo}$} \\
+        \midrule
+        1,20 -- 2,40 & 3000 & 1,9570 & 2,0164 & $2,00$ / $2,10 \times 10^{-5}$ \\
+        3,60 -- 4,80 & 2000 & 0,8759 & 0,8986 & $2,00$ / $2,07 \times 10^{-5}$ \\
+        4,80 -- 6,10 & 3000 & 1,9544 & 2,0134 & $2,00$ / $2,07 \times 10^{-5}$ \\
+        6,10 -- 8,00 & 2000 & 0,8761 & 0,8980 & $2,00$ / $2,04 \times 10^{-5}$ \\
+        \midrule
+        \multicolumn{2}{l}{\textbf{Valor Nominal (Teórico):}} &
+            \multicolumn{3}{c}{$\mathbf{2,00 \times 10^{-5}}$} \\
+        \multicolumn{2}{l}{\textbf{Média Global ($\hat{k}_{Q,smo}$):}} &
+            \multicolumn{3}{c}{$\mathbf{2,07 \times 10^{-5}}$} \\
+        \multicolumn{2}{l}{\textbf{Erro Relativo Global:}} &
+            \multicolumn{3}{c}{$\mathbf{3,46\%}$} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{0.2cm}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+Os resultados obtidos demonstram, em ambiente de simulação, a viabilidade da
+abordagem proposta para a identificação do coeficiente global a partir da
+estimativa de torque do observador. O erro relativo de \num{3,46}\% frente ao
+modelo da planta indica que o método é promissor, servindo como prova de
+conceito do encadeamento entre a estimação \textit{sensorless} e a
+caracterização aerodinâmica. Ressalta-se, contudo, que esta etapa constitui
+apenas uma verificação computacional da lógica de identificação: a confirmação
+definitiva depende dos ensaios com o motor real na bancada, nos quais o
+coeficiente estimado será confrontado com as medições físicas de tração e
+velocidade do escoamento.
+
+\section{Modelagem Física}
+
+A estrutura mecânica da bancada — mesa de suporte e células de carga — já era utilizada pela equipe Albatroz Aerodesign em ensaios anteriores. O escopo deste trabalho não abrange a construção dessa estrutura, mas sim sua instrumentação e
+integração a um sistema unificado de aquisição, processamento e supervisão. Parte-se, portanto, da bancada existente (\autoref{fig:bancada_fisica}), formalizando-a por meio do acoplamento das placas de medição, do gabinete de instrumentação e da rede de comunicação descritos nesta seção.
+
+\chapter{Conclusão e Trabalhos Futuros}
+\label{cap:conclusao}
+\section{Sugestões para trabalhos futuros}
+\begin{itemize}
+    \item Implementação de uma bancada física com 6 graus de liberdade;
+    \item Caracterização da bateria (curva SOC $\times$ OCV).
+\end{itemize}

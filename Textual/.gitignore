@@ -1,0 +1,50 @@
+# ------------------------------------------------------------
+#  LaTeX / abnTeX2 - artefatos de compilação
+#  (gerados por pdflatex/bibtex/makeindex; nunca versionar)
+# ------------------------------------------------------------
+
+# Auxiliares padrão do LaTeX
+*.aux
+*.log
+*.toc
+*.lof
+*.lot
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.nav
+*.snm
+*.vrb
+*.run.xml
+*.bcf
+
+# Bibliografia (bibtex / abntex2cite)
+*.bbl
+*.blg
+*.brf
+
+# Índice remissivo (makeindex)
+*.idx
+*.ind
+*.ilg
+
+# Glossário / lista de siglas e símbolos
+*.glo
+*.gls
+*.glg
+*.acn
+*.acr
+*.alg
+
+# Lista de quadros (definida em PacotesBasicos.tex via \newfloat/\newlistof)
+*.loq
+
+# PDF gerado (o .pdf final deve ser gerado localmente, não versionado)
+*.pdf
+
+# Backups de editores LaTeX (TeXstudio, TeXworks, Overleaf sync, etc.)
+*.bak
+*~
+*.synctex.gz(busy)

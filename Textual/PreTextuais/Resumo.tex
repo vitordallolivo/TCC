@@ -1,0 +1,11 @@
+% ---
+% RESUMOS
+% ---
+
+% resumo em português
+\setlength{\absparsep}{18pt} % ajusta o espaçamento dos parágrafos do resumo
+\begin{resumo}
+Este trabalho desenvolve uma bancada de ensaios para conjuntos motopropulsores com motores BLDC para o projeto Albatroz Aerodesign. O sistema realiza a aquisição sincronizada das variáveis elétricas do motor, das forças aerodinâmicas da hélice e da velocidade do escoamento. A arquitetura é organizada em dois nós de aquisição dedicados — um para a instrumentação aerodinâmica e da bateria, outro para a medição elétrica do motor — interligados por uma rede de comunicação \textit{TCP/UDP} a um \textit{software} de supervisão. Para estimar a velocidade angular e o torque no eixo sem sensores mecânicos, implementa-se um observador por modos deslizantes (SMO) associado a um \textit{PLL} e à reconstrução analítica da força contraeletromotriz, a partir das correntes e tensões de fase. O sistema permite correlacionar as grandezas medidas diretamente com as variáveis estimadas pelo observador, servindo como ferramenta de caracterização de conjuntos motopropulsores.
+
+ \textbf{Palavras-chave}: Bancada de Ensaios; Motor BLDC; Observador por Modos Deslizantes; Aquisição de Dados; Sistema \textit{Sensorless}; Propulsão Elétrica.
+\end{resumo}

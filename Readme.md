@@ -45,9 +45,10 @@ das correntes e tensões de fase.
 ```
 .
 ├── Codigos
-│   ├── Aplicacao_Pi   # Software de supervisão (Python/PyQt) + geração de código por YAML
+│   ├── Aplicacao_Pi   # Software de supervisão (Python/PySide6) + geração de código por YAML
 │   ├── SIBA           # Firmware Zephyr RTOS do nó aerodinâmico (board custom CH32V307)
-│   ├── SAME           # Nó de aquisição do motor (firmware em desenvolvimento)
+│   ├── SAME           # Firmware Zephyr RTOS do nó de aquisição do motor (board custom CH32V307)
+│   ├── SPMM           # Bancada provisória de caracterização mecânica (B, τc, J) do motor
 │   ├── Equations      # Scripts de simulação do SMO, autotuning e identificação da hélice
 │   └── Teste          # Scripts de bancada / experimentos pontuais
 ├── Esquematicos       # Projetos KiCad (SAME, PropellerMeasures/SIBA, InverterBLDC, Ensaio_Bateria)
@@ -55,19 +56,19 @@ das correntes e tensões de fase.
 └── Referencias Boas   # Bibliografia de apoio
 ```
 
-### Firmware (Vcore-OS)
+### Firmware (SIBA e SAME)
 
-O firmware das placas é estruturado em três camadas: **Vcore-OS**, **System** e
-**Application**. A camada base encapsula o Zephyr e padroniza a comunicação
-interna pelo **OSSI** (barramento de mensagens), com módulos:
-
-- **CMD** — interpreta pacotes binários da rede e roteia comandos.
-- **TCKEC** — gerencia o ciclo de vida das threads.
-- **NCI** — pilha de rede UDP e socket de comunicação.
-- **HAL** — acesso aos periféricos (ADC via DMA, etc.).
-
-A camada **System** (no SIBA) reúne `Propeller_Manager`, `Battery_Manager`,
-`Security_Manager`, `LoadCell_Manager` e `Log_Manager`.
+Os dois firmwares (Zephyr RTOS) seguem a mesma arquitetura: nenhuma thread
+fala diretamente com outra — sensores e comandos de rede passam por uma
+**fila de trabalho única** (`siba_wq`/`same_wq`) que serializa todo o
+processamento de lógica (calibração, segurança, telemetria), chamando os
+managers de domínio diretamente. Só as threads que precisam bloquear em
+hardware/socket (aquisição de ADC, RX de rede) continuam como threads
+Zephyr normais. Módulos principais: `NCI` (rede UDP), `HAL` (periféricos —
+ADC via DMA, PWM, etc.), `CMD_Core` (parser de comandos) e, no SIBA,
+`Battery_Manager`/`Propeller_Manager`/`Security_Manager`/`Log_Manager`.
+Ver `Codigos/SIBA/Readme.md` e `Codigos/SAME/Readme.md` para os diagramas
+completos.
 
 ### Geração de código por YAML
 
@@ -142,12 +143,13 @@ perda de **Huber**, priorizando a fidelidade do torque (w_T = 1,0; w_ω = 0,5).
 
 | Componente | Estado |
 |------------|--------|
-| Firmware SIBA (Zephyr) | Board custom + camadas Vcore-OS/System implementadas; Ethernet/UDP validada em simulação |
-| Firmware SAME | Em desenvolvimento (hardware e esquemático prontos) |
-| Software de supervisão (PyQt) | Funcional |
+| Firmware SIBA (Zephyr) | Implementado, compila para a placa real e para `native_sim`; Ethernet/UDP validada via `native_sim` |
+| Firmware SAME (Zephyr) | Implementado (SMO+PLL embarcado), compila para a placa real e para `native_sim` |
+| Bancada provisória SPMM | Implementada — usada para caracterizar B/τc/J antes da SIBA/SAME estarem prontas em bancada |
+| Software de supervisão (PySide6) | Funcional — cliente único das três placas, com modos hardware real / mock / `native_sim` |
 | Simulação SMO + autotuning | Validada (prova de conceito) |
 | Identificação de parâmetros elétricos | Concluída |
-| Validação experimental em bancada física | Etapa subsequente |
+| Validação experimental em bancada física (hardware SIBA/SAME) | Etapa subsequente |
 
 ## Ferramentas
 

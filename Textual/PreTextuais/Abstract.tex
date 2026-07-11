@@ -1,0 +1,12 @@
+% ---
+% Abstract
+% ---
+
+% resumo em inglês
+\begin{resumo}[Abstract]
+ \begin{otherlanguage*}{english}
+   This work develops a test bench for electric propulsion assemblies based on BLDC motors for the Albatroz Aerodesign project. The system performs the synchronized acquisition of the motor's electrical variables, the propeller's aerodynamic forces, and the airflow velocity. The architecture is organized into two dedicated acquisition nodes — one for the aerodynamic and battery instrumentation, the other for the motor's electrical measurement — interconnected through a \textit{TCP/UDP} communication network to a supervisory \textit{software}. To estimate the shaft angular velocity and torque without mechanical sensors, a sliding mode observer (SMO) is implemented, combined with a \textit{PLL} and the analytical reconstruction of the back-electromotive force, from the phase currents and voltages. The system enables the correlation of the directly measured quantities with the variables estimated by the observer, serving as a characterization tool for electric propulsion assemblies.
+   
+   \textbf{Keywords}: Test Bench. BLDC Motor. Sliding Mode Observer. Data Acquisition. \textit{Sensorless} System. Electric Propulsion.
+ \end{otherlanguage*}
+\end{resumo}

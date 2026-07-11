@@ -1,37 +1,59 @@
-# Configuração e Geração de Protocolo (SIBA Board)
+# Configuração e Geração de Protocolo
 
-Este diretório centraliza a **Single Source of Truth**, serve para geração de templates para C e python para o projeto inteiro
+Este diretório centraliza a **fonte única de verdade** do protocolo de rede
+(`CMD`/`TELEMETRY_LOG`) e gera os headers C consumidos pelos firmwares da
+SIBA e da SAME.
 
-## Fluxo de Automação e Sincronização
+## Fluxo de automação
 
-Convencionalmente é feito da seguinte forma, um arquivo .yaml, arquivos de template e o de geração
+1. **`SIBA.yaml`** / **`SAME.yaml`**: definição declarativa de enums e
+   structs (bloco `enums`/`structs`) + endereçamento (bloco `link:`). A
+   ordem dos campos dita o layout exato de memória.
+2. **`generate.py`**: lê os dois YAMLs e renderiza os templates Jinja2 para
+   cada placa, de uma vez.
+3. **Templates (`.j2`)**: modelos que definem a implementação final dos
+   headers C.
 
-1.  **`SIBA.yaml`**: Definição declarativa de Enums e Structs. A ordem dos campos dita o layout exato de memória.
-2.  **`generate.py`**: Script de automação que utiliza Jinja2 para parsing e renderização de headers.
-3.  **Templates (`.j2`)**: Modelos que definem a implementação final dos cabeçalhos C.
+`SPMM.yaml` **não** passa por `generate.py` — a SPMM fala um protocolo
+diferente (Telnet + log binário), fixo em `../../SPMM/src/spmm.h`; o YAML
+aqui só descreve endereçamento/`Ts`/comandos do lado do PC.
 
-## Estrutura de Arquivos e Outputs
+## Estrutura de arquivos e outputs
 
-O sistema gera arquivos modulares para respeitar a separação de domínios (OS vs SYS) e evitar redefinições de símbolos em tempo de compilação.
-
-| Fonte Template | Destino (Firmware) | Escopo |
+| Fonte (template) | Destino (por placa) | Escopo |
 | :--- | :--- | :--- |
-| `Common_template.h.j2` | `lib/OS/Common_Types.h` | Definição de tipos base e Enums compartilhadas. |
-| `CMD_template.h.j2` | `lib/OS/CMD.h` | Struct de comando (Ground Control -> MCU). |
-| `LOG_template.h.j2` | `lib/SYS/Log_Manager.h` | Struct de telemetria/logs (MCU -> Ground Control). |
+| `Common_template.h.j2` | `lib/OS/Common_Types.h` | Enums compartilhados (`func_type`, `target_type`, ...) |
+| `CMD_template.h.j2` | `lib/OS/CMD.h` | Struct de comando (PC → placa) |
+| `LOG_template.h.j2` | `lib/SYS/Log_Manager.h` | Struct de telemetria (placa → PC) + `SENSOR_ID_*` |
 
-## Integridade de Memória e Alinhamento
+## Integridade de memória e alinhamento
 
-Para garantir que o mapeamento via *cast* direto de ponteiros no microcontrolador funcione sem corrupção de dados:
+- **Packing dos structs**: `CMD` e `TELEMETRY_LOG` são sempre gerados com
+  `__attribute__((packed))` (alinhamento de 1 byte, sem padding do
+  compilador).
+- **Packing seletivo dos enums**: só os enums usados como **campo do
+  `CMD`** (`func_type`, `instruct_type`) recebem
+  `__attribute__((packed))` — o tamanho de um `enum` em C é
+  impl-definido (4 bytes no GCC host/`native_sim`, 1 byte só com
+  `-fshort-enums` na placa RISC-V); sem essa marcação seletiva,
+  `sizeof(CMD)` diverge entre o firmware real e `native_sim` (bug já
+  visto e corrigido — ver `../CLAUDE.md`). Enums de telemetria
+  (`log_status`) não são marcados.
+- **Endianness**: o lado Python usa o módulo `struct` com `<`
+  (little-endian), compatível com a arquitetura RISC-V de destino.
+- **Tipos de largura fixa** (`float`, `int32_t`, `uint32_t`) garantem
+  payload constante e previsível.
 
-* **Packing**: Os structs são gerados com `__attribute__((packed))` para forçar o alinhamento de 1 byte, eliminando o preenchimento automático (*padding*) do compilador.
-* **Endianness**: O processamento em Python utiliza a biblioteca `struct` com o modificador `<` (Little-Endian) para garantir compatibilidade nativa com a arquitetura de destino.
-* **Determinismo**: O uso de tipos de largura fixa (`float`, `int32_t`, `uint32_t`) assegura que o payload seja constante e previsível.
+## Procedimento
 
-## Procedimento de Build
-
-Sempre que o `SIBA.yaml` for modificado, o gerador deve ser executado para atualizar as dependências do firmware:
+Sempre que `SIBA.yaml` ou `SAME.yaml` forem modificados, rode o gerador
+antes de compilar o firmware correspondente:
 
 ```bash
-# Certifique-se de estar no ambiente virtual (.venv)
+# no venv (.venv/)
 python generate.py
+# gera SIBA/lib/OS/{Common_Types,CMD}.h + SIBA/lib/SYS/Log_Manager.h
+# e    SAME/lib/OS/{Common_Types,CMD}.h + SAME/lib/SYS/Log_Manager.h
+```
+
+Os `.h` gerados nunca são editados à mão.

@@ -39,7 +39,7 @@ SAME/
 ├── prj.conf / CMakeLists.txt        # 2 ADCs + rede UDP + FPU
 ├── boards/
 │   ├── wch/same_board/*             # placa real: adc1+adc2 (dual), Ethernet, UART
-│   └── native_sim.conf/.overlay     # adc-emul p/ adc1+adc2, NSOS (UDP no host)
+│   └── native_sim.conf/.overlay     # adc-emul p/ adc1+adc2, NSOS (UDP no host, loopback 127.0.0.100)
 ├── drivers/adc/adc_ch32v307.c       # driver custom (multi-instância ADC1/ADC2) — reciclado da SIBA
 ├── lib/OS/
 │   ├── OSSI.{h,c}                   # same_wq (despacho por eventos: telemetria + CMD)
@@ -72,33 +72,29 @@ e constantes carregados em locais `register` e constantes pré-calculadas
 
 ---
 
-## ⚠️ AVISOS CRÍTICOS ao implementar — RECICLAR CÓDIGO DA SIBA
+## Base reaproveitada da SIBA
 
-Os drivers do **CH32V307VCT6 não estão disponíveis diretamente no Zephyr**. A
-SIBA já resolveu isso; a SAME **deve reaproveitar** essa base em vez de refazer.
+Os drivers do **CH32V307VCT6 não estão disponíveis diretamente no Zephyr**,
+então a SAME reaproveita a base que a SIBA já resolveu, em vez de refazer:
 
-- **ADC — NÃO usar o driver padrão do Zephyr.** `CONFIG_ADC=y` neste micro pode
-  puxar o **driver do CH32V003**, que **conflita com o registrador de Ethernet
-  do CH32V307VCT6**. É **obrigatório** usar o **driver de ADC customizado** já
-  criado para o CH32V307 (o mesmo da SIBA — `../SIBA/drivers/adc/adc_ch32v307.c`),
-  e não o driver genérico que o `CONFIG_ADC` seleciona por padrão. Conferir o
-  Kconfig/overlay/.dts da SIBA para ver como o driver customizado é selecionado e
-  replicar — caso contrário a **Ethernet** (e portanto toda a telemetria UDP)
-  quebra.
+- **ADC**: usa o mesmo **driver de ADC customizado** da SIBA
+  (`../SIBA/drivers/adc/adc_ch32v307.c`), não o driver genérico do Zephyr —
+  `CONFIG_ADC=y` neste micro puxaria o driver do CH32V003, que conflita com
+  o registrador de Ethernet do CH32V307VCT6 e quebraria a telemetria UDP.
+- **`native_sim`**: mesmo esquema da SIBA (`boards/native_sim.conf`, HAL
+  synthetic, `make native_sim`) — permite achar bugs de aplicação (SMO,
+  parsing do `CMD`) no PC, sem flashar a placa.
+- **Makefile**: mesmos atalhos (`build`/`flash`/`native_sim`/`debug`) da
+  SIBA.
+- **Arquitetura em camadas**: OS/SYS/HAL, `OSSI`/`NCI` para a rede,
+  `generate.py` a partir do `SAME.yaml` — ver
+  [`../SIBA/CLAUDE.md`](../SIBA/CLAUDE.md) para o modelo de referência
+  (hoje ambas convergem para o mesmo esquema de fila única +
+  poucas threads bloqueantes).
 
-- **Copiar o setup POSIX/native_sim da SIBA.** A SIBA tem um build para
-  **POSIX/native** que permite achar **bugs de aplicação** (lógica de estimação,
-  parsing do `CMD`, manipulação de buffers) rodando no **PC**, fora do hardware —
-  sem flashar a placa a cada teste. Copiar (`boards/native_sim.conf`, HAL
-  synthetic, `make native_sim`). Acelera muito a depuração do SMO.
-
-- **Copiar o Makefile da SIBA.** A SIBA tem um **Makefile com comandos especiais**
-  (atalhos de `build`/`flash`/`native_sim`/`debug`). Copiar e adaptar para a
-  SAME em vez de montar os comandos do zero.
-
-- **Espelhar a arquitetura em camadas** da SIBA (OS/SYS/HAL, NCI/OSSI para a
-  rede, `generate.py` a partir do `SAME.yaml`). Ver `../SIBA/CLAUDE.md` e
-  `../SIBA/HW.md`.
+> Diferente da SIBA, a SAME **não tem shell de diagnóstico via UART** — todo
+> ajuste (parâmetros do motor, ganhos do SMO, calibração de sensores) passa
+> exclusivamente pelo `CMD` de rede (ver protocolo abaixo).
 
 ---
 
@@ -114,6 +110,11 @@ Mesmo protocolo compacto da SIBA (`CMD` 8 bytes + `TELEMETRY_LOG` packed LE):
 | Placa escuta comandos (`board_rx`) | `4444` |
 | `CMD` (PC→placa) | 8 bytes `<BBBfb>` = `func, instr, target, value, action` |
 | `TELEMETRY_LOG` (placa→PC) | struct packed LE, ~10 Hz |
+
+> **native_sim**: o IP link-local vira o loopback **`127.0.0.100`** (último
+> octeto do IP real), distinto do da SIBA (`127.0.0.200`), para as duas rodarem
+> juntas no host sem colidir. As portas 4444/4445 não mudam. Ver
+> `boards/native_sim.conf` e `Aplicacao_Pi/.../manager.py::_native_loopback`.
 
 ### TELEMETRY_LOG (o que a SAME envia)
 `timestamp`; **medidas ADC/shunts**: `V_a,V_b,V_c`, `i_a,i_b,i_c`; **referencial

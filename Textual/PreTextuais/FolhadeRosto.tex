@@ -1,0 +1,60 @@
+% ---
+% Folha de rosto
+% ---
+
+
+
+
+
+
+
+
+% --------------------------------------------------------
+% folha de rosto 
+% --------------------------------------------------------
+
+\makeatletter
+
+\renewcommand{\folhaderostocontent}{
+	\begin{center}
+		
+		{\fontseries{b}\selectfont\MakeTextUppercase{\imprimirautor}}
+		
+		\vfill
+		
+		\begin{center}
+			{\fontseries{b}\selectfont\MakeTextUppercase{\imprimirtitulo}}
+		\end{center}
+	
+		\vspace*{1.5cm}
+
+		\abntex@ifnotempty{\imprimirpreambulo}{%
+			\hspace{.45\textwidth}
+			{\begin{minipage}{.5\textwidth}
+					\SingleSpacing
+					Trabalho de Conclusão de Curso submetido ao Bacharelado em Engenharia Elétrica do Centro de Ciências Tecnológicas da Universidade do Estado de Santa Catarina, para a obtenção do Grau de Engenheiro Eletricista\par
+					\vspace*{4pt}
+					{\imprimirorientadorRotulo~\imprimirorientador\par}
+					\abntex@ifnotempty{\imprimircoorientador}{%
+						{\imprimircoorientadorRotulo~\imprimircoorientador}%
+					}%
+			\end{minipage}}%
+		}%
+	
+		
+		\vfill
+		
+	{\fontseries{b}\selectfont\MakeTextUppercase{\imprimirlocal}}
+	\par
+	{\fontseries{b}\selectfont \imprimirdata}
+	\vspace*{1cm}
+	\end{center}
+}
+
+
+% (o * indica que haverá a ficha bibliográfica)
+% ---
+\imprimirfolhaderosto*
+% ---
+
+
