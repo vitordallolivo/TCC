@@ -496,13 +496,17 @@ python generate.py
 #   ../../SIBA/lib/OS/Common_Types.h
 #   ../../SIBA/lib/OS/CMD.h
 #   ../../SIBA/lib/SYS/Log_Manager.h   (struct TELEMETRY_LOG + SENSORS + SENSOR_ID_*)
+#   ../../SIBA/lib/OS/CMD_Core_prm.h   (tabela SIBA_SENSOR_TABLE — de `sensor_defaults` no SIBA.yaml)
 ```
 
 **Sempre rodar generate.py após modificar SIBA.yaml antes de compilar.**
-Os `.h` gerados nunca são editados à mão. `CMD_Core_prm.h` (**não gerado**,
-escrito à mão) complementa: tabela `SIBA_SENSOR_TABLE` com defaults de
-calibração, faixa válida e bit de erro por sensor — fonte única para
-`CMD_Core_Init`, `CMD_Core_Validate_Sensor` e `Security_Manager_Check`.
+Os `.h` gerados nunca são editados à mão — isso agora inclui `CMD_Core_prm.h`:
+o bloco `sensor_defaults` do `SIBA.yaml` (defaults de calibração, faixa
+válida e bit de erro por sensor) é a fonte única, alimentando
+`CMD_Core_Init`, `CMD_Core_Validate_Sensor` e `Security_Manager_Check`. Pra
+mudar um default/limite de sensor, edite a entrada correspondente em
+`sensor_defaults` no yaml e rode `generate.py` — nunca edite
+`CMD_Core_prm.h` na mão (fica sobrescrito no próximo `generate.py`).
 
 ---
 
@@ -652,7 +656,7 @@ alvos.
 Common_Types.h  ←── gerado por generate.py (SIBA.yaml)
 CMD.h           ←── gerado por generate.py (SIBA.yaml), inclui Common_Types.h
 Log_Manager.h   ←── gerado por generate.py (SIBA.yaml); define TELEMETRY_LOG, SENSORS, SENSOR_ID_*
-CMD_Core_prm.h  ←── escrito à mão; usa SENSOR_ID_* e siba_error_bit_t
+CMD_Core_prm.h  ←── gerado por generate.py (`sensor_defaults` do SIBA.yaml); usa SENSOR_ID_* e siba_error_bit_t
 
 OSSI.c          ←── depende de Log_Manager.h, Battery/Propeller/Security_Manager.h, CMD_Core.h, CMD.h
 NCI.c           ←── depende de OSSI.h, Log_Manager.h

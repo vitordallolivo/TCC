@@ -81,6 +81,17 @@ enums:
     - STATUS_ERROR
     - STATUS_NONE # Don't care
 
+# Defaults de calibração afim (y = linear*x + offset) + faixa válida por
+# sensor calibrável — fonte única, alimenta CMD_Core_prm.h (gerado, ver
+# generate.py). `target` tem que ser um nome de enums.target_type existente.
+sensor_defaults:
+  - { target: TARGET_CURRENT_A, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_CURRENT_B, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_CURRENT_C, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_VOLTAGE_A, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_VOLTAGE_B, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_VOLTAGE_C, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+
 structs:
 
   SENSORS:

@@ -89,7 +89,28 @@ enums:
     - LOG_CRITICAL_ALARM
     - LOG_DENIED_ACTION
 
-structs:  
+# Defaults de calibração afim (y = linear*x + offset) + faixa válida/segurança
+# por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).
+# `target` é SENSOR_ID_<NOME_DO_CAMPO_TELEMETRY_LOG> (gerado em Log_Manager.h)
+# — não target_type, porque a ordem de TELEMETRY_LOG diverge da de target_type
+# nalgumas placas (ver SAME.yaml, que já usa target_type direto porque lá
+# bate). `error_bit` é opcional (siba_error_bit_t, Security_Manager.h) — só
+# nos sensores que disparam emergência quando saem da faixa [min,max].
+sensor_defaults:
+  - { target: SENSOR_ID_LOAD_CELL_0, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_LOAD_CELL_1, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_LOAD_CELL_2, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_LOAD_CELL_3, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_LOAD_CELL_4, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_LOAD_CELL_5, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_V_BATT, linear: 0.008, offset: 0.0, min: 0.0, max: 72.0, error_bit: ERROR_SEC_VOLTAGE_OUT_OF_RANGE }
+  - { target: SENSOR_ID_I_BATT, linear: 0.020, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 60.0, error_bit: ERROR_SEC_CURRENT_EXCESSIVE }
+  - { target: SENSOR_ID_SOC, linear: 1.0, offset: 0.0, min: 0.0, max: 100.0 }
+  - { target: SENSOR_ID_TEMPERATURE_BATTERY, linear: 0.040, offset: 0.0, min: -40.0, max: 85.0, error_bit: ERROR_BATT_OVER_TEMPERATURE }
+  - { target: SENSOR_ID_AIR_SPEED, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_RPM, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 20000.0, error_bit: ERROR_SEC_RPM_EXCESSIVE }
+
+structs:
 
   SENSORS: # Configuration of sensors
     - { name: SensorTarget, type: target_type }

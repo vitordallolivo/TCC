@@ -7,6 +7,8 @@ Para cada placa gera:
   <placa>/lib/OS/Common_Types.h  — Enums compartilhados
   <placa>/lib/OS/CMD.h           — Struct de comando (PC -> Board)
   <placa>/lib/SYS/Log_Manager.h  — Struct de telemetria (Board -> PC) + SENSORS
+  <placa>/lib/OS/CMD_Core_prm.h  — Defaults de calibração/faixa por sensor
+                                    (se o .yaml tiver `sensor_defaults`)
 """
 
 import yaml
@@ -31,6 +33,15 @@ def render(template_name, data, output_path):
     with open(output_path, 'w') as f:
         f.write(t.render(data))
     print(f"✔  {output_path}")
+
+
+def _c_float(v):
+    """Formata um valor de sensor_defaults como literal C float. Strings
+    passam direto (macros como 'CMD_CORE_NO_LIMIT'/'-CMD_CORE_NO_LIMIT');
+    números viram literal float com sufixo 'f'."""
+    if isinstance(v, str):
+        return v
+    return f"{float(v)}f"
 
 
 def generate_board(yaml_name, board_dir):
@@ -62,6 +73,22 @@ def generate_board(yaml_name, board_dir):
     render('Common_template.h.j2', cfg, os.path.join(lib_os,  'Common_Types.h'))
     render('CMD_template.h.j2',    cfg, os.path.join(lib_os,  'CMD.h'))
     render('LOG_template.h.j2',    cfg, os.path.join(lib_sys, 'Log_Manager.h'))
+
+    sensor_defaults = cfg.get('sensor_defaults')
+    if sensor_defaults:
+        for e in sensor_defaults:
+            e['linear_c'] = _c_float(e['linear'])
+            e['offset_c'] = _c_float(e['offset'])
+            e['min_c'] = _c_float(e['min'])
+            e['max_c'] = _c_float(e['max'])
+        cfg['sensor_defaults_needs_security'] = any('error_bit' in e for e in sensor_defaults)
+        cfg['sensor_defaults_needs_log_manager'] = any(
+            e['target'].startswith('SENSOR_ID_') for e in sensor_defaults)
+        cfg['sensor_defaults_needs_common_types'] = any(
+            e['target'].startswith('TARGET_') for e in sensor_defaults)
+        render('CMD_Core_prm_template.h.j2', cfg, os.path.join(lib_os, 'CMD_Core_prm.h'))
+    else:
+        print(f"[{board_dir}] sem `sensor_defaults` no yaml — CMD_Core_prm.h não gerado.")
 
 
 def main():

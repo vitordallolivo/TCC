@@ -98,8 +98,16 @@ static inline float apply_calib(int sensor_id, float mv)
 
 /* ===========================================================
  * Aquisição — hardware (2 ADCs) vs synthetic (POSIX)
+ *
+ * Só a FONTE da amostra bruta muda por plataforma (ADC real vs seno
+ * sintético) — um único #ifdef CONFIG_ARCH_POSIX isola isso em
+ * hal_adc_hw_init()/hal_read_raw(). A calibração (hal_acquire, abaixo) é
+ * escrita UMA vez só, compartilhada pelas duas plataformas.
  * =========================================================== */
-#if HAL_ENABLE_ADC && !defined(CONFIG_ARCH_POSIX)
+#if HAL_ENABLE_ADC
+
+#ifndef CONFIG_ARCH_POSIX
+/* ---- Hardware real: 2 ADCs do CH32V307 ---- */
 
 #define ADC1_NODE DT_NODELABEL(adc1)
 #define ADC2_NODE DT_NODELABEL(adc2)
@@ -155,24 +163,22 @@ static int hal_adc_hw_init(void)
     return 0;
 }
 
-/* Lê os 2 ADCs e devolve grandezas físicas calibradas + telemetria bruta. */
-static int hal_acquire(float *Va, float *Vb, float *Vc,
-                       float *ia, float *ib, float *ic)
+/* Lê os 2 ADCs -> grandezas BRUTAS em mV (calibração aplicada em hal_acquire). */
+static int hal_read_raw(float *Va, float *Vb, float *Vc,
+                        float *ia, float *ib, float *ic)
 {
     if (adc_read(adc1_dev, &adc1_seq) != 0) return -EIO;
     if (adc_read(adc2_dev, &adc2_seq) != 0) return -EIO;
-
-    *Va = apply_calib(TARGET_VOLTAGE_A, raw_to_mv(adc1_buf[0]));
-    *Vb = apply_calib(TARGET_VOLTAGE_B, raw_to_mv(adc1_buf[1]));
-    *Vc = apply_calib(TARGET_VOLTAGE_C, raw_to_mv(adc1_buf[2]));
-    *ia = apply_calib(TARGET_CURRENT_A,  raw_to_mv(adc2_buf[0]));
-    *ib = apply_calib(TARGET_CURRENT_B,  raw_to_mv(adc2_buf[1]));
-    *ic = apply_calib(TARGET_CURRENT_C,  raw_to_mv(adc2_buf[2]));
+    *Va = raw_to_mv(adc1_buf[0]);
+    *Vb = raw_to_mv(adc1_buf[1]);
+    *Vc = raw_to_mv(adc1_buf[2]);
+    *ia = raw_to_mv(adc2_buf[0]);
+    *ib = raw_to_mv(adc2_buf[1]);
+    *ic = raw_to_mv(adc2_buf[2]);
     return 0;
 }
 
-#elif HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
-
+#else /* CONFIG_ARCH_POSIX */
 /* ---- Synthetic (native_sim): motor virtual a HAL_SIM_DEMO_RPM ---- */
 #define SIM_P        7.0f
 #define SIM_KV_Y     (310.0f / 1.7320508075688772f)
@@ -184,8 +190,10 @@ static float sim_theta_e;
 
 static int hal_adc_hw_init(void) { LOG_INF("HAL: ADC synthetic (native_sim)"); return 0; }
 
-static int hal_acquire(float *Va, float *Vb, float *Vc,
-                       float *ia, float *ib, float *ic)
+/* Motor virtual -> grandezas já em unidade física (V/A); calibração aplicada
+ * em hal_acquire, igual ao caminho de hardware real. */
+static int hal_read_raw(float *Va, float *Vb, float *Vc,
+                        float *ia, float *ib, float *ic)
 {
     const float TWO_PI_3 = 2.0943951023931953f;
     const float FOUR_PI_3 = 4.1887902047863905f;
@@ -197,18 +205,31 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
     sim_theta_e += we * SIM_TS;
     if (sim_theta_e >= 2.0f * (float)M_PI) sim_theta_e -= 2.0f * (float)M_PI;
 
-    /* Calibração aplicada TAMBÉM no synthetic (antes só a leitura de HW real
-     * chamava apply_calib) — senão um CMD de calibração enviado durante o
-     * native_sim não tem efeito NENHUM observável na telemetria, o que
-     * inviabiliza testar o fluxo de calibração sem bancada física. Defaults
-     * (linear=1, offset=0) deixam o sinal sintético idêntico a antes. */
     float th = sim_theta_e;
-    *Va = apply_calib(TARGET_VOLTAGE_A, E * sinf(th));
-    *Vb = apply_calib(TARGET_VOLTAGE_B, E * sinf(th - TWO_PI_3));
-    *Vc = apply_calib(TARGET_VOLTAGE_C, E * sinf(th - FOUR_PI_3));
-    *ia = apply_calib(TARGET_CURRENT_A, SIM_I_AMP * sinf(th - SIM_LOAD_ANG));
-    *ib = apply_calib(TARGET_CURRENT_B, SIM_I_AMP * sinf(th - SIM_LOAD_ANG - TWO_PI_3));
-    *ic = apply_calib(TARGET_CURRENT_C, SIM_I_AMP * sinf(th - SIM_LOAD_ANG - FOUR_PI_3));
+    *Va = E * sinf(th);
+    *Vb = E * sinf(th - TWO_PI_3);
+    *Vc = E * sinf(th - FOUR_PI_3);
+    *ia = SIM_I_AMP * sinf(th - SIM_LOAD_ANG);
+    *ib = SIM_I_AMP * sinf(th - SIM_LOAD_ANG - TWO_PI_3);
+    *ic = SIM_I_AMP * sinf(th - SIM_LOAD_ANG - FOUR_PI_3);
+    return 0;
+}
+#endif /* CONFIG_ARCH_POSIX */
+
+/* Lê a fonte bruta (real ou sintética, acima) e aplica a calibração afim por
+ * sensor — ÚNICA implementação, compartilhada pelas duas plataformas (antes
+ * disso a calibração só existia duplicada dentro de cada ramo). */
+static int hal_acquire(float *Va, float *Vb, float *Vc,
+                       float *ia, float *ib, float *ic)
+{
+    float rVa, rVb, rVc, ria, rib, ric;
+    if (hal_read_raw(&rVa, &rVb, &rVc, &ria, &rib, &ric) != 0) return -EIO;
+    *Va = apply_calib(TARGET_VOLTAGE_A, rVa);
+    *Vb = apply_calib(TARGET_VOLTAGE_B, rVb);
+    *Vc = apply_calib(TARGET_VOLTAGE_C, rVc);
+    *ia = apply_calib(TARGET_CURRENT_A, ria);
+    *ib = apply_calib(TARGET_CURRENT_B, rib);
+    *ic = apply_calib(TARGET_CURRENT_C, ric);
     return 0;
 }
 

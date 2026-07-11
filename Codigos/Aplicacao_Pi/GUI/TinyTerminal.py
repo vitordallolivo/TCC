@@ -712,7 +712,50 @@ class TinyTerminal(QWidget):
         # Este callback é apenas para o EthernetManager passar os dados.
         # O logging para o terminal é feito por mainAlbatrozGUI.process_network_data
         # que chama self.terminal.log_board_data, que já respeita quiet_mocks.
-        pass 
+        pass
+
+    # Aliases: o nome que o usuário digita (e o nome da variável de
+    # telemetria) nem sempre bate por substring com o enum target_type.
+    # Ex.: `v_batt`/`i_batt` NÃO contêm "VOLTAGE_DIVIDOR"/"CURRENT_SENSOR",
+    # então sem isso caíam em TARGET_DEFAULT e o firmware rejeitava a
+    # calibração (era o "não funciona para o resto"). load_cell_* e
+    # pitot_tube já batem por substring e não precisam de alias.
+    TARGET_ALIASES = {
+        "V_BATT": "TARGET_VOLTAGE_DIVIDOR",
+        "I_BATT": "TARGET_CURRENT_SENSOR",
+        "AIR_SPEED": "TARGET_PITOT_TUBE",
+        "PITOT": "TARGET_PITOT_TUBE",
+        "TEMPERATURE_BATTERY": "TARGET_TEMPERATURE_SENSOR",
+        "TEMP_SENSOR": "TARGET_TEMPERATURE_SENSOR",
+        # SAME: telemetria usa i_a/i_b/i_c e V_a/V_b/V_c; os nomes de
+        # calibração (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C) são
+        # 1:1 com a telemetria mas não batem por substring ("I_A" não
+        # está contido em "CURRENT_A", etc.), daí o alias.
+        "I_A": "TARGET_CURRENT_A",
+        "I_B": "TARGET_CURRENT_B",
+        "I_C": "TARGET_CURRENT_C",
+        "V_A": "TARGET_VOLTAGE_A",
+        "V_B": "TARGET_VOLTAGE_B",
+        "V_C": "TARGET_VOLTAGE_C",
+    }
+
+    def _resolve_target_index(self, root, target_raw):
+        """Resolve um nome de sensor/target digitado (ou vindo da GUI) pro
+        índice numérico de target_type da placa `root` (SIBA/SAME). Usado
+        tanto pelo parser de CMD quanto pelo SensorConfigDialog (pra achar o
+        default em sensor_defaults, que é indexado na MESMA ordem)."""
+        targets_dict = self.siba_targets if root == "SIBA" else self.same_targets
+        target_raw = target_raw.upper()
+        exact_key = f"TARGET_{target_raw}"
+        if target_raw in self.TARGET_ALIASES and self.TARGET_ALIASES[target_raw] in targets_dict:
+            return targets_dict[self.TARGET_ALIASES[target_raw]]
+        if exact_key in targets_dict:
+            return targets_dict[exact_key]
+        for name, idx in targets_dict.items():
+            if target_raw in name:
+                return idx
+        return targets_dict.get("TARGET_DEFAULT", 10)
+
     def _parse_to_cmd_struct(self, parts):
         """
         Parser Final: Mapeamento dinâmico SAME/SIBA baseado nos YAMLs.
@@ -768,47 +811,7 @@ class TinyTerminal(QWidget):
                     break
 
             # --- 3. TARGET ID ---
-            target_val = 0
-            targets_dict = self.siba_targets if root == "SIBA" else self.same_targets
-
-            # Aliases: o nome que o usuário digita (e o nome da variável de
-            # telemetria) nem sempre bate por substring com o enum target_type.
-            # Ex.: `v_batt`/`i_batt` NÃO contêm "VOLTAGE_DIVIDOR"/"CURRENT_SENSOR",
-            # então sem isso caíam em TARGET_DEFAULT e o firmware rejeitava a
-            # calibração (era o "não funciona para o resto"). load_cell_* e
-            # pitot_tube já batem por substring e não precisam de alias.
-            TARGET_ALIASES = {
-                "V_BATT": "TARGET_VOLTAGE_DIVIDOR",
-                "I_BATT": "TARGET_CURRENT_SENSOR",
-                "AIR_SPEED": "TARGET_PITOT_TUBE",
-                "PITOT": "TARGET_PITOT_TUBE",
-                "TEMPERATURE_BATTERY": "TARGET_TEMPERATURE_SENSOR",
-                "TEMP_SENSOR": "TARGET_TEMPERATURE_SENSOR",
-                # SAME: telemetria usa i_a/i_b/i_c e V_a/V_b/V_c; os nomes de
-                # calibração (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C) são
-                # 1:1 com a telemetria mas não batem por substring ("I_A" não
-                # está contido em "CURRENT_A", etc.), daí o alias.
-                "I_A": "TARGET_CURRENT_A",
-                "I_B": "TARGET_CURRENT_B",
-                "I_C": "TARGET_CURRENT_C",
-                "V_A": "TARGET_VOLTAGE_A",
-                "V_B": "TARGET_VOLTAGE_B",
-                "V_C": "TARGET_VOLTAGE_C",
-            }
-
-            # Busca alias -> exata -> substring
-            exact_key = f"TARGET_{target_raw}"
-            if target_raw in TARGET_ALIASES and TARGET_ALIASES[target_raw] in targets_dict:
-                target_val = targets_dict[TARGET_ALIASES[target_raw]]
-            elif exact_key in targets_dict:
-                target_val = targets_dict[exact_key]
-            else:
-                for name, idx in targets_dict.items():
-                    if target_raw in name:
-                        target_val = idx
-                        break
-                else:
-                    target_val = targets_dict.get("TARGET_DEFAULT", 10)
+            target_val = self._resolve_target_index(root, target_raw)
 
             # --- 4. VALUE ---
             try:

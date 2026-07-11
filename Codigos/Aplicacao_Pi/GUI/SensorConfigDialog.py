@@ -38,6 +38,25 @@ _COLS = [
 ]
 
 _PENDING_BG = "#4a3b00"   # célula editada e ainda não enviada
+_DEFAULT_FG = "#8a8a8a"   # célula mostrando o default do yaml, ainda não editada
+
+_NO_LIMIT = 1.0e30  # == CMD_CORE_NO_LIMIT (Config/CMD_Core_prm_template.h.j2)
+
+
+def _numeric_default(raw):
+    """Converte um valor de sensor_defaults (yaml) pra float — traduz o
+    sentinela textual '(-)CMD_CORE_NO_LIMIT' pro valor real que o firmware
+    usa. Retorna None se `raw` for None (sensor sem default declarado)."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s == "CMD_CORE_NO_LIMIT":
+            return _NO_LIMIT
+        if s == "-CMD_CORE_NO_LIMIT":
+            return -_NO_LIMIT
+        return None
+    return float(raw)
 
 
 class SensorConfigDialog(QDialog):
@@ -53,6 +72,18 @@ class SensorConfigDialog(QDialog):
         self._loading = False
 
     # ------------------------------------------------------------------ #
+    def _default_for(self, board, sensor):
+        """Entrada de sensor_defaults (yaml) do sensor da linha, indexada
+        pelo MESMO índice de target_type que o firmware usa (ver
+        TinyTerminal._resolve_target_index) — ou None se não houver default
+        declarado pra esse índice."""
+        idx = self.gui.terminal._resolve_target_index(board, sensor)
+        cfg = self.gui.eth.registry.get(board)
+        defaults = (cfg.protocol_cfg.get('sensor_defaults') if cfg else None) or []
+        if 0 <= idx < len(defaults):
+            return defaults[idx]
+        return None
+
     def _friendly(self, board, var):
         """Legenda dos gráficos (FX/FY/…) se existir; senão o próprio nome,
         prefixado com a placa dona do sensor (SIBA/SAME têm sensores distintos,
@@ -67,9 +98,10 @@ class SensorConfigDialog(QDialog):
         root = QVBoxLayout(self)
 
         info = QLabel(
-            "Digite um valor numa célula e clique <b>Aplicar</b> — só as células "
-            "editadas (destacadas) são enviadas, cada uma pra placa dona daquele "
-            "sensor (SIBA ou SAME).<br>"
+            "Células em <span style='color:#8a8a8a;'>cinza</span> mostram o "
+            "valor <b>default</b> (yaml) — só viram pendente se você editar. "
+            "Clique <b>Aplicar</b> pra mandar só as células destacadas, cada "
+            "uma pra placa dona daquele sensor (SIBA ou SAME).<br>"
             "⚠ <b>Células de carga</b>: <i>Ganho</i> = calibrar pelo PESO conhecido; "
             "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta)."
         )
@@ -81,10 +113,20 @@ class SensorConfigDialog(QDialog):
         self.table.setVerticalHeaderLabels([self._friendly(b, s) for b, s in _SENSORS])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        for r in range(len(_SENSORS)):
-            for c in range(len(_COLS)):
+        for r, (board, sensor) in enumerate(_SENSORS):
+            default = self._default_for(board, sensor) or {}
+            for c, (_, action) in enumerate(_COLS):
                 it = QTableWidgetItem("")
                 it.setTextAlignment(Qt.AlignCenter)
+                # Só mostra default numérico de verdade — o sentinela "sem
+                # limite" (min/max) fica em branco, não ajuda o usuário a ver
+                # "1e+30" na célula.
+                raw = default.get(action)
+                if not isinstance(raw, str):
+                    val = _numeric_default(raw)
+                    if val is not None:
+                        it.setText(f"{val:g}")
+                        it.setForeground(_qcolor(_DEFAULT_FG))
                 self.table.setItem(r, c, it)
         self.table.itemChanged.connect(self._on_item_changed)
         root.addWidget(self.table, 1)
@@ -95,10 +137,16 @@ class SensorConfigDialog(QDialog):
 
         bottom = QHBoxLayout()
         bottom.addStretch()
+        self.btn_restore = QPushButton("Restaurar padrão")
+        self.btn_restore.setToolTip(
+            "Manda DEFAULT_ACTION_SENSE_RESET_DEFAULT (ganho+offset) e os "
+            "limites do yaml (mín/máx) pra TODOS os sensores da tabela.")
+        self.btn_restore.clicked.connect(self._restore_defaults)
         self.btn_clear = QPushButton("Limpar campos")
         self.btn_clear.clicked.connect(self._clear)
         self.btn_apply = QPushButton("Aplicar")
         self.btn_apply.clicked.connect(self._apply)
+        bottom.addWidget(self.btn_restore)
         bottom.addWidget(self.btn_clear)
         bottom.addWidget(self.btn_apply)
         root.addLayout(bottom)
@@ -166,6 +214,54 @@ class SensorConfigDialog(QDialog):
         msg = f"{sent} comando(s) enviado(s)."
         if failed:
             msg += f"  {failed} falharam (valor inválido?)."
+        self.lbl_status.setText(msg)
+
+    def _restore_defaults(self):
+        """Manda TODOS os sensores da tabela de volta pro default do yaml.
+
+        Ganho+offset: uma ação só no firmware (DEFAULT_ACTION_SENSE_RESET_
+        DEFAULT restaura os dois de uma vez, não precisa saber o valor).
+        Mín/máx: o firmware não tem uma ação "reset" própria pra faixa
+        (só grava o que vier em `value`), então reenvia os valores default
+        declarados em sensor_defaults explicitamente."""
+        boards = {b for b, _ in _SENSORS}
+        for board in boards:
+            if board not in self.gui.eth.workers:
+                self.gui.eth.start_link(board)
+
+        sent, failed = 0, 0
+        for board, sensor in _SENSORS:
+            try:
+                self.gui.terminal._handle_hardware_command(
+                    [board.lower(), "set", sensor, "reset", "0.0"])
+                sent += 1
+            except Exception:
+                failed += 1
+                continue
+            default = self._default_for(board, sensor) or {}
+            for action in ("min", "max"):
+                val = _numeric_default(default.get(action))
+                if val is None:
+                    continue
+                try:
+                    self.gui.terminal._handle_hardware_command(
+                        [board.lower(), "set", sensor, action, f"{val:.6f}"])
+                except Exception:
+                    pass
+
+        self._loading = True
+        self.table.blockSignals(True)
+        for r in range(len(_SENSORS)):
+            for c in range(len(_COLS)):
+                self.table.item(r, c).setData(Qt.BackgroundRole, None)
+        self.table.blockSignals(False)
+        self._pending.clear()
+        self._loading = False
+
+        self.lbl_status.setStyleSheet("color: #2ecc40;" if failed == 0 else "color: #ff4136;")
+        msg = f"Padrão restaurado em {sent} sensor(es)."
+        if failed:
+            msg += f"  {failed} falharam."
         self.lbl_status.setText(msg)
 
 
