@@ -715,55 +715,33 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
  * driver genérico zephyr,fake-pwm é FFF-based e exige
  * subsys/testsuite/include/zephyr/fff.h, que só existe em builds
  * Twister/ztest (não em firmware de aplicação normal — ver
- * native_sim.conf). Então, só para este subsistema, HAL.c ganha um
- * pequeno bloco `#ifdef CONFIG_ARCH_POSIX` com um substituto synthetic
- * — mesma API pública (HAL_ESC_Init/Arm/Disarm/Set_Throttle), mesmo
- * comportamento de alto nível (precisa armar antes de aceitar throttle),
- * só que sem tocar PWM de verdade. `hal_sim_throttle_pct` é consultado
- * por HAL_thread_RPM_fn (também synthetic em POSIX, ver abaixo) para que
- * o RPM "siga" o throttle, como no antigo HAL_mock.c.
+ * native_sim.conf). Só a SAÍDA (aplicar um pulso PWM real vs. guardar o
+ * equivalente em RAM) é `#ifdef CONFIG_ARCH_POSIX` — a lógica de negócio
+ * (clamp 0-100%, exigir armado antes de aceitar throttle, fórmula
+ * percent->pulso) é escrita UMA vez só, em HAL_ESC_Set_Throttle/Arm/Disarm
+ * abaixo, chamando o sink específico da plataforma (hal_esc_hw_*) só pro
+ * último passo. `hal_sim_throttle_x100` (declarado no topo do arquivo) é
+ * consultado por HAL_thread_RPM_fn (também synthetic em POSIX) para que o
+ * RPM "siga" o throttle, como no antigo HAL_mock.c.
  * =========================================================== */
 #if HAL_ENABLE_ESC
 #ifdef CONFIG_ARCH_POSIX
 
-static bool esc_armed;
 /* hal_sim_throttle_x100 (throttle * 100) declarado no topo do arquivo —
  * compartilhado com o stimulus do ADC e HAL_thread_RPM_fn. */
 
-int HAL_ESC_Init(void)
+static int hal_esc_hw_init(void)
 {
-    esc_armed = false;
     atomic_set(&hal_sim_throttle_x100, 0);
     LOG_INF("HAL ESC: modo synthetic (native_sim) — sem PWM/TIM4");
     return 0;
 }
 
-void HAL_ESC_Arm(void)
+/* Sem PWM real: guarda o throttle comandado (0-100%) em "por cento x100"
+ * pro RPM synthetic perseguir (ver HAL_thread_RPM_fn). */
+static void hal_esc_hw_apply(float percent)
 {
-    k_sleep(K_MSEC(2000));
-    esc_armed = true;
-    LOG_INF("HAL ESC: armado (synthetic)");
-}
-
-void HAL_ESC_Disarm(void)
-{
-    esc_armed = false;
-    atomic_set(&hal_sim_throttle_x100, 0);
-    LOG_INF("HAL ESC: desarmado (synthetic)");
-}
-
-int HAL_ESC_Set_Throttle(float percent)
-{
-    if (!esc_armed) {
-        LOG_WRN("HAL ESC: throttle ignorado — ESC não armado");
-        return -EPERM;
-    }
-
-    if (percent < 0.0f)   percent = 0.0f;
-    if (percent > 100.0f) percent = 100.0f;
-
     atomic_set(&hal_sim_throttle_x100, (atomic_val_t)(percent * 100.0f));
-    return 0;
 }
 
 #else /* !CONFIG_ARCH_POSIX — siba_board real: TIM4/PWM via API genérica */
@@ -771,9 +749,7 @@ int HAL_ESC_Set_Throttle(float percent)
 #define ESC_PWM_NODE DT_NODELABEL(esc_motor)
 static const struct pwm_dt_spec esc_pwm = PWM_DT_SPEC_GET(ESC_PWM_NODE);
 
-static bool esc_armed = false;
-
-int HAL_ESC_Init(void)
+static int hal_esc_hw_init(void)
 {
     if (!pwm_is_ready_dt(&esc_pwm)) {
         LOG_ERR("ESC PWM não pronto");
@@ -789,17 +765,34 @@ int HAL_ESC_Init(void)
         return r;
     }
 
-    esc_armed = false;
     LOG_INF("HAL ESC: PWM inicializado em %dµs", HAL_ESC_PWM_ARM_US);
     return 0;
+}
+
+static void hal_esc_hw_apply(float percent)
+{
+    uint32_t pulse_us = HAL_ESC_PWM_MIN_US +
+        (uint32_t)(percent / 100.0f *
+                   (HAL_ESC_PWM_MAX_US - HAL_ESC_PWM_MIN_US));
+    pwm_set_dt(&esc_pwm,
+              PWM_USEC(HAL_ESC_PWM_PERIOD_US),
+              PWM_USEC(pulse_us));
+}
+
+#endif /* CONFIG_ARCH_POSIX */
+
+static bool esc_armed;
+
+int HAL_ESC_Init(void)
+{
+    esc_armed = false;
+    return hal_esc_hw_init();
 }
 
 void HAL_ESC_Arm(void)
 {
     /* Sequência de arm: mínimo por 2s */
-    pwm_set_dt(&esc_pwm,
-               PWM_USEC(HAL_ESC_PWM_PERIOD_US),
-               PWM_USEC(HAL_ESC_PWM_MIN_US));
+    hal_esc_hw_apply(0.0f);
     k_sleep(K_MSEC(2000));
     esc_armed = true;
     LOG_INF("HAL ESC: armado");
@@ -807,9 +800,9 @@ void HAL_ESC_Arm(void)
 
 void HAL_ESC_Disarm(void)
 {
-    pwm_set_dt(&esc_pwm,
-               PWM_USEC(HAL_ESC_PWM_PERIOD_US),
-               PWM_USEC(HAL_ESC_PWM_ARM_US));
+    /* Disarm manda o percentual pro piso (0%) — mesmo pulso/estado "seguro"
+     * que HAL_ESC_Init já deixa configurado antes do primeiro Arm. */
+    hal_esc_hw_apply(0.0f);
     esc_armed = false;
     LOG_INF("HAL ESC: desarmado");
 }
@@ -824,16 +817,9 @@ int HAL_ESC_Set_Throttle(float percent)
     if (percent < 0.0f)   percent = 0.0f;
     if (percent > 100.0f) percent = 100.0f;
 
-    uint32_t pulse_us = HAL_ESC_PWM_MIN_US +
-        (uint32_t)(percent / 100.0f *
-                   (HAL_ESC_PWM_MAX_US - HAL_ESC_PWM_MIN_US));
-
-    return pwm_set_dt(&esc_pwm,
-                      PWM_USEC(HAL_ESC_PWM_PERIOD_US),
-                      PWM_USEC(pulse_us));
+    hal_esc_hw_apply(percent);
+    return 0;
 }
-
-#endif /* CONFIG_ARCH_POSIX */
 
 #else /* !HAL_ENABLE_ESC */
 
@@ -1149,16 +1135,15 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 
 static atomic_t hal_sim_dac_value;
 
-int HAL_DAC_Init(void)
+static int hal_dac_hw_init(void)
 {
     atomic_set(&hal_sim_dac_value, 0);
     LOG_INF("HAL DAC: modo synthetic (native_sim) — sem DAC1/PA5");
     return 0;
 }
 
-void HAL_DAC_Set_Value(uint16_t value_12bit)
+static void hal_dac_hw_write(uint16_t value_12bit)
 {
-    if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
     atomic_set(&hal_sim_dac_value, value_12bit);
 }
 
@@ -1173,7 +1158,7 @@ void HAL_DAC_Set_Value(uint16_t value_12bit)
 
 #define RCC_APB1PCENR_DAC_EN  (1UL << 29)  /* CH32V20X_V30X_CLOCK_DAC = APB1,29 */
 
-int HAL_DAC_Init(void)
+static int hal_dac_hw_init(void)
 {
     /* Habilita clock do DAC (APB1 bit 29) */
     RCC_APB1PCENR |= RCC_APB1PCENR_DAC_EN;
@@ -1189,13 +1174,23 @@ int HAL_DAC_Init(void)
     return 0;
 }
 
-void HAL_DAC_Set_Value(uint16_t value_12bit)
+static void hal_dac_hw_write(uint16_t value_12bit)
 {
-    if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
     DAC_R12BDHR1 = value_12bit;
 }
 
 #endif /* CONFIG_ARCH_POSIX */
+
+int HAL_DAC_Init(void)
+{
+    return hal_dac_hw_init();
+}
+
+void HAL_DAC_Set_Value(uint16_t value_12bit)
+{
+    if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
+    hal_dac_hw_write(value_12bit);
+}
 
 #else /* !HAL_ENABLE_DAC */
 
