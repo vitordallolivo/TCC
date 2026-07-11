@@ -784,17 +784,16 @@ class TinyTerminal(QWidget):
                 "PITOT": "TARGET_PITOT_TUBE",
                 "TEMPERATURE_BATTERY": "TARGET_TEMPERATURE_SENSOR",
                 "TEMP_SENSOR": "TARGET_TEMPERATURE_SENSOR",
-                # SAME: telemetria usa i_a/i_b/i_c e V_a/V_b/V_c, mas os nomes de
-                # calibração são TARGET_CURRENT_A/B/C (1:1) e só TARGET_VOLTAGE_
-                # AB/BC (2 alvos p/ 3 tensões de fase — o ADC1 lê 3 fases, mas só
-                # existe calibração de linha; o firmware reusa BC também p/ V_c,
-                # ver SAME/CLAUDE.md "Calibração de tensão").
+                # SAME: telemetria usa i_a/i_b/i_c e V_a/V_b/V_c; os nomes de
+                # calibração (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C) são
+                # 1:1 com a telemetria mas não batem por substring ("I_A" não
+                # está contido em "CURRENT_A", etc.), daí o alias.
                 "I_A": "TARGET_CURRENT_A",
                 "I_B": "TARGET_CURRENT_B",
                 "I_C": "TARGET_CURRENT_C",
-                "V_A": "TARGET_VOLTAGE_AB",
-                "V_B": "TARGET_VOLTAGE_BC",
-                "V_C": "TARGET_VOLTAGE_BC",
+                "V_A": "TARGET_VOLTAGE_A",
+                "V_B": "TARGET_VOLTAGE_B",
+                "V_C": "TARGET_VOLTAGE_C",
             }
 
             # Busca alias -> exata -> substring

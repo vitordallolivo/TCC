@@ -51,10 +51,13 @@ typedef enum __attribute__((packed)) {
     TARGET_CURRENT_C,
 
 
-    TARGET_VOLTAGE_AB,
+    TARGET_VOLTAGE_A,
 
 
-    TARGET_VOLTAGE_BC,
+    TARGET_VOLTAGE_B,
+
+
+    TARGET_VOLTAGE_C,
 
 
     TARGET_POLES_PAIRS,

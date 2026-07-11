@@ -18,16 +18,15 @@ from PySide6.QtWidgets import (
 )
 
 # Sensores calibráveis/monitoráveis, por placa (soc e rpm não têm ganho/offset
-# próprios). SAME: V_c fica de fora — o ADC lê 3 fases mas só há calibração p/
-# 2 tensões de linha (VOLTAGE_AB/BC); o firmware reusa a de V_b (BC) também
-# p/ V_c (ver SAME/CLAUDE.md "Calibração de tensão").
+# próprios). SAME: as 3 correntes E as 3 tensões de fase têm calibração
+# própria cada uma (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C).
 _SENSORS = [
     ("SIBA", "load_cell_0"), ("SIBA", "load_cell_1"), ("SIBA", "load_cell_2"),
     ("SIBA", "load_cell_3"), ("SIBA", "load_cell_4"), ("SIBA", "load_cell_5"),
     ("SIBA", "v_batt"), ("SIBA", "i_batt"),
     ("SIBA", "temperature_battery"), ("SIBA", "air_speed"),
     ("SAME", "i_a"), ("SAME", "i_b"), ("SAME", "i_c"),
-    ("SAME", "V_a"), ("SAME", "V_b"),
+    ("SAME", "V_a"), ("SAME", "V_b"), ("SAME", "V_c"),
 ]
 
 # Coluna -> (título, sub-ação do CMD)
@@ -72,9 +71,7 @@ class SensorConfigDialog(QDialog):
             "editadas (destacadas) são enviadas, cada uma pra placa dona daquele "
             "sensor (SIBA ou SAME).<br>"
             "⚠ <b>Células de carga</b>: <i>Ganho</i> = calibrar pelo PESO conhecido; "
-            "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta).<br>"
-            "⚠ <b>SAME — V_c</b>: não aparece porque o firmware reusa a calibração "
-            "de V_b (só há 2 alvos de tensão de linha pras 3 fases medidas)."
+            "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta)."
         )
         info.setWordWrap(True)
         root.addWidget(info)
@@ -140,7 +137,7 @@ class SensorConfigDialog(QDialog):
             return
         # Garante o link de cada placa envolvida pra o TX acontecer (só sobe
         # a(s) que realmente tiver(em) alguma célula pendente).
-        boards_pending = {_SENSORS[r][0] for (r, _c) in self._pending}
+        boards_pending = {_SENSORS[r][0] for (r, _) in self._pending}
         for board in boards_pending:
             if board not in self.gui.eth.workers:
                 self.gui.eth.start_link(board)

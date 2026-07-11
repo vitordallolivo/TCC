@@ -52,10 +52,10 @@ LOG_MODULE_REGISTER(hal, LOG_LEVEL_INF);
 #endif
 
 /* ===========================================================
- * Calibração afim por sensor — índice = target_type (0..4). Fonte única de
+ * Calibração afim por sensor — índice = target_type (0..5). Fonte única de
  * verdade (CMD_Core/shell alteram via HAL_ADC_Set_Calib). Mapa canal→sensor:
  *   i_a←CURRENT_A  i_b←CURRENT_B  i_c←CURRENT_C
- *   V_a←VOLTAGE_AB V_b←VOLTAGE_BC V_c←VOLTAGE_BC  (3 divisores idênticos)
+ *   V_a←VOLTAGE_A  V_b←VOLTAGE_B  V_c←VOLTAGE_C  (calibração própria cada uma)
  * =========================================================== */
 struct hal_calib { float linear; float offset; };
 static struct hal_calib adc_calib[CMD_CORE_SENSOR_COUNT];
@@ -162,9 +162,9 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
     if (adc_read(adc1_dev, &adc1_seq) != 0) return -EIO;
     if (adc_read(adc2_dev, &adc2_seq) != 0) return -EIO;
 
-    *Va = apply_calib(TARGET_VOLTAGE_AB, raw_to_mv(adc1_buf[0]));
-    *Vb = apply_calib(TARGET_VOLTAGE_BC, raw_to_mv(adc1_buf[1]));
-    *Vc = apply_calib(TARGET_VOLTAGE_BC, raw_to_mv(adc1_buf[2]));
+    *Va = apply_calib(TARGET_VOLTAGE_A, raw_to_mv(adc1_buf[0]));
+    *Vb = apply_calib(TARGET_VOLTAGE_B, raw_to_mv(adc1_buf[1]));
+    *Vc = apply_calib(TARGET_VOLTAGE_C, raw_to_mv(adc1_buf[2]));
     *ia = apply_calib(TARGET_CURRENT_A,  raw_to_mv(adc2_buf[0]));
     *ib = apply_calib(TARGET_CURRENT_B,  raw_to_mv(adc2_buf[1]));
     *ic = apply_calib(TARGET_CURRENT_C,  raw_to_mv(adc2_buf[2]));
@@ -197,13 +197,18 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
     sim_theta_e += we * SIM_TS;
     if (sim_theta_e >= 2.0f * (float)M_PI) sim_theta_e -= 2.0f * (float)M_PI;
 
+    /* Calibração aplicada TAMBÉM no synthetic (antes só a leitura de HW real
+     * chamava apply_calib) — senão um CMD de calibração enviado durante o
+     * native_sim não tem efeito NENHUM observável na telemetria, o que
+     * inviabiliza testar o fluxo de calibração sem bancada física. Defaults
+     * (linear=1, offset=0) deixam o sinal sintético idêntico a antes. */
     float th = sim_theta_e;
-    *Va = E * sinf(th);
-    *Vb = E * sinf(th - TWO_PI_3);
-    *Vc = E * sinf(th - FOUR_PI_3);
-    *ia = SIM_I_AMP * sinf(th - SIM_LOAD_ANG);
-    *ib = SIM_I_AMP * sinf(th - SIM_LOAD_ANG - TWO_PI_3);
-    *ic = SIM_I_AMP * sinf(th - SIM_LOAD_ANG - FOUR_PI_3);
+    *Va = apply_calib(TARGET_VOLTAGE_A, E * sinf(th));
+    *Vb = apply_calib(TARGET_VOLTAGE_B, E * sinf(th - TWO_PI_3));
+    *Vc = apply_calib(TARGET_VOLTAGE_C, E * sinf(th - FOUR_PI_3));
+    *ia = apply_calib(TARGET_CURRENT_A, SIM_I_AMP * sinf(th - SIM_LOAD_ANG));
+    *ib = apply_calib(TARGET_CURRENT_B, SIM_I_AMP * sinf(th - SIM_LOAD_ANG - TWO_PI_3));
+    *ic = apply_calib(TARGET_CURRENT_C, SIM_I_AMP * sinf(th - SIM_LOAD_ANG - FOUR_PI_3));
     return 0;
 }
 

@@ -278,7 +278,7 @@ tem bateria própria para gerenciar):
 ```c
 typedef enum __attribute__((packed)) {
     TARGET_CURRENT_A, TARGET_CURRENT_B, TARGET_CURRENT_C,     // calibração das 3 correntes
-    TARGET_VOLTAGE_AB, TARGET_VOLTAGE_BC,                     // calibração das tensões de linha
+    TARGET_VOLTAGE_A, TARGET_VOLTAGE_B, TARGET_VOLTAGE_C,     // calibração das 3 tensões de fase
     TARGET_POLES_PAIRS, TARGET_RESISTANCE, TARGET_INDUCTANCE,
     TARGET_KV_RATING,                                         // parâmetros físicos do motor
     TARGET_GAMMA1, TARGET_GAMMA2, TARGET_GAMMAT,              // ganhos do observador (ver equações)
@@ -301,19 +301,17 @@ faixa o `target_id` cai:
    telemetria (o padrão é 100 ms / 10 Hz) — pode ser aumentado para
    reduzir tráfego de rede, ou diminuído para uma taxa de amostragem mais
    fina, sem precisar recompilar.
-3. **Os 5 primeiros alvos** (`TARGET_CURRENT_A/B/C`, `TARGET_VOLTAGE_AB/
-   BC`): calibração afim comum, `y = \text{linear} \cdot x_{mV} +
+3. **Os 6 primeiros alvos** (`TARGET_CURRENT_A/B/C`, `TARGET_VOLTAGE_A/B/
+   C`): calibração afim comum, `y = \text{linear} \cdot x_{mV} +
    \text{offset}$, no mesmo padrão da SIBA — `action_or_status` escolhe
    entre gravar o ganho, gravar o offset, restaurar o padrão, ou só gravar
    um limite mínimo/máximo de validade.
 
-Um detalhe do circuito que vale registrar: o `SAME.yaml` só define
-calibração para **duas** tensões de linha (`VOLTAGE_AB`/`VOLTAGE_BC`), mas
-o ADC lê **três** tensões de fase (`V_a`, `V_b`, `V_c`). Como as três
-entradas passam pelo mesmo tipo de divisor resistivo no circuito, o
-firmware reutiliza a calibração de `VOLTAGE_BC` também para `V_c` — uma
-simplificação assumida enquanto não for confirmado em bancada que os três
-divisores têm exatamente o mesmo comportamento.
+O ADC1 lê **três** tensões de fase (`V_a`, `V_b`, `V_c`) e cada uma tem sua
+**própria** calibração (`TARGET_VOLTAGE_A/B/C`) — mesmo esquema das 3
+correntes. (Versão anterior deste protocolo só definia calibração para
+duas tensões de linha e reusava uma delas para a terceira fase; substituído
+por 3 alvos independentes.)
 
 ### Struct `TELEMETRY_LOG` (placa → PC, enviada por padrão a 10 Hz)
 

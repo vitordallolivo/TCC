@@ -54,6 +54,9 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void);
  * Sys_thread_fn a cada LOG_MANAGER_PERIOD_MS) */
 void Log_Manager_Transmit(void);
 
+/* Reprograma o período do timer de TX em runtime (ex.: TARGET_TS_UDP) */
+void Log_Manager_Set_Period_Ms(uint32_t period_ms);
+
 #define LOG_MANAGER_THREAD_ID   40
 #define LOG_MANAGER_PRIO         6
 #define LOG_MANAGER_PERIOD_MS  100   /* 10 Hz */

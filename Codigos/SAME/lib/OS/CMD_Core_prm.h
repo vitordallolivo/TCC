@@ -17,19 +17,19 @@
  *     há "bit de erro", só a marcação de validade.
  *
  * A tabela é INDEXADA pelo próprio `target_type` do CMD (Common_Types.h): os
- * 5 primeiros enums — TARGET_CURRENT_A..TARGET_VOLTAGE_BC — são exatamente os
- * sensores calibráveis, nesta ordem (0..4). Assim o índice do array = target,
+ * 6 primeiros enums — TARGET_CURRENT_A..TARGET_VOLTAGE_C — são exatamente os
+ * sensores calibráveis, nesta ordem (0..5). Assim o índice do array = target,
  * como na SIBA (índice = sensor_id).
  *
- * ⚠ DECISÃO DE HW EM ABERTO (ver SAME/CLAUDE.md): o protocolo expõe só DUAS
- * calibrações de tensão (VOLTAGE_AB, VOLTAGE_BC) mas o ADC1 lê TRÊS tensões
- * de fase (V_a,V_b,V_c). Como os três divisores são hardware idêntico, o HAL
- * calibra V_a←VOLTAGE_AB, V_b←V_c←VOLTAGE_BC (ver ADC_CH_* em HAL.c). Se um
- * dia houver um TARGET_VOLTAGE_CA no SAME.yaml, basta acrescentar a linha.
+ * As 3 tensões de fase (V_a,V_b,V_c) têm calibração PRÓPRIA cada uma
+ * (TARGET_VOLTAGE_A/B/C), mesmo esquema das 3 correntes — cada uma com seu
+ * próprio divisor resistivo (ver ADC_CH_* em HAL.c). Antes desta versão, o
+ * protocolo só tinha 2 alvos de tensão (linha AB/BC) e V_c reusava a
+ * calibração de V_b; substituído por 3 alvos independentes.
  * =========================================================== */
 
 /* Nº de sensores calibráveis (target 0..CMD_CORE_SENSOR_COUNT-1). */
-#define CMD_CORE_SENSOR_COUNT   5
+#define CMD_CORE_SENSOR_COUNT   6
 
 /* Sentinela "sem limite" para a faixa de validade. */
 #define CMD_CORE_NO_LIMIT       1.0e30f
@@ -39,7 +39,8 @@
     X(TARGET_CURRENT_A,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
     X(TARGET_CURRENT_B,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
     X(TARGET_CURRENT_C,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
-    X(TARGET_VOLTAGE_AB,        1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
-    X(TARGET_VOLTAGE_BC,        1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)
+    X(TARGET_VOLTAGE_A,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
+    X(TARGET_VOLTAGE_B,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)     \
+    X(TARGET_VOLTAGE_C,         1.0f,       0.0f,      -CMD_CORE_NO_LIMIT,  CMD_CORE_NO_LIMIT)
 
 #endif /* CMD_CORE_PRM_H */

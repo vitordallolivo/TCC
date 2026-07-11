@@ -32,9 +32,11 @@ enums:
     - TARGET_CURRENT_A
     - TARGET_CURRENT_B
     - TARGET_CURRENT_C
-    # These are terminal voltages
-    - TARGET_VOLTAGE_AB
-    - TARGET_VOLTAGE_BC
+    # 3 tensões de FASE (ADC1 lê V_a/V_b/V_c independentemente — cada uma com
+    # seu próprio divisor resistivo, calibração própria, igual às 3 correntes).
+    - TARGET_VOLTAGE_A
+    - TARGET_VOLTAGE_B
+    - TARGET_VOLTAGE_C
     # MOTOR PARAMETERS
     - TARGET_POLES_PAIRS 
     - TARGET_RESISTANCE

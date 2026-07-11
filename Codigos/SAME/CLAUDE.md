@@ -123,8 +123,8 @@ estacionário αβ** (entrada do SMO): `V_alpha,V_beta`, `i_alpha,i_beta`;
 `status`.
 
 ### CMD — targets (o que a SAME recebe)
-- **Correntes/tensões** (calibração dos sensores): `TARGET_CURRENT_A/B/C`,
-  `TARGET_VOLTAGE_AB/BC`.
+- **Correntes/tensões** (calibração dos sensores, uma por fase): `TARGET_CURRENT_A/B/C`,
+  `TARGET_VOLTAGE_A/B/C`.
 - **Parâmetros do motor**: `TARGET_POLES_PAIRS`, `TARGET_RESISTANCE`,
   `TARGET_INDUCTANCE`, `TARGET_KV_RATING`.
 - **Ganhos do SMO (na forma Γ — ver abaixo)**: `TARGET_GAMMA1`, `TARGET_GAMMA2`,
@@ -264,6 +264,6 @@ Codigos/
 - **`torque_helice`**: hoje espelha `Te` (em regime, carga da hélice = torque
   eletromagnético). Subtrair atrito `(B·ω + τc)` quando `B/τc` (compartilhados
   com a SPMM) forem embarcados.
-- **Calibração de tensão**: o `SAME.yaml` só tem `VOLTAGE_AB/BC` (2 alvos) mas o
-  ADC1 lê 3 tensões de fase — hoje V_c reusa a calibração de `VOLTAGE_BC`.
-  Considerar um `TARGET_VOLTAGE_CA` no YAML se os 3 divisores divergirem.
+- ~~**Calibração de tensão**: o `SAME.yaml` só tem `VOLTAGE_AB/BC`...~~ resolvido:
+  `SAME.yaml` agora tem `TARGET_VOLTAGE_A/B/C` (3 alvos, um por fase, calibração
+  independente) — mesmo esquema das 3 correntes.
