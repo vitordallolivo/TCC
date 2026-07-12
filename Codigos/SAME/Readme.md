@@ -595,12 +595,15 @@ os que, um dia, entrarão na conta de `torque_helice` mencionada acima.
   (tensões `V_a/V_b/V_c`) e ADC2 em PA3/PA4/PA5 (correntes `i_a/i_b/i_c`)
   — precisa ser confirmado contra o esquemático definitivo dos shunts de
   corrente e divisores de tensão de fase.
-- **DMA do ADC2**: o driver customizado (`adc_ch32v307.c`) trata o ADC2
-  igual ao ADC1 (com seu próprio canal de DMA), mas em chips clássicos da
-  família STM32F1 (que compartilha a mesma origem de silício), o ADC2 não
-  tem canal de DMA próprio — precisa validar em bancada se o CH32V307
-  realmente permite isso; se não permitir, a leitura do ADC2 precisaria
-  ser feita em modo simultâneo através de um registro combinado do ADC1.
+- ~~**DMA do ADC2**...~~ resolvido: confirmado no manual de referência
+  (Table 11-2, cap. 11.2.3) que o ADC2 do CH32V307 **não tem canal de DMA
+  próprio** (mesma limitação da família STM32F1) — o driver customizado
+  (`adc_ch32v307.c`) agora roda os dois em **modo dual simultâneo**
+  (DUALMOD=Regular Simultaneous no `ADC1_CTLR1`): ADC1 dispara os dois ao
+  mesmo tempo e o resultado sai combinado (ADC2 nos 16 bits altos, ADC1 nos
+  baixos) por uma única transferência de DMA de 32 bits no canal do ADC1.
+  Ainda não validado em bancada de verdade (só compila — `native_sim` emula
+  o ADC por outro caminho, não exercita esse driver).
 - **$T_s$ real de amostragem**: o valor efetivo depende da taxa real de
   conversão alcançada pela malha de aquisição (o projeto mira algo em
   torno de 333 kSps por canal) — ajustável via `TARGET_TS_ADC` sem

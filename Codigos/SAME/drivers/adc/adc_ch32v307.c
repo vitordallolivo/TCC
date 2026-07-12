@@ -5,17 +5,41 @@
  * Implementa a API drivers/adc.h via MMIO direto (sem HAL WCH).
  *
  * Suporta múltiplas instâncias — ADC1 (base 0x40012400) e ADC2
- * (base 0x40012800, = ADC1_BASE + 0x400) — desde que cada nó `wch,adc`
- * no DTS aponte para um canal DMA1 próprio via `dmas = <&dma1 N>`.
+ * (base 0x40012800, = ADC1_BASE + 0x400).
+ *
+ * ⚠ MODO DUAL SIMULTÂNEO (ADC1 mestre + ADC2 escravo) — OBRIGATÓRIO se as
+ * duas instâncias existirem no DTS. O manual de referência confirma
+ * (Table 11-2 "Peripheral mapping table of each DMA1 channel", cap. 11.2.3):
+ * **só o ADC1 tem linha de request de DMA** — ADC2 NÃO aparece em NENHUM
+ * dos 7 canais do DMA1. Um ADC2 "independente" com `dmas = <&dma1 N>`
+ * próprio nunca completaria uma transferência (join TC nunca dispara) —
+ * toda leitura daria timeout na placa real (native_sim não pega isso, já
+ * que emula o ADC por outro caminho, sem esse driver).
+ *
+ * Por isso, quando as DUAS instâncias existem (caso da SAME — 3 tensões no
+ * ADC1, 3 correntes no ADC2), o driver configura DUALMOD=Regular
+ * Simultaneous (registrador ADC1_CTLR1, bits 19:16 = 0110 — ver manual de
+ * referência 12.3.2): a cada passo da sequência, ADC1 e ADC2 convertem SEUS
+ * respectivos canais NO MESMO INSTANTE (V_a com i_a, V_b com i_b, V_c com
+ * i_c — pareado por fase, essencial pro Clarke/SMO), e o resultado
+ * combinado (ADC2 nos 16 bits altos, ADC1 nos 16 bits baixos de um único
+ * word de 32 bits) sai por UMA SÓ transferência de DMA de 32 bits, disparada
+ * pelo ADC1 (única linha de DMA que existe de verdade). O ADC2 (escravo)
+ * não tem `dmas` no DTS — nem precisa, é acionado pelo trigger simultâneo
+ * que o hardware manda pra ele quando DUALMOD está configurado no ADC1.
+ *
+ * Quando só UMA instância existe (caso da SIBA), o driver cai no modo
+ * "independente" de sempre — nada muda pra esse caso.
+ *
  * Cada instância:
- *   - aloca seu próprio canal de DMA1 (registradores + IRQ calculados a
- *     partir do número do canal informado no DTS — ver DMA1_CH_BASE/
- *     ADC_CH32V307_DMA_IRQN)
+ *   - (mestre, ou única) aloca seu próprio canal de DMA1 (registradores +
+ *     IRQ calculados a partir do número do canal informado no DTS — ver
+ *     DMA1_CH_BASE/ADC_CH32V307_DMA_IRQN)
  *   - habilita seu próprio clock em RCC_APB2PCENR (ADC1 = bit 9,
  *     ADC2 = bit 10 — calculado a partir do offset do `base` em relação
  *     a ADC1_BASE, blocos de 0x400)
  *
- * Modo de operação (igual para qualquer instância):
+ * Modo de operação (independente, igual para qualquer instância isolada):
  *   - Scan contínuo de N canais configurados via adc_channel_cfg
  *   - DMA em modo circular → sem intervenção da CPU por amostra
  *   - adc_read() síncrono: dispara software trigger e aguarda semáforo
@@ -23,14 +47,15 @@
  *
  * Registradores (offsets relativos à base do periférico — ADC1 ou ADC2):
  *   STATR   +0x00   Status
- *   CTLR1   +0x04   Control 1
+ *   CTLR1   +0x04   Control 1  (SCAN, DUALMOD[19:16] — só ADC1_CTLR1 vale)
  *   CTLR2   +0x08   Control 2  (ADON, CONT, DMA, SWSTART, CAL, RSTCAL)
  *   SAMPTR1 +0x0C   Sample time ch10-17
  *   SAMPTR2 +0x10   Sample time ch0-9
  *   RSQR1   +0x2C   Regular sequence 1  (comprimento L)
  *   RSQR2   +0x30   Regular sequence 2
  *   RSQR3   +0x34   Regular sequence 3  (SQ1..SQ6)
- *   RDATAR  +0x4C   Regular data (lido pelo DMA)
+ *   RDATAR  +0x4C   Regular data (lido pelo DMA) — em modo dual, os 32 bits
+ *                   do ADC1_RDATAR trazem {ADC2[31:16], ADC1[15:0]}
  *
  * DMA1 (base 0x40020000) — canal N em offset 0x08 + (N-1)*0x14:
  *   CFGR    +0x00   Config
@@ -41,6 +66,9 @@
  *
  * Referências:
  *   openwch/ch32v307 — ch32v30x.h, ch32v30x_adc.c
+ *   CH32FV2x_V3xRM-EN (manual de referência) — cap. 11.2.3 "DMA Request
+ *   Mapping" (Table 11-2) e cap. 12.2.7 "Dual ADC Mode" (Regular
+ *   simultaneous mode, DUALMOD, Figure 12-7)
  *   Seu ADC.c do Projeto_Final_AAM
  */
 
@@ -91,6 +119,12 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 /* CTLR1 bits */
 #define ADC_CTLR1_SCAN      BIT(8)
 
+/* Dual mode — DUALMOD[19:16], só é interpretado no CTLR1 do ADC1 (mestre).
+ * 0110 = Regular simultaneous mode (manual de referência 12.3.2). */
+#define ADC_CTLR1_DUALMOD_SHIFT     16
+#define ADC_CTLR1_DUALMOD_MASK      (0xFUL << ADC_CTLR1_DUALMOD_SHIFT)
+#define ADC_CTLR1_DUALMOD_REGSIMUL  (0x6UL << ADC_CTLR1_DUALMOD_SHIFT)
+
 /* =========================================================
  * DMA1 — canal alocado por instância via DTS (`dmas = <&dma1 N>`)
  * ========================================================= */
@@ -115,6 +149,8 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 #define DMA_CFGR_MINC       BIT(7)   /* Memory increment */
 #define DMA_CFGR_PSIZE_16   BIT(8)   /* Peripheral size 16 bit */
 #define DMA_CFGR_MSIZE_16   BIT(10)  /* Memory size 16 bit */
+#define DMA_CFGR_PSIZE_32   BIT(9)   /* Peripheral size 32 bit */
+#define DMA_CFGR_MSIZE_32   BIT(11)  /* Memory size 32 bit */
 #define DMA_CFGR_PL_HIGH    BIT(12)  /* Priority level high */
 
 /* ISR/IFCR: 4 bits por canal (GIFx, TCIFx, HTIFx, TEIFx), TCIF é o bit 1
@@ -141,10 +177,29 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 #define CH32_ADC_MAX_CHANNELS  16
 
 /* =========================================================
+ * Par dual (mestre ADC1 + escravo ADC2) — resolvido em runtime comparando
+ * cfg->base no init() de cada instância, SEM precisar de propriedade nova
+ * no DTS. Só existe de verdade se as DUAS instâncias forem instanciadas
+ * (caso da SAME); na SIBA (só ADC1) fica sempre {NULL, NULL} e todo o
+ * código abaixo cai no caminho independente de sempre.
+ * ========================================================= */
+static const struct device *g_adc1_dev;
+static const struct device *g_adc2_dev;
+
+/* Buffer do DMA combinado de 32 bits (só usado pelo mestre em modo dual):
+ * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}. */
+static __attribute__((aligned(4))) uint32_t g_dual_dma_buf[CH32_ADC_MAX_CHANNELS];
+
+static inline bool adc_dual_is_paired(void)
+{
+    return g_adc1_dev != NULL && g_adc2_dev != NULL;
+}
+
+/* =========================================================
  * Estado do driver (uma instância por ADC1/ADC2)
  * ========================================================= */
 struct adc_ch32v307_data {
-    /* Buffer DMA — alinhado em 4 bytes, escrito pelo DMA */
+    /* Buffer DMA (modo independente) — alinhado em 4 bytes, escrito pelo DMA */
     __attribute__((aligned(4)))
     uint16_t dma_buf[CH32_ADC_MAX_CHANNELS];
 
@@ -169,13 +224,19 @@ struct adc_ch32v307_data {
  * ========================================================= */
 struct adc_ch32v307_cfg {
     uint32_t base;          /* Base do periférico — ADC1_BASE ou ADC2_BASE */
-    uint32_t dma_ch_base;   /* Base dos registradores do canal DMA1 alocado */
-    uint8_t  dma_channel;   /* Número do canal DMA1 (1-7) — bits ISR/IFCR   */
-    void (*irq_config_func)(const struct device *dev);
+    uint32_t dma_ch_base;   /* Base dos registradores do canal DMA1 alocado (0 se !has_dma) */
+    uint8_t  dma_channel;   /* Número do canal DMA1 (1-7) — bits ISR/IFCR (0 se !has_dma) */
+    bool     has_dma;       /* false só pro escravo (ADC2) em modo dual — ver topo do arquivo */
+    void (*irq_config_func)(const struct device *dev);  /* NULL se !has_dma */
 };
 
 /* =========================================================
- * ISR do canal DMA1 alocado para esta instância — Transfer Complete
+ * ISR do canal DMA1 alocado — Transfer Complete
+ *
+ * Em modo dual, só o MESTRE (ADC1) tem IRQ própria conectada (o escravo
+ * não tem canal de DMA nenhum) — quando ela dispara, o word de 32 bits já
+ * traz os resultados dos DOIS ADCs combinados, então esta mesma ISR separa
+ * e libera o semáforo/sinal das DUAS instâncias.
  * ========================================================= */
 static void adc_ch32v307_dma_isr(const struct device *dev)
 {
@@ -189,14 +250,39 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
     /* Limpa flag TC do canal */
     DMA1_IFCR = tcif;
 
-    /* Copia DMA → buffer do usuário na ordem dos canais configurados */
+    if (adc_dual_is_paired() && dev == g_adc1_dev) {
+        /* Mestre em modo dual: g_dual_dma_buf tem 1 word/passo — 16 bits
+         * baixos = ADC1 (este dev), 16 bits altos = ADC2 (escravo). */
+        struct adc_ch32v307_data *sdata = g_adc2_dev->data;
+
+        for (int i = 0; i < data->ch_count; i++) {
+            uint32_t w = g_dual_dma_buf[i];
+            if (data->user_buf)  data->user_buf[i]  = (uint16_t)(w & 0xFFFFU);
+            if (sdata->user_buf) sdata->user_buf[i] = (uint16_t)(w >> 16);
+        }
+
+        if (data->async_sig) {
+            k_poll_signal_raise(data->async_sig, 0);
+            data->async_sig = NULL;
+        } else {
+            k_sem_give(&data->sem_sync);
+        }
+        if (sdata->async_sig) {
+            k_poll_signal_raise(sdata->async_sig, 0);
+            sdata->async_sig = NULL;
+        } else {
+            k_sem_give(&sdata->sem_sync);
+        }
+        return;
+    }
+
+    /* Instância única/independente (caso da SIBA, ou qualquer instância
+     * fora de um par dual) — comportamento de sempre. */
     if (data->user_buf) {
         for (int i = 0; i < data->ch_count; i++) {
             data->user_buf[i] = data->dma_buf[i];
         }
     }
-
-    /* Sinaliza quem estiver aguardando */
     if (data->async_sig) {
         k_poll_signal_raise(data->async_sig, 0);
         data->async_sig = NULL;
@@ -245,6 +331,30 @@ static void dma_init(const struct adc_ch32v307_cfg *cfg, uint16_t *buf, uint16_t
                     DMA_CFGR_PL_HIGH;       /* prioridade alta */
 
     /* Habilita canal */
+    DMA_CH_REG(chb, DMA_CH_OFF_CFGR) |= DMA_CFGR_EN;
+}
+
+/* Igual a dma_init(), mas pro word combinado de 32 bits do modo dual
+ * (ADC1_RDATAR traz {ADC2[31:16], ADC1[15:0]} quando DUALMOD=Regular
+ * simultaneous). Só chamada pelo mestre (ADC1). */
+static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16_t count)
+{
+    uint32_t chb = cfg->dma_ch_base;
+
+    DMA_CH_REG(chb, DMA_CH_OFF_CFGR) &= ~DMA_CFGR_EN;
+
+    DMA_CH_REG(chb, DMA_CH_OFF_PADDR) = cfg->base + ADC_OFF_RDATAR;
+    DMA_CH_REG(chb, DMA_CH_OFF_MADDR) = (uint32_t)buf;
+    DMA_CH_REG(chb, DMA_CH_OFF_CNTR)  = count;
+
+    DMA_CH_REG(chb, DMA_CH_OFF_CFGR) =
+                    DMA_CFGR_TCIE      |
+                    DMA_CFGR_CIRC       |
+                    DMA_CFGR_MINC       |
+                    DMA_CFGR_PSIZE_32   |
+                    DMA_CFGR_MSIZE_32   |
+                    DMA_CFGR_PL_HIGH;
+
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) |= DMA_CFGR_EN;
 }
 
@@ -310,6 +420,53 @@ static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t coun
     ADC_REG(base, ADC_OFF_SAMPTR1) = smp1;
 }
 
+/*
+ * Re-arma o PAR dual inteiro (mestre + escravo) — chamada sempre que
+ * qualquer um dos dois tiver sua sequência de canais alterada, pra que a
+ * config final reflita SEMPRE o estado atual dos dois lados (não importa
+ * se o mestre ou o escravo terminou de configurar por último).
+ */
+static void adc_arm_dual_master(void)
+{
+    const struct adc_ch32v307_cfg *mcfg = g_adc1_dev->config;
+    const struct adc_ch32v307_cfg *scfg = g_adc2_dev->config;
+    struct adc_ch32v307_data *mdata = g_adc1_dev->data;
+
+    /* Desliga os dois ADCs e o DMA do mestre antes de reconfigurar */
+    DMA_CH_REG(mcfg->dma_ch_base, DMA_CH_OFF_CFGR) &= ~DMA_CFGR_EN;
+    ADC_REG(mcfg->base, ADC_OFF_CTLR2) &= ~ADC_CTLR2_ADON;
+    ADC_REG(scfg->base, ADC_OFF_CTLR2) &= ~ADC_CTLR2_ADON;
+
+    /* DUALMOD só é interpretado no CTLR1 do ADC1 (mestre) — Regular
+     * simultaneous mode (manual de referência 12.3.2, valor 0110). */
+    uint32_t ctlr1 = ADC_REG(mcfg->base, ADC_OFF_CTLR1);
+    ctlr1 = (ctlr1 & ~ADC_CTLR1_DUALMOD_MASK) | ADC_CTLR1_DUALMOD_REGSIMUL | ADC_CTLR1_SCAN;
+    ADC_REG(mcfg->base, ADC_OFF_CTLR1) = ctlr1;
+    ADC_REG(scfg->base, ADC_OFF_CTLR1) |= ADC_CTLR1_SCAN;
+
+    /* DMA combinado de 32 bits — só o mestre tem linha de DMA de verdade
+     * (ver nota grande no topo do arquivo). */
+    dma_init32(mcfg, g_dual_dma_buf, mdata->ch_count);
+
+    /* Mestre: ADON+CONT+DMA+trigger por software — SWSTART no ADC1 dispara
+     * os DOIS simultaneamente uma vez DUALMOD configurado (a placa envia o
+     * trigger simultâneo pro ADC2 sozinha, em hardware).
+     * Escravo: ADON+CONT apenas — SEM DMA própria, SEM trigger próprio. */
+    ADC_REG(mcfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT | ADC_CTLR2_DMA |
+                                        ADC_CTLR2_EXTTRIG | (0x7UL << 17); /* EXTSEL=111: SWSTART */
+    ADC_REG(mcfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
+
+    ADC_REG(scfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT;
+    ADC_REG(scfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
+
+    adc_calibrate(mcfg->base);
+    adc_calibrate(scfg->base);
+
+    /* Dispara a primeira conversão — só no mestre; o escravo é acionado
+     * junto, em hardware, pelo trigger simultâneo do modo dual. */
+    ADC_REG(mcfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_SWSTART;
+}
+
 static void adc_hw_reconfigure(const struct device *dev);
 
 /* =========================================================
@@ -367,16 +524,27 @@ static void adc_hw_reconfigure(const struct device *dev)
     struct adc_ch32v307_data *data = dev->data;
     uint32_t base = cfg->base;
 
-    /* Desliga ADC e DMA antes de reconfigurar */
-    DMA_CH_REG(cfg->dma_ch_base, DMA_CH_OFF_CFGR) &= ~DMA_CFGR_EN;
+    /* Desliga só este ADC antes de reprogramar a sequência DELE — quem
+     * re-arma o par inteiro (DMA/DUALMOD/trigger) é adc_arm_dual_master(),
+     * chamada abaixo (em modo dual) depois da sequência atualizada. */
     ADC_REG(base, ADC_OFF_CTLR2) &= ~ADC_CTLR2_ADON;
+    if (!adc_dual_is_paired()) {
+        DMA_CH_REG(cfg->dma_ch_base, DMA_CH_OFF_CFGR) &= ~DMA_CFGR_EN;
+    }
 
     adc_set_sequence(base, data->ch_ids, data->ch_count);
     adc_set_sample_times(base, data->ch_ids, data->ch_count);
 
+    if (adc_dual_is_paired()) {
+        /* Re-arma os DOIS lados com o estado atual — não importa se quem
+         * chamou foi o mestre ou o escravo. */
+        adc_arm_dual_master();
+        return;
+    }
+
+    /* Modo independente de sempre (SIBA, ou qualquer instância isolada) */
     dma_init(cfg, data->dma_buf, data->ch_count);
 
-    /* Liga ADC + scan + DMA + continuous */
     ADC_REG(base, ADC_OFF_CTLR1) |= ADC_CTLR1_SCAN;
     ADC_REG(base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT | ADC_CTLR2_DMA |
                                    ADC_CTLR2_EXTTRIG | (0x7UL << 17); /* EXTSEL=111: SWSTART */
@@ -416,7 +584,9 @@ static int adc_ch32v307_read(const struct device *dev,
     data->user_buf  = (uint16_t *)seq->buffer;
     data->async_sig = NULL;
 
-    /* O DMA circular já está rodando; semáforo é dado na próxima TC */
+    /* O DMA circular já está rodando (mestre, em modo dual, ou este mesmo
+     * ADC, em modo independente); semáforo é dado na próxima TC — em modo
+     * dual, quem dá este semáforo é a ISR do MESTRE (ver adc_ch32v307_dma_isr). */
     k_sem_reset(&data->sem_sync);
     int ret = k_sem_take(&data->sem_sync, K_MSEC(100));
     if (ret) {
@@ -450,7 +620,8 @@ static int adc_ch32v307_read_async(const struct device *dev,
     data->user_buf  = (uint16_t *)seq->buffer;
     data->async_sig = async;
 
-    /* DMA circular → ISR sinalizará async quando TC ocorrer */
+    /* DMA circular → ISR (do mestre, em modo dual) sinalizará async quando
+     * TC ocorrer. */
     return 0;
 }
 #endif /* CONFIG_ADC_ASYNC */
@@ -469,6 +640,17 @@ static int adc_ch32v307_init(const struct device *dev)
     data->async_sig = NULL;
     data->user_buf  = NULL;
 
+    /* Registra este device como mestre (ADC1) ou escravo (ADC2) do par
+     * dual — resolvido só comparando a base física, sem depender de
+     * propriedade nova no DTS nem da ordem de inicialização (as duas
+     * instâncias terminam o init() antes de HAL_Init() chamar
+     * channel_setup(), então não há corrida aqui). */
+    if (cfg->base == ADC1_BASE) {
+        g_adc1_dev = dev;
+    } else if (cfg->base == ADC2_BASE) {
+        g_adc2_dev = dev;
+    }
+
     adc_rcc_enable(cfg);
 
     /* Liga ADC pela primeira vez (necessário antes da calibração) */
@@ -479,16 +661,22 @@ static int adc_ch32v307_init(const struct device *dev)
         __asm__ volatile("nop");
     }
 
-    /* Conecta/habilita a IRQ do canal DMA1 alocado (transfer-complete) --
-     * a partir daqui adc_ch32v307_dma_isr() pode disparar, mas o canal
-     * ainda está com CFGR.EN=0 (dma_init() só roda em adc_hw_reconfigure(),
-     * chamado por adc_channel_setup() depois que HAL_ADC_Init() configurar
-     * os canais) — sem transferência em andamento, sem TC, sem ISR. */
-    cfg->irq_config_func(dev);
+    /* Conecta/habilita a IRQ do canal DMA1 alocado (transfer-complete) —
+     * só existe se esta instância TEM DMA própria (o escravo ADC2, em modo
+     * dual, não tem — recebe o resultado via ISR do mestre). A partir
+     * daqui adc_ch32v307_dma_isr() pode disparar, mas o canal ainda está
+     * com CFGR.EN=0 (dma_init()/dma_init32() só rodam em
+     * adc_hw_reconfigure()/adc_arm_dual_master(), chamados por
+     * adc_channel_setup() depois que HAL_ADC_Init() configurar os canais)
+     * — sem transferência em andamento, sem TC, sem ISR. */
+    if (cfg->has_dma) {
+        cfg->irq_config_func(dev);
+    }
 
     data->initialized = true;
-    LOG_INF("ADC CH32V307 inicializado (base=0x%08X, DMA1 canal %u)",
-            cfg->base, cfg->dma_channel);
+    LOG_INF("ADC CH32V307 inicializado (base=0x%08X, DMA1 canal %u%s)",
+            cfg->base, cfg->dma_channel,
+            cfg->has_dma ? "" : " -- escravo dual, sem DMA própria");
     return 0;
 }
 
@@ -505,34 +693,46 @@ static const struct adc_driver_api adc_ch32v307_api = {
 };
 
 /* =========================================================
- * Instanciação via DTS — suporta múltiplos nós `wch,adc` (ADC1 e/ou ADC2),
- * cada um com seu próprio canal DMA1 (`dmas = <&dma1 N>` no DTS)
+ * Instanciação via DTS — suporta múltiplos nós `wch,adc` (ADC1 e/ou ADC2).
+ * Só a instância que tiver `dmas = <&dma1 N>` no DTS ganha canal de DMA e
+ * IRQ próprios — o escravo dual (ADC2, quando houver par) não declara
+ * `dmas` no DTS de propósito (ver nota grande no topo do arquivo).
  * ========================================================= */
+#define ADC_CH32V307_HAS_DMA(n)      DT_INST_NODE_HAS_PROP(n, dmas)
 #define ADC_CH32V307_DMA_CHANNEL(n)  DT_INST_DMAS_CELL_BY_IDX(n, 0, channel)
 /* IRQn do canal N de DMA1 = 26 + N (DMA1_CH1=27 .. DMA1_CH7=33) */
 #define ADC_CH32V307_DMA_IRQN(n)     (26 + ADC_CH32V307_DMA_CHANNEL(n))
 
-#define ADC_CH32V307_INIT(n)                                                \
-    static void adc_ch32v307_irq_config_##n(const struct device *dev)      \
-    {                                                                       \
-        IRQ_CONNECT(ADC_CH32V307_DMA_IRQN(n), 1,                           \
-                    adc_ch32v307_dma_isr, DEVICE_DT_INST_GET(n), 0);        \
-        irq_enable(ADC_CH32V307_DMA_IRQN(n));                              \
-    }                                                                       \
-    static struct adc_ch32v307_data adc_ch32v307_data_##n;                 \
-    static const struct adc_ch32v307_cfg adc_ch32v307_cfg_##n = {          \
-        .base            = DT_INST_REG_ADDR(n),                            \
-        .dma_channel     = ADC_CH32V307_DMA_CHANNEL(n),                    \
-        .dma_ch_base     = DMA1_CH_BASE(ADC_CH32V307_DMA_CHANNEL(n)),      \
-        .irq_config_func = adc_ch32v307_irq_config_##n,                    \
-    };                                                                      \
-    DEVICE_DT_INST_DEFINE(n,                                                \
-        adc_ch32v307_init,                                                  \
-        NULL,                                                               \
-        &adc_ch32v307_data_##n,                                             \
-        &adc_ch32v307_cfg_##n,                                              \
-        POST_KERNEL,                                                        \
-        CONFIG_ADC_INIT_PRIORITY,                                           \
+#define ADC_CH32V307_IRQ_CONFIG_FN(n)                                          \
+    IF_ENABLED(ADC_CH32V307_HAS_DMA(n), (                                     \
+        static void adc_ch32v307_irq_config_##n(const struct device *dev)    \
+        {                                                                     \
+            IRQ_CONNECT(ADC_CH32V307_DMA_IRQN(n), 1,                         \
+                        adc_ch32v307_dma_isr, DEVICE_DT_INST_GET(n), 0);      \
+            irq_enable(ADC_CH32V307_DMA_IRQN(n));                            \
+        }                                                                     \
+    ))
+
+#define ADC_CH32V307_INIT(n)                                                   \
+    ADC_CH32V307_IRQ_CONFIG_FN(n)                                              \
+    static struct adc_ch32v307_data adc_ch32v307_data_##n;                    \
+    static const struct adc_ch32v307_cfg adc_ch32v307_cfg_##n = {             \
+        .base            = DT_INST_REG_ADDR(n),                               \
+        .has_dma         = ADC_CH32V307_HAS_DMA(n),                           \
+        .dma_channel     = COND_CODE_1(ADC_CH32V307_HAS_DMA(n),               \
+                               (ADC_CH32V307_DMA_CHANNEL(n)), (0)),            \
+        .dma_ch_base     = COND_CODE_1(ADC_CH32V307_HAS_DMA(n),               \
+                               (DMA1_CH_BASE(ADC_CH32V307_DMA_CHANNEL(n))), (0)), \
+        .irq_config_func = COND_CODE_1(ADC_CH32V307_HAS_DMA(n),               \
+                               (adc_ch32v307_irq_config_##n), (NULL)),         \
+    };                                                                         \
+    DEVICE_DT_INST_DEFINE(n,                                                   \
+        adc_ch32v307_init,                                                     \
+        NULL,                                                                  \
+        &adc_ch32v307_data_##n,                                                \
+        &adc_ch32v307_cfg_##n,                                                 \
+        POST_KERNEL,                                                           \
+        CONFIG_ADC_INIT_PRIORITY,                                              \
         &adc_ch32v307_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ADC_CH32V307_INIT)

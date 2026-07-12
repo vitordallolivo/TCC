@@ -252,10 +252,21 @@ Codigos/
 - **Mapa de pinos** (`same_board.dts`): hoje ADC1=PA0/PA1/PA2 (V_a/V_b/V_c),
   ADC2=PA3/PA4/PA5 (i_a/i_b/i_c). Confirmar contra o esquemático real dos shunts
   de corrente e divisores de tensão de fase.
-- **DMA do ADC2 no CH32V307**: o driver `adc_ch32v307.c` instancia ADC1 (DMA1
-  ch1) e ADC2 (DMA1 ch2) igualmente. Validar em bancada que o ADC2 realmente
-  gera requisição de DMA (no STM32F1 clássico ADC2 não tem DMA próprio) — se não
-  gerar, ler ADC2 em modo simultâneo pelo registro combinado do ADC1.
+- ~~**DMA do ADC2 no CH32V307**...~~ resolvido: confirmado no manual de
+  referência (CH32FV2x_V3xRM-EN, Table 11-2 "Peripheral mapping table of
+  each DMA1 channel", cap. 11.2.3) que **ADC2 não tem linha de DMA própria**
+  — não aparece em nenhum dos 7 canais do DMA1 (só ADC1 aparece, canal 1).
+  Um ADC2 independente com `dmas` próprio nunca completaria uma
+  transferência (timeout sempre, na placa real). `adc_ch32v307.c` agora
+  roda ADC1+ADC2 em **modo dual simultâneo de hardware** (DUALMOD=Regular
+  Simultaneous, ADC1_CTLR1) — ADC1 dispara os dois ADCs no mesmo instante
+  (V_x pareado com i_x da mesma fase) e o resultado sai por uma única
+  transferência de DMA de 32 bits (ADC2 nos 16 bits altos, ADC1 nos baixos)
+  no canal do ADC1. `HAL.c` não precisou mudar — a API `adc_read()` de cada
+  instância continua igual, só que agora ADC2 é sinalizado pela ISR do
+  ADC1. **Ainda não validado em bancada** (só compila; não dá pra testar
+  DMA/registrador combinado no `native_sim`, que emula o ADC por outro
+  caminho).
 - **`Ts_adc` real** (define `K = Γ/Ts` e o passo do observador): fixar conforme a
   taxa efetiva da malha de aquisição (~333 kSps/canal no projeto). Configurável
   por `TARGET_TS_ADC`.

@@ -163,7 +163,16 @@ static int hal_adc_hw_init(void)
     return 0;
 }
 
-/* Lê os 2 ADCs -> grandezas BRUTAS em mV (calibração aplicada em hal_acquire). */
+/* Lê os 2 ADCs -> grandezas BRUTAS em mV (calibração aplicada em hal_acquire).
+ *
+ * As duas chamadas abaixo PARECEM sequenciais, mas não são: o driver
+ * (drivers/adc/adc_ch32v307.c) roda ADC1+ADC2 em modo dual simultâneo de
+ * hardware (DUALMOD=Regular Simultaneous) — ADC1 dispara os dois ADCs no
+ * MESMO instante (V_x com i_x pareado por fase) e o resultado sai numa só
+ * transferência de DMA de 32 bits; a chamada adc_read(adc2_dev,...) só
+ * espera o mesmo semáforo já sinalizado pela ISR do ADC1 (ver comentário
+ * grande no topo do driver — ADC2 não tem linha de DMA própria no
+ * CH32V307, confirmado no manual de referência). */
 static int hal_read_raw(float *Va, float *Vb, float *Vc,
                         float *ia, float *ib, float *ic)
 {

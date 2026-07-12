@@ -43,10 +43,23 @@
     };
 
     /* ================================================================ *
-     * ADC2 — três CORRENTES de fase (i_a, i_b, i_c), entrelaçado c/ADC1 *
+     * ADC2 — três CORRENTES de fase (i_a, i_b, i_c) — ESCRAVO do ADC1  *
      *   CH3 = PA3 = i_a   CH4 = PA4 = i_b   CH5 = PA5 = i_c             *
-     * DMA1 canal 2 (IRQ 28). Base = ADC1_BASE + 0x400 (ver             *
-     * drivers/adc/adc_ch32v307.c — suporte multi-instância).           *
+     *                                                                    *
+     * SEM `dmas` de propósito: o manual de referência (Table 11-2,     *
+     * "Peripheral mapping table of each DMA1 channel") confirma que só *
+     * o ADC1 tem linha de request de DMA no DMA1 — ADC2 não aparece em *
+     * NENHUM dos 7 canais. Um ADC2 "independente" com DMA própria nunca*
+     * completaria uma transferência (dava timeout sempre, no hardware  *
+     * real — native_sim não pegava isso, pois emula por outro caminho).*
+     * Por isso o driver (drivers/adc/adc_ch32v307.c) roda os dois em   *
+     * modo DUAL SIMULTÂNEO (DUALMOD=Regular Simultaneous, registrador  *
+     * ADC1_CTLR1): ADC1 dispara os dois ADCs ao MESMO TEMPO (V_a com   *
+     * i_a, V_b com i_b, V_c com i_c — pareado por fase, essencial pro  *
+     * Clarke/SMO), e o resultado combinado sai por UMA transferência   *
+     * de DMA de 32 bits no canal do ADC1 (16 bits baixos=ADC1, altos=  *
+     * ADC2). O driver detecta esse modo sozinho (via `has_dma` = ADC2  *
+     * não ter `dmas` no DTS) — não precisa de propriedade nova aqui.   *
      * ================================================================ */
     adc2: adc@40012800 {
         compatible = "wch,adc";
@@ -54,8 +67,6 @@
         clocks = <&rcc CH32V20X_V30X_CLOCK_ADC2>;
         interrupt-parent = <&pfic>;
         interrupts = <34>;
-        dmas = <&dma1 2>;
-        dma-names = "rx";
         pinctrl-0 = <&adc2_default>;
         pinctrl-names = "default";
         status = "okay";
