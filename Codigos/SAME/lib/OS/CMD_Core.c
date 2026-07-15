@@ -1,3 +1,8 @@
+/**
+ * @file CMD_Core.c
+ * @brief Despacho de CMD (rede) da SAME: calibração de sensores e
+ * parâmetros/ganhos do observador.
+ */
 #include "CMD_Core.h"
 #include "CMD_Core_prm.h"
 #include "CMD.h"
@@ -14,7 +19,12 @@ LOG_MODULE_REGISTER(cmd_core, LOG_LEVEL_DBG);
  * aqui guarda-se defaults + faixa de validade. */
 static SENSORS sensor_cfg[CMD_CORE_SENSOR_COUNT];
 
-/* ---- Aplica/lê calibração no HAL (fonte única de verdade) --------------- */
+/**
+ * @brief Aplica calibração afim no HAL, se `tid` for um sensor válido.
+ * @param tid índice do sensor (target_type)
+ * @param linear ganho
+ * @param offset deslocamento
+ */
 static void apply_sensor_calib(int8_t tid, float linear, float offset)
 {
     if (tid >= 0 && tid < CMD_CORE_SENSOR_COUNT) {
@@ -22,6 +32,12 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
     }
 }
 
+/**
+ * @brief Lê a calibração atual do HAL; fora do range devolve (1.0, 0.0).
+ * @param tid índice do sensor (target_type)
+ * @param linear [out] ganho atual
+ * @param offset [out] deslocamento atual
+ */
 static void read_sensor_calib(int8_t tid, float *linear, float *offset)
 {
     if (tid >= 0 && tid < CMD_CORE_SENSOR_COUNT) {
@@ -31,26 +47,34 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
     }
 }
 
-/* ---- FUNC_START / STOP / RESET ----------------------------------------- */
+/**
+ * @brief FUNC_START: se target for TARGET_DEFAULT, reinicia o observador
+ * pra começar limpo uma nova aquisição (telemetria já está sempre ativa).
+ * @param cmd comando recebido
+ */
 static void handle_func_start(const CMD *cmd)
 {
-    /* A telemetria/observador já estão sempre ativos na SAME (é só leitura).
-     * START (TARGET_DEFAULT) reinicia o estado do observador para começar
-     * limpo uma nova aquisição. */
     if (cmd->target_id == TARGET_DEFAULT) {
         Observer_Reset();
         LOG_INF("CMD START: observador reiniciado");
     }
 }
 
+/**
+ * @brief FUNC_STOP: a SAME não aciona nada, só zera o observador.
+ * @param cmd comando recebido (não usado)
+ */
 static void handle_func_stop(const CMD *cmd)
 {
     ARG_UNUSED(cmd);
-    /* SAME não aciona nada; STOP apenas zera o observador. */
     Observer_Reset();
     LOG_INF("CMD STOP: observador zerado");
 }
 
+/**
+ * @brief FUNC_RESET: reinicia o sistema (sys_reboot). Não retorna.
+ * @param cmd comando recebido (não usado)
+ */
 static void handle_func_reset(const CMD *cmd)
 {
     ARG_UNUSED(cmd);
@@ -59,7 +83,11 @@ static void handle_func_reset(const CMD *cmd)
     sys_reboot(0);
 }
 
-/* ---- Calibração de um sensor (currents/voltages) ----------------------- */
+/**
+ * @brief Aplica uma ação de calibração/faixa a um sensor (currents/voltages).
+ * @param tid índice do sensor (0..CMD_CORE_SENSOR_COUNT-1)
+ * @param cmd comando recebido (usa action_or_status e value)
+ */
 static void handle_sensor_calib(int8_t tid, const CMD *cmd)
 {
     default_action act = (default_action)cmd->action_or_status;
@@ -103,7 +131,11 @@ static void handle_sensor_calib(int8_t tid, const CMD *cmd)
     }
 }
 
-/* ---- FUNC_SENSOR: calibração OU parâmetro/ganho do observador ---------- */
+/**
+ * @brief FUNC_SENSOR: roteia pra calibração de sensor, parâmetro/ganho do
+ * observador, ou período da telemetria, conforme o target_id do comando.
+ * @param cmd comando recebido
+ */
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
@@ -141,6 +173,11 @@ static void handle_func_sensor(const CMD *cmd)
     LOG_WRN("CMD SENSOR: target_id %d inválido", tid);
 }
 
+/**
+ * @brief Desserializa um CMD do buffer binário e despacha pro handler.
+ * @param buf bytes do pacote recebido
+ * @param len tamanho de buf; se menor que sizeof(CMD), o pacote é descartado
+ */
 void CMD_Core_Dispatch(const uint8_t *buf, size_t len)
 {
     if (len < sizeof(CMD)) {
@@ -165,12 +202,23 @@ void CMD_Core_Dispatch(const uint8_t *buf, size_t len)
     }
 }
 
+/**
+ * @brief Lê a config/faixa de validade cacheada de um sensor.
+ * @param id índice do sensor
+ * @return ponteiro pra entrada em sensor_cfg[], ou NULL se id fora do range
+ */
 const SENSORS *CMD_Core_Get_Sensor_Cfg(uint32_t id)
 {
     if (id >= CMD_CORE_SENSOR_COUNT) return NULL;
     return &sensor_cfg[id];
 }
 
+/**
+ * @brief Verifica se um valor está dentro da faixa válida do sensor.
+ * @param id índice do sensor; se fora do range, sempre válido (true)
+ * @param value valor a validar
+ * @return true se dentro de [Minimum_Valid_Value, Max_Valid_Value]
+ */
 bool CMD_Core_Validate_Sensor(uint32_t id, float value)
 {
     if (id >= CMD_CORE_SENSOR_COUNT) return true;
@@ -178,6 +226,10 @@ bool CMD_Core_Validate_Sensor(uint32_t id, float value)
             value <= sensor_cfg[id].Max_Valid_Value);
 }
 
+/**
+ * @brief Preenche sensor_cfg[] com os defaults de SAME_SENSOR_TABLE.
+ * Chamar em main() antes de qualquer CMD chegar.
+ */
 void CMD_Core_Init(void)
 {
     /* Preenche sensor_cfg[] a partir de SAME_SENSOR_TABLE (CMD_Core_prm.h):

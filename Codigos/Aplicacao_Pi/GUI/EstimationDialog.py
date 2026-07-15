@@ -1,16 +1,10 @@
 """Camada 4 · Apresentação — popout de estimação dos ganhos do SMO.
 
-Fluxo pedido: botão "Estimar" (menu Motor) -> este popout, que:
-- recebe R e L (indutância/resistência usadas na bancada) + Ts/maxiter/popsize;
-- pergunta se deseja PLOTAR o resultado final (checkbox -> --plot);
-- mostra em TEMPO REAL quantas iterações/avaliações rodaram e o custo atual/melhor;
-- ao terminar, mostra o RESULTADO final na forma Γ (Gamma_s1/s2/t — invariante
-  ao passo; é o que o firmware da SAME recebe) e pergunta antes de gravar no
-  SAME.yaml. Ks* ficam só como referência @ Ts_sim.
-
-Roda `Scripts/autotune_cost.py` via EstimationRunner e parseia o stdout
-(linhas PROGRESS/GEN/RESULT). O parsing roda na thread do subprocesso e é
-levado à UI por sinais Qt (thread-safe).
+Recebe R/L/Ts/maxiter/popsize, roda Scripts/autotune_cost.py via
+EstimationRunner e mostra progresso em tempo real (parseando stdout:
+PROGRESS/GEN/RESULT, levado à UI por sinais Qt). Resultado final em Γ
+(invariante ao passo, o que o firmware recebe) — pergunta antes de gravar
+no SAME.yaml.
 """
 import os
 import time

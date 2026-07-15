@@ -1,20 +1,12 @@
 """Camada 1 · Transporte — subprocesso do firmware real (modo 3 · native_sim).
 
-Sobe o binário do firmware compilado para a board `native_sim` do Zephyr
-(`make native_sim` -> build_native_sim/zephyr/zephyr.exe) como processo POSIX
-no host e faz o relay do stdout para o console. Diferente do BoardSimulator
-(fake Python), aqui é o firmware DE VERDADE trocando UDP real em loopback
-(NSOS — native offloaded sockets, ver <board>/boards/native_sim.conf).
+Sobe o binário compilado pra board `native_sim` do Zephyr como processo POSIX
+no host, com UDP real em loopback (NSOS). Diferente do BoardSimulator (fake
+Python), é o firmware de verdade. Só roda no Linux (zephyr.exe é ELF POSIX).
 
-Só roda no **Linux**: `zephyr.exe` é um ELF POSIX de Linux.
-
-Dois modos de comando conforme o transporte da placa:
-- SIBA/SAME (udp_struct): comandos chegam por UDP (nada de stdin).
-- SPMM (telnet): em native o firmware usa o **shell serial** ligado ao
-  stdin/stdout (`-uart_stdinout`), pois o backend Telnet TCP fica desligado
-  em native_sim (ver SPMM/boards/native_sim.conf). Por isso subimos com
-  `extra_args=['-uart_stdinout']` e `pipe_stdin=True`, e os comandos de texto
-  vão pelo `write_stdin()`.
+SIBA/SAME (udp_struct) recebem comando por UDP; SPMM (telnet) usa o shell
+serial via stdin (-uart_stdinout), já que o backend Telnet fica desligado
+em native_sim.
 """
 import os
 import signal
@@ -29,10 +21,8 @@ def native_sim_supported():
 
 
 def _pdeathsig_preexec():
-    """Linux: faz o KERNEL matar este filho (zephyr.exe) quando o processo pai
-    (a app Python) morrer — INCLUSIVE em segfault/kill -9, onde stop_native_sim
-    não chega a rodar. Evita `zephyr.exe` órfãos acumulando e streamando UDP na
-    porta 5000 (causa de tráfego 7x + dados misturados + travamentos)."""
+    """Faz o kernel matar este filho quando o processo pai morrer (mesmo em
+    kill -9), pra não deixar zephyr.exe órfão streamando UDP na porta 5000."""
     try:
         import ctypes
         PR_SET_PDEATHSIG = 1

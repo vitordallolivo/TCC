@@ -1,21 +1,10 @@
-/*
- * HAL.c — SAME Board (só aquisição elétrica; a SAME não aciona o motor).
+/**
+ * @file HAL.c
+ * @brief HAL da SAME: só aquisição elétrica, não aciona motor.
  *
- * Dois ADCs convencionais do CH32V307 (driver custom drivers/adc/adc_ch32v307.c):
- *   ADC1 → V_a,V_b,V_c (canais 0,1,2 = PA0,PA1,PA2)
- *   ADC2 → i_a,i_b,i_c (canais 3,4,5 = PA3,PA4,PA5)
- *
- * Uma única thread de aquisição bloqueia na conversão (evento "ADC pronto"),
- * calibra, faz Clarke (αβ), roda UM passo do observador (Observer_Step) e —
- * decimado no tempo — publica os 13 campos do TELEMETRY_LOG via OSSI. Nenhuma
- * outra thread de hardware existe.
- *
- * native_sim (POSIX): o driver custom não compila para PC; em vez de ler os
- * ADCs, a thread SINTETIZA um motor girando a HAL_SIM_DEMO_RPM (3 tensões +
- * 3 correntes senoidais na frequência elétrica), avançando θe pelo MESMO Ts
- * que o observador usa. A cadeia ADC→Clarke→SMO→PLL→telemetria roda inteira
- * no host e rpm_same converge para HAL_SIM_DEMO_RPM. Mesmo espírito dos blocos
- * `#ifdef CONFIG_ARCH_POSIX` da SIBA.
+ * ADC1 = V_a,V_b,V_c | ADC2 = i_a,i_b,i_c. Thread única bloqueia no ADC,
+ * faz Clarke + Observer_Step, publica telemetria. native_sim: sintetiza
+ * tensões/correntes senoidais em vez de ler ADC real.
  */
 
 #include "HAL.h"
@@ -42,24 +31,20 @@ LOG_MODULE_REGISTER(hal, LOG_LEVEL_INF);
 /* Telemetria publicada ~50 Hz (independe da taxa do laço de aquisição). */
 #define HAL_TELEM_PUBLISH_MS   20U
 
-/* Passos de observador por iteração do laço. No hardware = 1 (uma conversão =
- * um passo). No native_sim, um burst comprime o tempo-de-motor para a PLL
- * convergir em tempo de parede (ver nota no laço). */
+/* Passos do observador por iteração: 1 no hardware, burst no native_sim
+ * pra PLL convergir em tempo de parede. */
 #ifdef CONFIG_ARCH_POSIX
 #define HAL_ACQ_BURST   1000
 #else
 #define HAL_ACQ_BURST   1
 #endif
 
-/* ===========================================================
- * Calibração afim por sensor — índice = target_type (0..5). Fonte única de
- * verdade (CMD_Core/shell alteram via HAL_ADC_Set_Calib). Mapa canal→sensor:
- *   i_a←CURRENT_A  i_b←CURRENT_B  i_c←CURRENT_C
- *   V_a←VOLTAGE_A  V_b←VOLTAGE_B  V_c←VOLTAGE_C  (calibração própria cada uma)
- * =========================================================== */
+/* Calibração afim por sensor, indexada por target_type (CMD_Core altera
+ * via HAL_ADC_Set_Calib). Cada fase de V e de i tem sua própria calibração. */
 struct hal_calib { float linear; float offset; };
 static struct hal_calib adc_calib[CMD_CORE_SENSOR_COUNT];
 
+/** @brief Preenche adc_calib[] com os defaults de SAME_SENSOR_TABLE. */
 static void hal_adc_calib_init(void)
 {
     for (int i = 0; i < CMD_CORE_SENSOR_COUNT; i++) {
@@ -73,6 +58,12 @@ static void hal_adc_calib_init(void)
 #undef X
 }
 
+/**
+ * @brief Ajusta a calibração afim (y = linear*x + offset) de um sensor.
+ * @param sensor_id índice do sensor (target_type), ver CMD_Core_prm.h
+ * @param linear ganho
+ * @param offset deslocamento
+ */
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
 {
     if (sensor_id >= CMD_CORE_SENSOR_COUNT) return;
@@ -80,6 +71,12 @@ void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
     adc_calib[sensor_id].offset = offset;
 }
 
+/**
+ * @brief Lê a calibração atual de um sensor.
+ * @param sensor_id índice do sensor (target_type)
+ * @param linear [out] ganho atual
+ * @param offset [out] deslocamento atual
+ */
 void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
 {
     float l = 1.0f, o = 0.0f;
@@ -91,19 +88,20 @@ void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
     if (offset) *offset = o;
 }
 
+/**
+ * @brief Aplica a calibração afim de um sensor a uma leitura em mV.
+ * @param sensor_id índice do sensor (target_type)
+ * @param mv tensão bruta no pino (mV)
+ * @return valor calibrado (unidade física do sensor)
+ */
 static inline float apply_calib(int sensor_id, float mv)
 {
     return mv * adc_calib[sensor_id].linear + adc_calib[sensor_id].offset;
 }
 
-/* ===========================================================
- * Aquisição — hardware (2 ADCs) vs synthetic (POSIX)
- *
- * Só a FONTE da amostra bruta muda por plataforma (ADC real vs seno
- * sintético) — um único #ifdef CONFIG_ARCH_POSIX isola isso em
- * hal_adc_hw_init()/hal_read_raw(). A calibração (hal_acquire, abaixo) é
- * escrita UMA vez só, compartilhada pelas duas plataformas.
- * =========================================================== */
+/* Só a fonte da amostra bruta muda por plataforma (ADC real vs seno
+ * sintético), isolada em hal_adc_hw_init()/hal_read_raw(). A calibração
+ * (hal_acquire, abaixo) é uma única implementação para as duas. */
 #if HAL_ENABLE_ADC
 
 #ifndef CONFIG_ARCH_POSIX
@@ -140,11 +138,20 @@ static struct adc_sequence adc2_seq = {
     .buffer = adc2_buf, .buffer_size = sizeof(adc2_buf), .resolution = ADC_RESOLUTION,
 };
 
+/**
+ * @brief Converte contagem bruta do ADC (12 bits) para tensão no pino (mV).
+ * @param raw contagem bruta (0..HAL_ADC_FULL_SCALE-1)
+ * @return tensão em mV
+ */
 static inline float raw_to_mv(uint16_t raw)
 {
     return (float)raw * (float)HAL_ADC_VREF_MV / (float)HAL_ADC_FULL_SCALE;
 }
 
+/**
+ * @brief Inicializa e configura os canais de ADC1/ADC2 (hardware real).
+ * @return 0 em sucesso, ou -ENODEV/erro do adc_channel_setup
+ */
 static int hal_adc_hw_init(void)
 {
     if (!device_is_ready(adc1_dev) || !device_is_ready(adc2_dev)) {
@@ -163,16 +170,18 @@ static int hal_adc_hw_init(void)
     return 0;
 }
 
-/* Lê os 2 ADCs -> grandezas BRUTAS em mV (calibração aplicada em hal_acquire).
+/**
+ * @brief Lê os 2 ADCs -> valores brutos em mV (calibração é em hal_acquire).
  *
- * As duas chamadas abaixo PARECEM sequenciais, mas não são: o driver
- * (drivers/adc/adc_ch32v307.c) roda ADC1+ADC2 em modo dual simultâneo de
- * hardware (DUALMOD=Regular Simultaneous) — ADC1 dispara os dois ADCs no
- * MESMO instante (V_x com i_x pareado por fase) e o resultado sai numa só
- * transferência de DMA de 32 bits; a chamada adc_read(adc2_dev,...) só
- * espera o mesmo semáforo já sinalizado pela ISR do ADC1 (ver comentário
- * grande no topo do driver — ADC2 não tem linha de DMA própria no
- * CH32V307, confirmado no manual de referência). */
+ * As duas chamadas parecem sequenciais mas não são: o driver dispara ADC1+ADC2
+ * em modo dual simultâneo (DUALMOD), então adc_read(adc2) só espera o
+ * semáforo já sinalizado pela ISR do ADC1 (ADC2 não tem DMA próprio no
+ * CH32V307 — ver driver).
+ *
+ * @param Va, Vb, Vc [out] tensões de fase brutas (mV)
+ * @param ia, ib, ic [out] correntes de fase brutas (mV no shunt/sensor)
+ * @return 0 em sucesso, -EIO se a leitura falhar
+ */
 static int hal_read_raw(float *Va, float *Vb, float *Vc,
                         float *ia, float *ib, float *ic)
 {
@@ -197,10 +206,16 @@ static int hal_read_raw(float *Va, float *Vb, float *Vc,
 
 static float sim_theta_e;
 
+/** @brief native_sim: stub (não há ADC real). @return sempre 0. */
 static int hal_adc_hw_init(void) { LOG_INF("HAL: ADC synthetic (native_sim)"); return 0; }
 
-/* Motor virtual -> grandezas já em unidade física (V/A); calibração aplicada
- * em hal_acquire, igual ao caminho de hardware real. */
+/**
+ * @brief native_sim: sintetiza um motor virtual girando a HAL_SIM_DEMO_RPM
+ * (grandezas já em V/A; calibração aplicada em hal_acquire).
+ * @param Va, Vb, Vc [out] tensões de fase sintéticas (V)
+ * @param ia, ib, ic [out] correntes de fase sintéticas (A)
+ * @return sempre 0
+ */
 static int hal_read_raw(float *Va, float *Vb, float *Vc,
                         float *ia, float *ib, float *ic)
 {
@@ -225,9 +240,13 @@ static int hal_read_raw(float *Va, float *Vb, float *Vc,
 }
 #endif /* CONFIG_ARCH_POSIX */
 
-/* Lê a fonte bruta (real ou sintética, acima) e aplica a calibração afim por
- * sensor — ÚNICA implementação, compartilhada pelas duas plataformas (antes
- * disso a calibração só existia duplicada dentro de cada ramo). */
+/**
+ * @brief Lê a fonte bruta (real ou sintética) e aplica a calibração por
+ * sensor — implementação única, compartilhada pelas duas plataformas.
+ * @param Va, Vb, Vc [out] tensões de fase calibradas (V)
+ * @param ia, ib, ic [out] correntes de fase calibradas (A)
+ * @return 0 em sucesso, -EIO se hal_read_raw falhar
+ */
 static int hal_acquire(float *Va, float *Vb, float *Vc,
                        float *ia, float *ib, float *ic)
 {
@@ -244,7 +263,14 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
 
 #else  /* HAL_ENABLE_ADC == 0 */
 
+/** @brief Stub (HAL_ENABLE_ADC=0). @return sempre 0. */
 static int hal_adc_hw_init(void) { LOG_INF("HAL: ADC desabilitado (HAL_prm.h)"); return 0; }
+/**
+ * @brief Stub (HAL_ENABLE_ADC=0): zera todas as saídas.
+ * @param Va, Vb, Vc [out] sempre 0.0f
+ * @param ia, ib, ic [out] sempre 0.0f
+ * @return sempre 0
+ */
 static int hal_acquire(float *Va, float *Vb, float *Vc,
                        float *ia, float *ib, float *ic)
 {
@@ -253,15 +279,23 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
 }
 #endif
 
+/**
+ * @brief Inicializa calibração e ADCs (ou stub, se HAL_ENABLE_ADC=0).
+ * @return 0 em sucesso, ou erro de hal_adc_hw_init
+ */
 int HAL_ADC_Init(void)
 {
-    hal_adc_calib_init();   /* software puro — sempre roda */
+    hal_adc_calib_init();   /* sempre roda, independe do hardware */
     return hal_adc_hw_init();
 }
 
-/* ===========================================================
- * Thread de aquisição — o laço de eventos do observador
- * =========================================================== */
+/**
+ * @brief Publica os campos elétricos/estimados no TELEMETRY_LOG via OSSI.
+ * @param Va, Vb, Vc tensões de fase (V)
+ * @param ia, ib, ic correntes de fase (A)
+ * @param Val, Vbe tensão em αβ (V)
+ * @param ial, ibe corrente em αβ (A)
+ */
 static void hal_publish_telemetry(float Va, float Vb, float Vc,
                                   float ia, float ib, float ic,
                                   float Val, float Vbe, float ial, float ibe)
@@ -281,6 +315,11 @@ static void hal_publish_telemetry(float Va, float Vb, float Vc,
     OSSI_Submit_Sensor(SENSOR_ID_TORQUE_HELICE,   Observer_Get_Torque_Helice());
 }
 
+/**
+ * @brief Thread de aquisição: bloqueia na conversão do ADC, roda Clarke +
+ * Observer_Step, e publica telemetria decimada no tempo. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -292,31 +331,26 @@ static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
     float V_alpha = 0, V_beta = 0, i_alpha = 0, i_beta = 0;
 
     while (1) {
-        /* Aplica reconfiguração pendente (reinicia o observador se um
-         * parâmetro/ganho mudou por CMD) — topo do laço, fora do lock. */
+        /* Reinicia o observador se um parâmetro/ganho mudou por CMD. */
         Observer_Apply_Pending();
 
-        /* No hardware, cada conversão = 1 passo. No native_sim, um "burst" de
-         * passos por iteração comprime o tempo-de-motor (o ADC real roda a
-         * ~333 kSps; sem o burst, os 2 ms de k_sleep dariam poucos passos e a
-         * PLL nunca convergiria em tempo de parede). Ver HAL_ACQ_BURST. */
+        /* HAL_ACQ_BURST: 1 conversão = 1 passo no hardware; no native_sim
+         * comprime várias iterações pra PLL convergir em tempo de parede. */
         for (int b = 0; b < HAL_ACQ_BURST; b++) {
             if (hal_acquire(&Va, &Vb, &Vc, &ia, &ib, &ic) != 0) {
                 k_sleep(K_MSEC(1));
                 break;
             }
-            /* Clarke (amplitude-invariante, i_a+i_b+i_c=0):
-             *   α = fase_a ; β = (fase_a + 2·fase_b)/√3 (ver test_coeff_auto.py) */
+            /* Clarke amplitude-invariante (i_a+i_b+i_c=0). */
             i_alpha = ia;
             i_beta  = (ia + 2.0f * ib) * INV_SQRT3;
             V_alpha = Va;
             V_beta  = (Va + 2.0f * Vb) * INV_SQRT3;
 
-            /* UM passo do observador, colado ao evento de conversão. */
             Observer_Step(V_alpha, V_beta, i_alpha, i_beta);
         }
 
-        /* Telemetria decimada no tempo (não por contagem de amostras). */
+        /* Telemetria decimada no tempo, não por amostra. */
         uint32_t now = k_uptime_get_32();
         if ((now - last_pub) >= HAL_TELEM_PUBLISH_MS) {
             last_pub = now;
@@ -325,20 +359,20 @@ static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
         }
 
 #ifdef CONFIG_ARCH_POSIX
-        /* adc_emul/synthetic "converte" instantaneamente — sem uma pausa o
-         * laço nunca cede e trava o scheduler/clock do native_sim. ~500 Hz
-         * de laço, telemetria a 50 Hz. */
+        /* Synthetic "converte" na hora; sem pausa o laço trava o clock do
+         * native_sim. ~500 Hz de laço, telemetria a 50 Hz. */
         k_sleep(K_MSEC(2));
 #endif
     }
 }
 
-/* ===========================================================
- * HAL_Init
- * =========================================================== */
 K_THREAD_STACK_DEFINE(hal_adc_stack, HAL_STACK_SIZE);
 static struct k_thread hal_adc_thread_data;
 
+/**
+ * @brief Inicializa os ADCs e sobe a thread de aquisição/observador.
+ * @return 0 em sucesso, ou erro de HAL_ADC_Init
+ */
 int HAL_Init(void)
 {
     int r = HAL_ADC_Init();

@@ -1,7 +1,8 @@
-/*
- * Shell de bancada (Telnet) — comandos customizados do SPMM.
- * Registrados via SHELL_CMD_ARG_REGISTER. Ver tabela no CLAUDE.md.
+/**
+ * @file shell_cmds.c
+ * @brief Shell de bancada (Telnet) — comandos customizados do SPMM.
  *
+ * Registrados via SHELL_CMD_ARG_REGISTER:
  *   arm | disarm            sequencia de armar/desarmar o ESC
  *   throttle <us>           define o PWM do ESC (1000=parado .. 2000=max)
  *   ramp <us> <s>           rampa suave de throttle (evita degrau no ESC)
@@ -17,6 +18,8 @@
 #include <zephyr/shell/shell.h>
 #include <stdlib.h>
 
+/** @brief "arm" — arma o ESC (bloqueia ~2s). @param sh shell
+ * @param argc, argv não usados @return sempre 0 */
 static int cmd_arm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
@@ -26,6 +29,8 @@ static int cmd_arm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "disarm" — desarma o ESC. @param sh shell
+ * @param argc, argv não usados @return sempre 0 */
 static int cmd_disarm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
@@ -34,6 +39,9 @@ static int cmd_disarm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "throttle <us>" — define o PWM do ESC. @param sh shell
+ * @param argc não usado @param argv argv[1]=us @return 0 ou -EPERM se
+ * não armado */
 static int cmd_throttle(const struct shell *sh, size_t argc, char **argv)
 {
     int us = atoi(argv[1]);
@@ -46,6 +54,9 @@ static int cmd_throttle(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "ramp <us> <s>" — rampa suave de throttle. @param sh shell
+ * @param argc não usado @param argv argv[1]=us, argv[2]=segundos
+ * @return 0 ou -EPERM se não armado */
 static int cmd_ramp(const struct shell *sh, size_t argc, char **argv)
 {
     int us   = atoi(argv[1]);
@@ -60,6 +71,8 @@ static int cmd_ramp(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "rpm" — imprime rotação e velocidade angular atuais.
+ * @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_rpm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
@@ -68,6 +81,8 @@ static int cmd_rpm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "iq" — imprime a corrente de torque média filtrada.
+ * @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_iq(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
@@ -75,6 +90,8 @@ static int cmd_iq(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "read" — dump completo: rpm, omega, Te, Iq, Id, theta_e e as 6
+ * fases. @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_read(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
@@ -91,6 +108,10 @@ static int cmd_read(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "patamar <us> <s>" — aplica throttle, espera estabilizar e
+ * imprime o ponto de regime (ω, Te) pro ensaio B/τc.
+ * @param sh shell @param argc não usado @param argv argv[1]=us, argv[2]=segundos
+ * @return 0 ou -EPERM se não armado */
 static int cmd_patamar(const struct shell *sh, size_t argc, char **argv)
 {
     int us   = atoi(argv[1]);
@@ -109,17 +130,22 @@ static int cmd_patamar(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "coast" — corta o throttle (mínimo) pra disparar o coast-down
+ * (ensaio J); o log ativo captura omega(t) do decaimento.
+ * @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_coast(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
-    /* Corta a excitacao (throttle minimo) -> motor desacelera livre. O log
-     * (iniciado antes via 'log start') captura omega(t) do decaimento. */
     esc_set_throttle_us(SPMM_ESC_MIN_US);
     shell_print(sh, "coast: throttle cortado (%u us) — capturando omega(t)",
                 SPMM_ESC_MIN_US);
     return 0;
 }
 
+/** @brief "log start <hz> | log stop" — controla o streaming UDP.
+ * @param sh shell @param argc número de argumentos
+ * @param argv argv[1]="start"/"stop", argv[2]=hz (se start)
+ * @return 0 em sucesso, -EINVAL em uso inválido */
 static int cmd_log(const struct shell *sh, size_t argc, char **argv)
 {
     if (strcmp(argv[1], "start") == 0) {

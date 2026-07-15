@@ -1,3 +1,7 @@
+/**
+ * @file Security_Manager.c
+ * @brief Código de erro agregado e parada de emergência da SIBA.
+ */
 #include "Security_Manager.h"
 #include "CMD_Core.h"        /* CMD_Core_Get_Sensor_Cfg — faixa central (CMD_Core_prm.h) */
 #include "HAL.h"
@@ -18,6 +22,7 @@ static bool emergency_active = false;
  * é sempre feito através de Error_Detect/Error_Erase/Get_Error_Code. */
 static uint32_t error_code = 0U;
 
+/** @brief Zera o estado de emergência e o código de erro agregado. */
 void Security_Manager_Init(void)
 {
     emergency_active = false;
@@ -25,6 +30,11 @@ void Security_Manager_Init(void)
     LOG_INF("Security_Manager inicializado");
 }
 
+/**
+ * @brief Seta um bit de erro, se ainda não estiver setado (borda de subida).
+ * @param bit bit a setar
+ * @return true se mudou o estado (borda), false se já estava setado
+ */
 bool Security_Manager_Error_Detect(siba_error_bit_t bit)
 {
     if (error_code & (uint32_t)bit) {
@@ -34,6 +44,11 @@ bool Security_Manager_Error_Detect(siba_error_bit_t bit)
     return true;
 }
 
+/**
+ * @brief Limpa um bit de erro, se estiver setado (borda de descida).
+ * @param bit bit a limpar
+ * @return true se mudou o estado (borda), false se já estava limpo
+ */
 bool Security_Manager_Error_Erase(siba_error_bit_t bit)
 {
     if (!(error_code & (uint32_t)bit)) {
@@ -43,11 +58,16 @@ bool Security_Manager_Error_Erase(siba_error_bit_t bit)
     return true;
 }
 
+/** @brief Código de erro agregado atual. @return bitmask (siba_error_bit_t). */
 uint32_t Security_Manager_Get_Error_Code(void)
 {
     return error_code;
 }
 
+/**
+ * @brief Dispara a parada de emergência: desarma o ESC imediatamente.
+ * Idempotente — chamadas subsequentes são no-op enquanto ativa.
+ */
 void Security_Manager_Trigger_Emergency(void)
 {
     if (emergency_active) return;
@@ -59,13 +79,12 @@ void Security_Manager_Trigger_Emergency(void)
     HAL_ESC_Disarm();
 }
 
-/*
- * Security_Manager_Check
- *
- * Verifica se o valor recebido faz sentido dentro dos limites
- * operacionais (padrão Error_Detect/Error_Erase do CMP_BackgroundHandler:
- * seta o bit enquanto a condição persiste, limpa assim que ela cessa —
- * loga só na borda, nunca a cada amostra).
+/**
+ * @brief Verifica se o valor está dentro dos limites operacionais (tabela
+ * central); seta/limpa o bit de erro correspondente e dispara emergência
+ * se estiver fora da faixa.
+ * @param sensor_id SENSOR_ID_V_BATT/I_BATT/RPM (outros são ignorados)
+ * @param value valor do sensor
  */
 void Security_Manager_Check(uint32_t sensor_id, float value)
 {

@@ -1,20 +1,11 @@
-/*
- * Aquisicao — MEDICAO COMPLETA das fases do BLDC.
- *   ADC1 (DMA): Ia, Ib, Ic  (correntes)
- *   ADC2 (DMA): Va, Vb, Vc  (tensoes)
+/**
+ * @file acquisition.c
+ * @brief Medição completa das fases: ADC1=Ia,Ib,Ic, ADC2=Va,Vb,Vc.
  *
- * Pipeline (mesmo codigo na placa e em native_sim):
- *   1. Clarke nas tensoes  -> (Valpha, Vbeta) -> theta_e = atan2(Vbeta,Valpha)
- *      (o vetor de tensao da o angulo eletrico; resolve a falta de sensor de
- *       posicao absoluta — so ha sensor de rotacao de 7 pulsos/volta).
- *   2. Clarke nas correntes -> (Ialpha, Ibeta)
- *   3. Park com theta_e     -> Id, Iq
- *   4. Iq filtrado (EMA, remove ripple do 6-step) -> Te = KT * Iq
- *
- * Prioridade ALTA (ver main.c): nunca pode ser preemptada pelo shell/telemetria.
- *
- * native_sim (CONFIG_ARCH_POSIX): sem ADC de hardware -> sintetiza as 6 fases
- * a partir de omega e passa pelo MESMO pipeline (testa Clarke/Park no host).
+ * Pipeline: Clarke nas tensões -> theta_e=atan2(Vbeta,Valpha) (dá o ângulo
+ * elétrico, já que só há sensor de rotação); Clarke nas correntes; Park com
+ * theta_e -> Id,Iq; Iq filtrado (EMA) -> Te=KT*Iq. Prioridade alta, nunca
+ * preemptada pelo shell/telemetria. native_sim sintetiza as 6 fases.
  */
 #include "spmm.h"
 #include <zephyr/kernel.h>
@@ -34,6 +25,10 @@ static struct k_spinlock  meas_lock;
 static spmm_meas_t        g_meas;
 static float              iq_filt;
 
+/**
+ * @brief Copia coerente da última medida completa (thread-safe).
+ * @param out [out] destino da cópia
+ */
 void spmm_get_meas(spmm_meas_t *out)
 {
     k_spinlock_key_t key = k_spin_lock(&meas_lock);
@@ -41,6 +36,7 @@ void spmm_get_meas(spmm_meas_t *out)
     k_spin_unlock(&meas_lock, key);
 }
 
+/** @brief Iq médio filtrado (EMA). @return corrente de torque em A. */
 float spmm_get_iq(void)
 {
     k_spinlock_key_t key = k_spin_lock(&meas_lock);
@@ -49,16 +45,26 @@ float spmm_get_iq(void)
     return v;
 }
 
+/** @brief Torque eletromagnético estimado. @return Te = KT*Iq, em N.m. */
 float spmm_get_te(void) { return SPMM_KT * spmm_get_iq(); }
 
-/* Clarke invariante em amplitude (sem neutro: Xc medido, nao assumido) */
+/**
+ * @brief Clarke invariante em amplitude, sem assumir neutro (Xc é medido).
+ * @param xa, xb, xc grandezas de fase (corrente ou tensão)
+ * @param xal, xbe [out] componentes alpha/beta
+ */
 static inline void clarke(float xa, float xb, float xc, float *xal, float *xbe)
 {
     *xal = (2.0f * xa - xb - xc) * (1.0f / 3.0f);
     *xbe = (xb - xc) * (1.0f / 1.7320508f);   /* 1/sqrt(3) */
 }
 
-/* Nucleo do processamento — comum a placa real e ao native_sim */
+/**
+ * @brief Núcleo do processamento (Clarke+Park+filtro Iq), comum à placa
+ * real e ao native_sim. Atualiza g_meas/iq_filt sob spinlock.
+ * @param ia, ib, ic correntes de fase (A)
+ * @param va, vb, vc tensões de fase (V)
+ */
 static void process_measurement(float ia, float ib, float ic,
                                 float va, float vb, float vc)
 {
@@ -81,11 +87,17 @@ static void process_measurement(float ia, float ib, float ic,
     k_spin_unlock(&meas_lock, key);
 }
 
+/** @brief Converte contagem bruta do ADC em tensão no pino (mV).
+ * @param raw contagem bruta @return mV */
 static inline float raw_to_mv(uint16_t raw)
 {
     return (float)raw * (float)SPMM_ADC_VREF_MV / (float)SPMM_ADC_FULL_SCALE;
 }
+/** @brief Converte mV no pino em corrente calibrada. @param mv tensão no pino
+ * @return A (provisório — calibrar na bancada) */
 static inline float mv_to_amp(float mv)  { return (mv - SPMM_I_OFFSET_MV) * SPMM_I_AMPS_PER_MV; }
+/** @brief Converte mV no pino em tensão de fase calibrada. @param mv tensão
+ * no pino @return V (provisório — calibrar na bancada) */
 static inline float mv_to_volt(float mv) { return mv * SPMM_V_VOLTS_PER_MV; }
 
 #ifndef CONFIG_ARCH_POSIX
@@ -124,6 +136,10 @@ static struct adc_sequence seq_v = {
     .buffer      = buf_v, .buffer_size = sizeof(buf_v), .resolution = SPMM_ADC_RESOLUTION,
 };
 
+/**
+ * @brief Configura ADC1 (correntes) e ADC2 (tensões, best-effort).
+ * @return 0 em sucesso, -ENODEV se ADC1 não estiver pronto
+ */
 int acquisition_init(void)
 {
     if (!device_is_ready(adc1)) { LOG_ERR("ADC1 nao pronto"); return -ENODEV; }
@@ -145,6 +161,12 @@ int acquisition_init(void)
     return 0;
 }
 
+/**
+ * @brief Dispara uma conversão assíncrona e bloqueia até terminar (ou 50ms).
+ * @param dev instância do ADC
+ * @param seq sequência a ler
+ * @return 0 em sucesso, -EIO ou -ETIMEDOUT
+ */
 static int adc_read_signal(const struct device *dev, struct adc_sequence *seq)
 {
     struct k_poll_signal sig;
@@ -156,6 +178,11 @@ static int adc_read_signal(const struct device *dev, struct adc_sequence *seq)
     return 0;
 }
 
+/**
+ * @brief Thread de aquisição (hardware): lê os 2 ADCs, converte e roda
+ * process_measurement a ~1 kHz. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void acq_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -179,12 +206,18 @@ static void acq_thread_fn(void *p1, void *p2, void *p3)
 
 #else /* CONFIG_ARCH_POSIX — sintetiza as 6 fases e usa o MESMO pipeline */
 
+/** @brief native_sim: stub (fases sintetizadas a partir de omega). @return sempre 0. */
 int acquisition_init(void)
 {
     LOG_INF("Aquisicao: modo synthetic (native_sim) — fases geradas de omega");
     return 0;
 }
 
+/**
+ * @brief Thread de aquisição (native_sim): sintetiza as 6 fases a partir
+ * de omega e roda o mesmo process_measurement da placa real. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void acq_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -215,6 +248,7 @@ static void acq_thread_fn(void *p1, void *p2, void *p3)
 }
 #endif /* CONFIG_ARCH_POSIX */
 
+/** @brief Cria a thread de aquisição (prioridade alta). */
 void acquisition_start(void)
 {
     k_thread_create(&acq_thread, acq_stack, ACQ_STACK_SIZE,

@@ -1,10 +1,11 @@
-/*
- * ESC — PWM de servo (TIM4 CH1 / PB6) para o throttle do ESC comercial.
- * O SPMM NAO gera PWM trifasico; so comanda o throttle (1000-2000us @ 50Hz).
+/**
+ * @file esc.c
+ * @brief ESC — PWM de servo (TIM4 CH1/PB6) para o throttle do ESC comercial.
  *
- * Reaproveita o padrao de PWM da SIBA (HAL_ESC_*), reconfigurado para servo.
- * Em native_sim (CONFIG_ARCH_POSIX) nao ha TIM4 -> throttle synthetic (so
- * guarda o valor, para rpm.c/acquisition.c "seguirem" o throttle).
+ * O SPMM não gera PWM trifásico; só comanda o throttle (1000-2000us @ 50Hz).
+ * Reaproveita o padrão de PWM da SIBA, reconfigurado pra servo. Em
+ * native_sim não há TIM4 -> throttle synthetic (só guarda o valor, pra
+ * rpm.c/acquisition.c "seguirem" o throttle).
  */
 #include "spmm.h"
 #include <zephyr/kernel.h>
@@ -15,6 +16,7 @@ LOG_MODULE_REGISTER(esc, LOG_LEVEL_INF);
 static bool     esc_armed;
 static uint32_t esc_throttle_us = SPMM_ESC_MIN_US;
 
+/** @brief Último throttle aplicado. @return valor em µs (1000-2000). */
 uint32_t esc_get_throttle_us(void) { return esc_throttle_us; }
 
 #ifndef CONFIG_ARCH_POSIX
@@ -23,11 +25,17 @@ uint32_t esc_get_throttle_us(void) { return esc_throttle_us; }
 
 static const struct pwm_dt_spec esc_pwm = PWM_DT_SPEC_GET(DT_NODELABEL(esc_motor));
 
+/** @brief Aplica um pulso em µs no PWM do ESC. @param us largura do pulso.
+ * @return 0 em sucesso, erro do pwm_set_dt */
 static int esc_apply_us(uint32_t us)
 {
     return pwm_set_dt(&esc_pwm, PWM_USEC(SPMM_ESC_PERIOD_US), PWM_USEC(us));
 }
 
+/**
+ * @brief Inicializa o PWM do ESC em posição de disarm.
+ * @return 0 em sucesso, -ENODEV se o PWM não estiver pronto
+ */
 int esc_init(void)
 {
     if (!pwm_is_ready_dt(&esc_pwm)) {
@@ -42,8 +50,10 @@ int esc_init(void)
 }
 #else
 /* -------------------- native_sim: throttle synthetic -------------------- */
+/** @brief native_sim: stub (sem PWM real). @param us não usado. @return sempre 0. */
 static int esc_apply_us(uint32_t us) { ARG_UNUSED(us); return 0; }
 
+/** @brief native_sim: inicializa o estado sem PWM real. @return sempre 0. */
 int esc_init(void)
 {
     esc_armed = false;
@@ -53,9 +63,9 @@ int esc_init(void)
 }
 #endif /* CONFIG_ARCH_POSIX */
 
+/** @brief Sequência de arm: pulso mínimo por 2s (padrão dos ESCs RC). */
 void esc_arm(void)
 {
-    /* Sequencia de arm: pulso minimo por 2s (padrao dos ESCs RC) */
     esc_throttle_us = SPMM_ESC_MIN_US;
     esc_apply_us(SPMM_ESC_MIN_US);
     k_sleep(K_MSEC(2000));
@@ -63,6 +73,7 @@ void esc_arm(void)
     LOG_INF("ESC: armado");
 }
 
+/** @brief Desarma o ESC, voltando ao pulso de disarm. */
 void esc_disarm(void)
 {
     esc_throttle_us = SPMM_ESC_ARM_US;
@@ -71,6 +82,11 @@ void esc_disarm(void)
     LOG_INF("ESC: desarmado");
 }
 
+/**
+ * @brief Aplica um throttle, se armado.
+ * @param us largura do pulso desejada; clampada em [SPMM_ESC_MIN_US, SPMM_ESC_MAX_US]
+ * @return 0 em sucesso, -EPERM se não armado
+ */
 int esc_set_throttle_us(uint32_t us)
 {
     if (!esc_armed) {
@@ -83,6 +99,13 @@ int esc_set_throttle_us(uint32_t us)
     return esc_apply_us(us);
 }
 
+/**
+ * @brief Rampa suave de throttle até target_us, em `secs` segundos (20
+ * passos/s), evitando degrau brusco no ESC.
+ * @param target_us destino (clampado em [SPMM_ESC_MIN_US, SPMM_ESC_MAX_US])
+ * @param secs duração da rampa; 0 aplica o valor direto
+ * @return 0 em sucesso, -EPERM se não armado
+ */
 int esc_ramp_us(uint32_t target_us, uint32_t secs)
 {
     if (!esc_armed) {

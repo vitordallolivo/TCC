@@ -1,17 +1,11 @@
 """Camada 4 · Apresentação — Ensaios da SPMM (atrito B/τc e inércia J).
 
-Porta o cliente de bancada de ../SPMM/CLAUDE.md para a GUI:
-- **Atrito (patamares):** para cada throttle, estabiliza e mede (ω, Te) em
-  regime permanente → regressão Te = B·ω + τc.
-- **Inércia (coast-down):** sobe a rotação, `coast` corta o throttle, coleta
-  ω(t) (t = n·Ts, do micro) → J = -(B·ω+τc)/(dω/dt) em janelas.
+Atrito: por patamar de throttle, estabiliza e mede (ω, Te) em regime ->
+regressão Te = B·ω + τc. Inércia: sobe a rotação, `coast` corta o throttle,
+coleta ω(t) -> J = -(B·ω+τc)/(dω/dt) em janelas.
 
-Orquestra pelo link Telnet da SPMM (comandos de texto) e coleta as amostras
-UDP pelo gancho `gui._spmm_sample_sink`. Roda numa thread para não travar a UI.
-
-SEGURANÇA (crítico): `disarm` + `throttle 1000` rodam SEMPRE no `finally` —
-o motor nunca pode ficar girando se algo falhar (Ctrl+C do script vira o botão
-"Parar" + o fechamento do diálogo aqui).
+Orquestra via Telnet da SPMM, roda numa thread pra não travar a UI.
+Segurança: disarm + throttle 1000 rodam sempre no finally.
 """
 import csv
 import threading

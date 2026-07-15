@@ -4,17 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ===========================================================
- * Código de erro/alarme agregado — uint32_t, 1 bit por condição
- *
- * Cada manager (Battery/Propeller/Security/OS) detecta suas próprias
- * condições e reporta aqui via Security_Manager_Error_Detect/_Erase
- * (mesmo padrão Error_Detect/Error_Erase do CMP_BackgroundHandler:
- * o bit fica setado enquanto a condição persistir e é limpo assim
- * que ela deixa de ocorrer — sem reentrância/spam de log a cada
- * leitura, só na transição). O agregado vai para TELEMETRY_LOG.error_code
- * (ver SIBA.yaml/Log_Manager) — exposto em HEX para a interface.
- * =========================================================== */
+/* Código de erro agregado (1 bit por condição). Cada manager reporta via
+ * Security_Manager_Error_Detect/_Erase (só loga na transição). Agregado
+ * vai pra TELEMETRY_LOG.error_code. */
 typedef enum {
     /* --- Battery_Manager --- */
     ERROR_BATT_LOW_SOC              = (1U << 0),  /* SOC abaixo do limite de alerta        */
@@ -42,13 +34,8 @@ void Security_Manager_Init(void);
 void Security_Manager_Check(uint32_t sensor_id, float value);
 void Security_Manager_Trigger_Emergency(void);
 
-/* ---------------------------------------------------------------------
- * Error_Detect / Error_Erase — agregação central do código de erro.
- *
- * Retornam true quando a chamada efetivamente mudou o estado do bit
- * (borda de subida/descida) — útil para os managers logarem só na
- * transição, evitando spam de LOG_ERR a cada leitura de sensor.
- * --------------------------------------------------------------------- */
+/* @return true se a chamada mudou o estado do bit (borda), pra managers
+ * logarem só na transição. */
 bool Security_Manager_Error_Detect(siba_error_bit_t bit);
 bool Security_Manager_Error_Erase(siba_error_bit_t bit);
 

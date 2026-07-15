@@ -42,11 +42,7 @@
 #define SPMM_ESC_MAX_US         2000U      /* maximo                           */
 #define SPMM_ESC_ARM_US         1000U
 
-/* ====================================================================
- * ADC — MEDICAO COMPLETA (dq real)
- *   ADC1 (3 canais): correntes Ia/Ib/Ic (PA0/PA1/PA2)
- *   ADC2 (3 canais): tensoes  Va/Vb/Vc (PA3/PA4/PA5)  -> estima theta_e
- * ==================================================================== */
+/* ADC — dq real: ADC1=Ia/Ib/Ic (PA0-2), ADC2=Va/Vb/Vc (PA3-5) -> theta_e. */
 #define SPMM_ADC_NUM_CH        3           /* canais por instancia (ADC1/ADC2) */
 #define SPMM_ADC_IDX_A         0           /* Ia / Va                          */
 #define SPMM_ADC_IDX_B         1           /* Ib / Vb                          */
@@ -131,11 +127,8 @@ void     telemetry_start_log(uint32_t hz);   /* comeca streaming (n, w, Te)   */
 void     telemetry_stop_log(void);
 uint32_t telemetry_get_ts_us(void);          /* Ts atual em us (0 = parado)   */
 
-/* ====================================================================
- * Protocolo UDP de log — binario, little-endian, sem padding.
- * O PC reconstroi o tempo como t = n * Ts (contador de amostra, NAO horario
- * de chegada do pacote). Ver CLAUDE.md e scripts/spmm_bench.py.
- * ==================================================================== */
+/* Protocolo UDP de log, binario/little-endian/sem padding. PC reconstroi
+ * t = n*Ts (contador de amostra, nao o horario de chegada do pacote). */
 #pragma pack(push, 1)
 typedef struct {
     uint32_t n;        /* indice da amostra; tempo = n * Ts (reconstruido PC) */

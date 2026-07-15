@@ -1,3 +1,8 @@
+/**
+ * @file main.c
+ * @brief Ponto de entrada do firmware da SIBA: ordem de inicialização dos
+ * subsistemas.
+ */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -17,6 +22,11 @@
 
 LOG_MODULE_REGISTER(siba_main, LOG_LEVEL_INF);
 
+/**
+ * @brief Inicializa OSSI/managers/Log/CMD_Core/NCI/HAL nessa ordem e
+ * habilita o tráfego de rede. HAL_Init falhando não impede o boot.
+ * @return 0 sempre (Zephyr chama main() uma vez e segue no scheduler)
+ */
 int main(void)
 {
     LOG_INF("=== SIBA Board — Iniciando ===");

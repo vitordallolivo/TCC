@@ -1,21 +1,10 @@
-"""motor_math.py — transformadas de Clarke/Park para obter Iq/Id das correntes
-de fase medidas (SAME), independente da estimativa de torque do motor.
+"""motor_math.py — Clarke/Park pra obter Iq/Id das correntes de fase medidas
+(SAME), sem depender da estimativa de torque do motor (Kt é específico de
+cada motor). Clarke é puramente geométrica; Park precisa de theta_e.
 
-Motivação: o `torque_eletrico` da SAME é `Kt·iq`, e `Kt`/parâmetros do SMO são
-ESPECÍFICOS do motor. Para um motor desconhecido não dá pra confiar nesse torque.
-As correntes de fase (i_a, i_b, i_c), porém, são medidas diretas. Daí:
-
-  Clarke (abc -> αβ)  — puramente geométrica, INDEPENDENTE do motor.
-  Park   (αβ -> dq)   — precisa do ângulo elétrico θ_e do rotor.
-  |I| = sqrt(iα²+iβ²) — magnitude, independente de θ_e (≈ iq se id≈0).
-
-Filosofia de uso (pedido do usuário): COLETAR os dados brutos primeiro (os
-buffers da GUI já guardam i_a/i_b/i_c/rpm como nos gráficos) e só DEPOIS calcular
-— assim dá pra experimentar fontes de θ_e diferentes offline, sem recomeçar o
-ensaio. Todas as funções aceitam escalares ou arrays numpy (vetorizadas).
-
-Convenção: Clarke com invariância de AMPLITUDE (fator 2/3), padrão em FOC —
-iα/iβ têm a mesma amplitude das correntes de fase senoidais.
+Uso: coletar os dados brutos primeiro (buffers da GUI) e calcular depois,
+pra poder testar fontes de theta_e diferentes offline. Todas as funções
+aceitam escalar ou array numpy. Clarke com invariância de amplitude (2/3).
 """
 import numpy as np
 
@@ -59,13 +48,20 @@ def magnitude(i_alpha, i_beta):
 
 
 def electrical_angle_from_speed(t, rpm, pole_pairs, theta0=0.0):
-    """Reconstrói θ_e integrando a velocidade: θ_e = θ0 + ∫ω_e dt, com
-    ω_e = 2π·(rpm/60)·P (frequência ELÉTRICA). `t` em segundos.
+    """Reconstrói theta_e integrando a velocidade (theta_e = theta0 + integral de omega_e dt).
 
-    Uma das fontes candidatas de θ_e (usa o RPM da SIBA). Precisa dos pares de
-    polos P e de uma referência de fase θ0 (alinhamento) — por isso é para
-    EXPERIMENTAR sobre os dados coletados, não uma verdade absoluta. Retorna o
-    ângulo em [0, 2π)."""
+    Uma fonte candidata de theta_e (a partir do RPM da SIBA) pra experimentar
+    offline, não uma referência absoluta — depende do alinhamento em theta0.
+
+    Args:
+        t: tempo em segundos (array)
+        rpm: rotação mecânica
+        pole_pairs: pares de polos do motor
+        theta0: ângulo elétrico inicial (rad)
+
+    Returns:
+        Ângulo elétrico em [0, 2*pi).
+    """
     t = np.asarray(t, dtype=float)
     rpm = np.asarray(rpm, dtype=float)
     omega_e = 2.0 * np.pi * (rpm / 60.0) * float(pole_pairs)
@@ -84,12 +80,13 @@ def dq_from_phases(ia, ib, ic, theta_e):
 
 
 def imbalance(ia, ib, ic):
-    """Diagnóstico de desbalanceamento das 3 fases.
+    """Diagnóstico de desbalanceamento das 3 fases (num sistema equilibrado
+    sem neutro, ia+ib+ic ~= 0). Vetorizado: com arrays, opera ponto a ponto.
 
-    Num sistema equilibrado (sem neutro) ia+ib+ic ≈ 0. Retorna um dict com a
-    soma (corrente de sequência zero ×3), a soma normalizada pela magnitude e um
-    flag de desbalanceio. Vetorizado: se as entradas forem arrays, opera ponto a
-    ponto e o `imbalanced` vira array booleano."""
+    Returns:
+        dict com soma (ia+ib+ic), magnitude (|I|), rel (soma relativa à
+        corrente) e imbalanced (bool, rel > 5%).
+    """
     ia = np.asarray(ia, dtype=float)
     ib = np.asarray(ib, dtype=float)
     ic = np.asarray(ic, dtype=float)

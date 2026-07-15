@@ -4,14 +4,8 @@
 #include "Common_Types.h"      /* target_type */
 
 /* Auto-generated — edite SAME.yaml, não este arquivo.
- *
- * CMD_Core_prm.h — configuração básica dos sensores calibráveis de SAME.
- * Fonte única de verdade: bloco `sensor_defaults` do SAME.yaml.
- *   - defaults de calibração afim (y = linear*x + offset), restaurados no RESET
- *   - faixa válida [min, max]
- *
- * A tabela é INDEXADA pelo próprio target/sensor — mesmo índice usado por
- * cmd->target_id (ver Common_Types.h / Log_Manager.h).
+ * Defaults de calibração (y=linear*x+offset) e faixa válida por sensor,
+ * indexado pelo target/sensor (cmd->target_id).
  */
 
 /* Nº de entradas (target/sensor 0..CMD_CORE_SENSOR_COUNT-1). */

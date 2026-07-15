@@ -1,14 +1,8 @@
-/*
- * Log_Manager.c — SAME
- *
- * Mantém o TELEMETRY_LOG corrente e o transmite por UDP a cada Ts_udp
- * (default 100 ms = 10 Hz). Mesmo modelo da SIBA: um k_timer dispara um
- * k_work na same_wq → NCI_Transmit. O TX fica serializado com o despacho de
- * telemetria (OSSI) e de CMDs, sem concorrer com Log_Manager_Update.
- *
- * A thread do ADC publica os 13 campos via OSSI_Submit_Sensor →
- * Log_Manager_Update (sensor_id = SENSOR_ID_*, gerados em Log_Manager.h a
- * partir do SAME.yaml).
+/**
+ * @file Log_Manager.c
+ * @brief Mantém o TELEMETRY_LOG e transmite por UDP a cada Ts_udp (10 Hz
+ * default). k_timer dispara k_work na same_wq -> NCI_Transmit, serializado
+ * com telemetria (OSSI) e CMDs. Thread do ADC atualiza via OSSI_Submit_Sensor.
  */
 
 #include "Log_Manager.h"
@@ -26,18 +20,31 @@ static struct k_mutex log_mutex;
 static struct k_work  log_tx_work;
 static struct k_timer log_tx_timer;
 
+/**
+ * @brief Item de trabalho que efetivamente transmite o log. Roda na same_wq.
+ * @param w item de trabalho (não usado)
+ */
 static void log_tx_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
     Log_Manager_Transmit();
 }
 
+/**
+ * @brief Callback do k_timer: só agenda log_tx_work na same_wq (não
+ * transmite direto, pra não rodar em contexto de interrupção do timer).
+ * @param t timer que disparou (não usado)
+ */
 static void log_tx_timer_fn(struct k_timer *t)
 {
     ARG_UNUSED(t);
     k_work_submit_to_queue(&same_wq, &log_tx_work);
 }
 
+/**
+ * @brief Inicializa o log (status LOG_VALID) e arranca o timer de TX
+ * periódico. Chamar em main() antes do HAL.
+ */
 void Log_Manager_Init(void)
 {
     k_mutex_init(&log_mutex);
@@ -56,6 +63,10 @@ void Log_Manager_Init(void)
     LOG_INF("Log_Manager inicializado (TX a cada %d ms)", LOG_MANAGER_PERIOD_MS);
 }
 
+/**
+ * @brief Reconfigura o período de TX do log (via CMD TARGET_TS_UDP).
+ * @param period_ms novo período em ms; 0 é ignorado (mantém o atual)
+ */
 void Log_Manager_Set_Period_Ms(uint32_t period_ms)
 {
     if (period_ms == 0) return;
@@ -63,6 +74,11 @@ void Log_Manager_Set_Period_Ms(uint32_t period_ms)
     LOG_INF("Log_Manager: período de TX = %u ms", period_ms);
 }
 
+/**
+ * @brief Atualiza um campo do TELEMETRY_LOG corrente. Thread-safe.
+ * @param sensor_id ver SENSOR_ID_* em Log_Manager.h
+ * @param value valor a gravar; sensor_id desconhecido só loga um aviso
+ */
 void Log_Manager_Update(uint32_t sensor_id, float value)
 {
     k_mutex_lock(&log_mutex, K_FOREVER);
@@ -87,6 +103,10 @@ void Log_Manager_Update(uint32_t sensor_id, float value)
     k_mutex_unlock(&log_mutex);
 }
 
+/**
+ * @brief Copia o TELEMETRY_LOG corrente (thread-safe).
+ * @return cópia do snapshot atual
+ */
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
 {
     TELEMETRY_LOG snap;
@@ -96,6 +116,9 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
     return snap;
 }
 
+/**
+ * @brief Marca timestamp/status e transmite o log corrente por UDP (NCI).
+ */
 void Log_Manager_Transmit(void)
 {
     TELEMETRY_LOG snap;

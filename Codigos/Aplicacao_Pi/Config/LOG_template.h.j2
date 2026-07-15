@@ -6,11 +6,7 @@
 
 /* Auto-generated — edite {{ board_yaml }}, não este arquivo */
 
-/* ===========================================================
- * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
- * Gerado a partir da ordem dos campos em TELEMETRY_LOG
- * (exclui timestamp, status e error_code, que não são sensores).
- * =========================================================== */
+/* Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG. */
 {%- set ns = namespace(idx = 0) %}
 {%- for field in structs.TELEMETRY_LOG %}
 {%- if field.name not in ['timestamp', 'status', 'error_code'] %}

@@ -1,47 +1,14 @@
-/*
+/**
+ * @file adc_ch32v307.c
+ * @brief Driver ADC do CH32V307 (Zephyr), MMIO direto — suporta ADC1/ADC2,
+ * cada instância independente (sem modo dual, ver versão SAME/SIBA).
+ *
  * SPDX-License-Identifier: Apache-2.0
  *
- * Driver ADC para CH32V307 — Zephyr RTOS
- * Implementa a API drivers/adc.h via MMIO direto (sem HAL WCH).
- *
- * Suporta múltiplas instâncias — ADC1 (base 0x40012400) e ADC2
- * (base 0x40012800, = ADC1_BASE + 0x400) — desde que cada nó `wch,adc`
- * no DTS aponte para um canal DMA1 próprio via `dmas = <&dma1 N>`.
- * Cada instância:
- *   - aloca seu próprio canal de DMA1 (registradores + IRQ calculados a
- *     partir do número do canal informado no DTS — ver DMA1_CH_BASE/
- *     ADC_CH32V307_DMA_IRQN)
- *   - habilita seu próprio clock em RCC_APB2PCENR (ADC1 = bit 9,
- *     ADC2 = bit 10 — calculado a partir do offset do `base` em relação
- *     a ADC1_BASE, blocos de 0x400)
- *
- * Modo de operação (igual para qualquer instância):
- *   - Scan contínuo de N canais configurados via adc_channel_cfg
- *   - DMA em modo circular → sem intervenção da CPU por amostra
- *   - adc_read() síncrono: dispara software trigger e aguarda semáforo
- *   - adc_read_async() assíncrono: usa k_poll_signal sinalizado na ISR DMA TC
- *
- * Registradores (offsets relativos à base do periférico — ADC1 ou ADC2):
- *   STATR   +0x00   Status
- *   CTLR1   +0x04   Control 1
- *   CTLR2   +0x08   Control 2  (ADON, CONT, DMA, SWSTART, CAL, RSTCAL)
- *   SAMPTR1 +0x0C   Sample time ch10-17
- *   SAMPTR2 +0x10   Sample time ch0-9
- *   RSQR1   +0x2C   Regular sequence 1  (comprimento L)
- *   RSQR2   +0x30   Regular sequence 2
- *   RSQR3   +0x34   Regular sequence 3  (SQ1..SQ6)
- *   RDATAR  +0x4C   Regular data (lido pelo DMA)
- *
- * DMA1 (base 0x40020000) — canal N em offset 0x08 + (N-1)*0x14:
- *   CFGR    +0x00   Config
- *   CNTR    +0x04   Count
- *   PADDR   +0x08   Peripheral addr
- *   MADDR   +0x0C   Memory addr
- *   IRQn = 26 + N   (DMA1_CH1=27 .. DMA1_CH7=33, ch32v30x.h openwch)
- *
- * Referências:
- *   openwch/ch32v307 — ch32v30x.h, ch32v30x_adc.c
- *   Seu ADC.c do Projeto_Final_AAM
+ * Cada instância tem seu próprio canal DMA1 (`dmas = <&dma1 N>` no DTS) e
+ * clock em RCC_APB2PCENR. Scan contínuo em DMA circular; adc_read() bloqueia
+ * num semáforo, adc_read_async() usa k_poll_signal sinalizado na ISR DMA TC.
+ * Refs: openwch/ch32v307 (ch32v30x_adc.c).
  */
 
 #define DT_DRV_COMPAT wch_adc
@@ -55,10 +22,7 @@
 
 LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 
-/* =========================================================
- * Mapa de registradores — MMIO direto, offsets relativos à base
- * (ADC1_BASE para a instância ADC1, ADC1_BASE + 0x400 para ADC2)
- * ========================================================= */
+/* Registradores, offsets relativos à base (ADC1_BASE ou ADC1_BASE+0x400). */
 
 #define ADC1_BASE       0x40012400UL
 #define ADC2_BASE       (ADC1_BASE + 0x400UL)
@@ -174,9 +138,11 @@ struct adc_ch32v307_cfg {
     void (*irq_config_func)(const struct device *dev);
 };
 
-/* =========================================================
- * ISR do canal DMA1 alocado para esta instância — Transfer Complete
- * ========================================================= */
+/**
+ * @brief ISR de Transfer Complete do canal DMA1 alocado a esta instância:
+ * copia o buffer DMA pro buffer do usuário e sinaliza quem espera.
+ * @param dev instância dona da IRQ
+ */
 static void adc_ch32v307_dma_isr(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -205,11 +171,12 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
     }
 }
 
-/* =========================================================
- * Funções internas de HW — todas recebem a base do periférico/canal,
- * permitindo reuso idêntico entre instâncias ADC1 e ADC2
- * ========================================================= */
+/* Funções de HW, recebem a base do periférico/canal — reusadas por ADC1 e ADC2. */
 
+/**
+ * @brief Habilita o clock do DMA1 e do ADC desta instância, e o prescaler.
+ * @param cfg config da instância (usa cfg->base pra achar o índice ADC1/ADC2)
+ */
 static void adc_rcc_enable(const struct adc_ch32v307_cfg *cfg)
 {
     uint32_t adc_index = (cfg->base - ADC1_BASE) / 0x400UL; /* 0=ADC1, 1=ADC2 */
@@ -218,13 +185,18 @@ static void adc_rcc_enable(const struct adc_ch32v307_cfg *cfg)
     RCC_AHBPCENR  |= RCC_AHB_DMA1;
     RCC_APB2PCENR |= RCC_APB2_ADCx(adc_index);
 
-    /* ADC clock = PCLK2 / 6  (144 MHz / 6 = 24 MHz, dentro do limite 14 MHz
-     * do datasheet — ajuste para /8 se usar HSE < 112 MHz). Prescaler é
-     * compartilhado entre ADC1/ADC2 — última instância a inicializar
-     * apenas reafirma o mesmo valor. */
+    /* ADC clock = PCLK2/6 = 24 MHz (limite datasheet 14 MHz... ajustar p/
+     * /8 se HSE < 112 MHz). Prescaler é compartilhado; última instância a
+     * inicializar só reafirma o mesmo valor. */
     RCC_CFGR0 = (RCC_CFGR0 & ~RCC_CFGR0_ADCPRE_MASK) | RCC_CFGR0_ADCPRE_DIV6;
 }
 
+/**
+ * @brief Configura o canal DMA1 em modo circular, 16 bits.
+ * @param cfg config da instância (dma_ch_base, base do periférico)
+ * @param buf buffer de destino (uint16_t por canal)
+ * @param count número de canais na sequência
+ */
 static void dma_init(const struct adc_ch32v307_cfg *cfg, uint16_t *buf, uint16_t count)
 {
     uint32_t chb = cfg->dma_ch_base;
@@ -248,6 +220,10 @@ static void dma_init(const struct adc_ch32v307_cfg *cfg, uint16_t *buf, uint16_t
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) |= DMA_CFGR_EN;
 }
 
+/**
+ * @brief Executa a sequência de calibração de hardware do ADC (RSTCAL+CAL).
+ * @param base endereço base do periférico (ADC1_BASE ou ADC2_BASE)
+ */
 static void adc_calibrate(uint32_t base)
 {
     /* Reset calibração */
@@ -262,10 +238,11 @@ static void adc_calibrate(uint32_t base)
     }
 }
 
-/*
- * Configura RSQR3/2/1 com a sequência de canais.
- * Cada SQx é 5 bits; RSQR3 contém SQ1..SQ6 (canais 1 a 6 da sequência),
- * RSQR2 contém SQ7..SQ12, RSQR1 contém SQ13..SQ16 + L (comprimento-1).
+/**
+ * @brief Configura RSQR3/2/1 com a sequência de canais (5 bits por SQx).
+ * @param base endereço base do periférico
+ * @param ids ordem dos IDs de canal na sequência
+ * @param count número de canais (1..16)
  */
 static void adc_set_sequence(uint32_t base, const uint8_t *ids, uint8_t count)
 {
@@ -288,10 +265,11 @@ static void adc_set_sequence(uint32_t base, const uint8_t *ids, uint8_t count)
     ADC_REG(base, ADC_OFF_RSQR1) = rsqr1;
 }
 
-/*
- * Sample time: 239.5 ciclos para todos os canais (máxima precisão).
- * Bits por canal: 3 bits; SAMPTR2 cobre ch0-ch9, SAMPTR1 ch10-ch17.
- * Valor 0b111 = 239.5 ciclos.
+/**
+ * @brief Configura sample time = 239.5 ciclos (máx. precisão) pra todos os canais.
+ * @param base endereço base do periférico
+ * @param ids IDs de canal a configurar
+ * @param count número de canais
  */
 static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t count)
 {
@@ -312,9 +290,13 @@ static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t coun
 
 static void adc_hw_reconfigure(const struct device *dev);
 
-/* =========================================================
- * API Zephyr: channel_setup
- * ========================================================= */
+/**
+ * @brief API Zephyr channel_setup: adiciona um canal à sequência de scan
+ * desta instância e reprograma o hardware.
+ * @param dev instância do driver
+ * @param cfg config do canal (só ADC_GAIN_1/ADC_REF_INTERNAL suportados)
+ * @return 0 em sucesso, -EINVAL/-ENOTSUP/-ENOMEM em erro
+ */
 static int adc_ch32v307_channel_setup(const struct device *dev,
                                       const struct adc_channel_cfg *cfg)
 {
@@ -348,19 +330,18 @@ static int adc_ch32v307_channel_setup(const struct device *dev,
         LOG_DBG("Canal %d adicionado (total: %d)", cfg->channel_id,
                 data->ch_count);
 
-        /* Reprograma RSQR/SAMPTR/DMA com a sequência atualizada — chamado
-         * uma vez por canal adicionado; a última chamada (todos os canais
-         * já registrados) deixa o scan circular rodando com a sequência
-         * completa. */
+        /* Reprograma RSQR/SAMPTR/DMA a cada canal adicionado. */
         adc_hw_reconfigure(dev);
     }
 
     return 0;
 }
 
-/* =========================================================
- * Reconfiguração do ADC quando os canais mudam
- * ========================================================= */
+/**
+ * @brief Reprograma sequência/sample-time/DMA/trigger desta instância
+ * quando os canais mudam.
+ * @param dev instância do driver
+ */
 static void adc_hw_reconfigure(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -390,9 +371,12 @@ static void adc_hw_reconfigure(const struct device *dev)
     ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_SWSTART;
 }
 
-/* =========================================================
- * API Zephyr: read (síncrono)
- * ========================================================= */
+/**
+ * @brief API Zephyr read (síncrono): dispara/aguarda uma conversão completa.
+ * @param dev instância do driver
+ * @param seq sequência solicitada (buffer + máscara de canais)
+ * @return 0 em sucesso, -ENODEV/-EINVAL/-ETIMEDOUT em erro
+ */
 static int adc_ch32v307_read(const struct device *dev,
                              const struct adc_sequence *seq)
 {
@@ -427,9 +411,14 @@ static int adc_ch32v307_read(const struct device *dev,
     return 0;
 }
 
-/* =========================================================
- * API Zephyr: read_async
- * ========================================================= */
+/**
+ * @brief API Zephyr read_async: registra o buffer/sinal e retorna sem
+ * bloquear; o sinal é levantado na ISR do DMA quando a conversão terminar.
+ * @param dev instância do driver
+ * @param seq sequência solicitada (buffer + máscara de canais)
+ * @param async sinal a levantar na conclusão
+ * @return 0 em sucesso, -ENODEV/-EINVAL em erro
+ */
 #ifdef CONFIG_ADC_ASYNC
 static int adc_ch32v307_read_async(const struct device *dev,
                                    const struct adc_sequence *seq,
@@ -455,9 +444,13 @@ static int adc_ch32v307_read_async(const struct device *dev,
 }
 #endif /* CONFIG_ADC_ASYNC */
 
-/* =========================================================
- * API Zephyr: init
- * ========================================================= */
+/**
+ * @brief API Zephyr init: liga o clock/ADC desta instância e conecta a IRQ
+ * do canal DMA1 alocado. Calibração de verdade ocorre depois, no primeiro
+ * adc_hw_reconfigure() (channel_setup).
+ * @param dev instância do driver
+ * @return sempre 0
+ */
 static int adc_ch32v307_init(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -479,11 +472,8 @@ static int adc_ch32v307_init(const struct device *dev)
         __asm__ volatile("nop");
     }
 
-    /* Conecta/habilita a IRQ do canal DMA1 alocado (transfer-complete) --
-     * a partir daqui adc_ch32v307_dma_isr() pode disparar, mas o canal
-     * ainda está com CFGR.EN=0 (dma_init() só roda em adc_hw_reconfigure(),
-     * chamado por adc_channel_setup() depois que HAL_ADC_Init() configurar
-     * os canais) — sem transferência em andamento, sem TC, sem ISR. */
+    /* Habilita a IRQ do canal DMA1; ainda não dispara pois dma_init() só
+     * roda depois, em adc_hw_reconfigure(). */
     cfg->irq_config_func(dev);
 
     data->initialized = true;
@@ -492,9 +482,7 @@ static int adc_ch32v307_init(const struct device *dev)
     return 0;
 }
 
-/* =========================================================
- * Tabela de API do driver
- * ========================================================= */
+/** @brief Tabela de API do driver ADC (interface Zephyr adc_driver_api). */
 static const struct adc_driver_api adc_ch32v307_api = {
     .channel_setup = adc_ch32v307_channel_setup,
     .read          = adc_ch32v307_read,
@@ -504,14 +492,16 @@ static const struct adc_driver_api adc_ch32v307_api = {
     .ref_internal  = 3300,  /* mV — Vref interno CH32V307 */
 };
 
-/* =========================================================
- * Instanciação via DTS — suporta múltiplos nós `wch,adc` (ADC1 e/ou ADC2),
- * cada um com seu próprio canal DMA1 (`dmas = <&dma1 N>` no DTS)
- * ========================================================= */
+/* Instanciação via DTS — cada nó `wch,adc` com seu canal DMA1 próprio. */
 #define ADC_CH32V307_DMA_CHANNEL(n)  DT_INST_DMAS_CELL_BY_IDX(n, 0, channel)
 /* IRQn do canal N de DMA1 = 26 + N (DMA1_CH1=27 .. DMA1_CH7=33) */
 #define ADC_CH32V307_DMA_IRQN(n)     (26 + ADC_CH32V307_DMA_CHANNEL(n))
 
+/**
+ * @brief Instancia o driver pra instância DTS `n`: gera a função de IRQ,
+ * dados/config e registro no dispositivo Zephyr (DEVICE_DT_INST_DEFINE).
+ * @param n índice da instância DTS
+ */
 #define ADC_CH32V307_INIT(n)                                                \
     static void adc_ch32v307_irq_config_##n(const struct device *dev)      \
     {                                                                       \

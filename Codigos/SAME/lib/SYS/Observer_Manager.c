@@ -1,30 +1,11 @@
-/*
- * Observer_Manager.c — SMO + PLL embarcado no nó SAME.
+/**
+ * @file Observer_Manager.c
+ * @brief SMO + PLL do nó SAME, transcrito do laço numba de
+ * test_coeff_auto.py::run_sim_core (só a parte do observador; a planta é o
+ * motor real, medido pelos 2 ADCs). Tudo em float (FPU single-precision).
  *
- * Transcrição DIRETA do laço numba de
- *   ../Aplicacao_Pi/Scripts/test_coeff_auto.py :: run_sim_core
- * — porém SÓ a parte do OBSERVADOR (SMO + PLL + reconstrução/torque). A
- * planta (inversor 6-passos, dinâmica mecânica, geração de BEMF) é o motor
- * REAL sob ensaio: a SAME não a simula, ela MEDE u_αβ/i_αβ pelos 2 ADCs
- * (Clarke feito no HAL) e alimenta este passo.
- *
- * DESEMPENHO (pedido do projeto — roda a até ~333 kSps por canal):
- *   - Tudo em `float` (precisão simples): o CH32V307 tem FPU single-precision;
- *     `double`/sin() cairiam em soft-float lentíssimo. Usa-se sinf/tanhf/etc.
- *   - O estado e as constantes são carregados em variáveis LOCAIS `register`
- *     no início de Observer_Step e regravados no fim — o compilador mantém o
- *     laço quente inteiro em registradores de FP, sem reler a struct a cada
- *     amostra (mesmo padrão do laço numba, que só usa escalares locais).
- *   - Constantes de discretização são pré-calculadas (Observer_Recompute),
- *     não no caminho quente.
- *   - Helpers marcados always_inline; Observer_Step marcado hot+flatten.
- *
- * RECONFIGURAÇÃO = REINÍCIO: um CMD que muda um parâmetro/ganho chama um
- * Observer_Set_* na thread da same_wq, que só grava em `pending` e levanta um
- * flag atômico. A thread do ADC chama Observer_Apply_Pending() no topo do
- * laço: recalcula as constantes e ZERA o estado dinâmico — o observador
- * "reinicia" ao mudar uma variável dele (não arrasta transitório do modelo
- * antigo). Caminho quente fica sem lock; o lock só ocorre quando um CMD chega.
+ * Reconfiguração = reinício: CMD muda param via Observer_Set_*, aplicado no
+ * topo do laço do ADC (Observer_Apply_Pending), que zera o estado.
  */
 
 #include "Observer_Manager.h"
@@ -130,7 +111,12 @@ static struct k_mutex cfg_mutex;
  * Helpers (always_inline, float puro)                                      *
  * ======================================================================== */
 
-/* Forma normalizada (±1) da BEMF da fase A — igual a f_shape() do script. */
+/**
+ * @brief Forma normalizada (±1) da BEMF — igual a f_shape() do script.
+ * @param theta ângulo elétrico (rad)
+ * @param kind 1 = senoidal, 0 = trapezoidal
+ * @return valor normalizado em [-1, 1]
+ */
 static inline float __attribute__((always_inline))
 f_shape(float theta, int kind)
 {
@@ -146,7 +132,13 @@ f_shape(float theta, int kind)
     else                                  return (6.0f/(float)M_PI) * (th - TWO_PI);
 }
 
-/* Função de comutação s(e) com camada de contorno inv_bl = 1/BL. */
+/**
+ * @brief Função de comutação s(e) com camada de contorno.
+ * @param e erro de corrente
+ * @param inv_bl 1/BL (largura da camada de contorno)
+ * @param kind SW_SAT, SW_TANH ou SW_SIGMOID
+ * @return valor de comutação em [-1, 1]
+ */
 static inline float __attribute__((always_inline))
 switch_fn(float e, float inv_bl, int kind)
 {
@@ -162,7 +154,11 @@ switch_fn(float e, float inv_bl, int kind)
     }
 }
 
-/* Envolve ângulo em [0,2π) sem laço (trata transitório grande). */
+/**
+ * @brief Envolve um ângulo em [0, 2*pi), sem laço (trata transitório grande).
+ * @param th ângulo em rad (qualquer valor)
+ * @return ângulo equivalente em [0, 2*pi)
+ */
 static inline float __attribute__((always_inline))
 wrap_2pi(float th)
 {
@@ -170,9 +166,12 @@ wrap_2pi(float th)
     return th;
 }
 
-/* ======================================================================== *
- * Recalcula constantes de discretização a partir de `p` (obs_params)       *
- * ======================================================================== */
+/**
+ * @brief Recalcula as constantes de discretização a partir dos parâmetros
+ * "crus" (motor + ganhos), pra uso no caminho quente de Observer_Step.
+ * @param p [in] parâmetros configuráveis (motor, ganhos Γ, LPFs, Ts)
+ * @param c [out] constantes pré-calculadas
+ */
 static void Observer_Recompute(const obs_params *p, obs_const *c)
 {
     const float ts = p->ts;
@@ -205,16 +204,20 @@ static void Observer_Recompute(const obs_params *p, obs_const *c)
     c->bemf_kind   = p->bemf_kind;
 }
 
-/* ======================================================================== *
- * API                                                                      *
- * ======================================================================== */
-
+/**
+ * @brief Zera só o estado dinâmico (î, ê, PLL, θ̂, filtros, saídas) sem
+ * mexer nos parâmetros/constantes.
+ */
 void Observer_Reset(void)
 {
     live_state = (obs_state){0};
     out_rpm = out_te = out_torque_helice = 0.0f;
 }
 
+/**
+ * @brief Aplica os defaults de fábrica, recalcula as constantes e zera o
+ * estado. Chamar em main() antes do HAL.
+ */
 void Observer_Init(void)
 {
     k_mutex_init(&cfg_mutex);
@@ -245,7 +248,12 @@ void Observer_Init(void)
             (double)(live_params.ts * 1e6f));
 }
 
-/* Default de fábrica de cada target (para VALUE_RESET_DEFAULT). */
+/**
+ * @brief Devolve o valor de fábrica de um target (pra VALUE_RESET_DEFAULT).
+ * @param t target do CMD
+ * @param out [out] valor default (TS_ADC em µs)
+ * @return true se `t` pertence ao observador
+ */
 static bool default_for_target(target_type t, float *out)
 {
     switch (t) {
@@ -263,7 +271,13 @@ static bool default_for_target(target_type t, float *out)
     }
 }
 
-/* Grava um target em `pending`. Deve ser chamado com cfg_mutex travado. */
+/**
+ * @brief Grava um target em pending_params. Deve ser chamado com cfg_mutex
+ * travado.
+ * @param t target do CMD
+ * @param value novo valor (TS_ADC em µs, convertido pra segundos aqui)
+ * @return true se `t` pertence ao observador
+ */
 static bool write_pending(target_type t, float value)
 {
     switch (t) {
@@ -282,6 +296,13 @@ static bool write_pending(target_type t, float value)
     return true;
 }
 
+/**
+ * @brief Agenda mudança de um parâmetro/ganho (marca reconfig pendente;
+ * não toca no estado ao vivo).
+ * @param target TARGET_* do CMD
+ * @param value novo valor
+ * @return true se target pertence ao observador
+ */
 bool Observer_Set_Param(target_type target, float value)
 {
     k_mutex_lock(&cfg_mutex, K_FOREVER);
@@ -296,6 +317,11 @@ bool Observer_Set_Param(target_type target, float value)
     return handled;
 }
 
+/**
+ * @brief Restaura o valor de fábrica de um target (agenda via Observer_Set_Param).
+ * @param target TARGET_* do CMD
+ * @return true se tratado
+ */
 bool Observer_Reset_Param_Default(target_type target)
 {
     float def;
@@ -306,6 +332,10 @@ bool Observer_Reset_Param_Default(target_type target)
     return Observer_Set_Param(target, def);
 }
 
+/**
+ * @brief Aplica reconfig pendente (se houver): recalcula constantes e
+ * zera o estado. Chamada no topo do laço da thread do ADC.
+ */
 void Observer_Apply_Pending(void)
 {
     if (!atomic_get(&reconfig_pending)) {
@@ -321,9 +351,12 @@ void Observer_Apply_Pending(void)
     LOG_INF("Observer: reconfigurado e reiniciado");
 }
 
-/* ------------------------------------------------------------------------ *
- * O PASSO. Caminho quente — sem lock, tudo em registradores de FP.         *
- * ------------------------------------------------------------------------ */
+/**
+ * @brief Executa um passo do SMO+PLL (referencial αβ). Caminho quente, sem
+ * lock, estado/constantes em registradores de FP.
+ * @param v_alpha, v_beta tensão de fase em αβ (V)
+ * @param i_alpha, i_beta corrente de fase em αβ (A)
+ */
 void __attribute__((hot, flatten))
 Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
 {
@@ -424,6 +457,9 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
     out_torque_helice = tq_lpf;
 }
 
+/** @brief Rotação mecânica estimada. @return rpm mecânico (rpm_same). */
 float Observer_Get_Rpm(void)            { return out_rpm; }
+/** @brief Torque eletromagnético estimado. @return Te em N·m. */
 float Observer_Get_Te(void)             { return out_te; }
+/** @brief Torque na hélice (hoje espelha Te). @return N·m. */
 float Observer_Get_Torque_Helice(void)  { return out_torque_helice; }

@@ -1,24 +1,11 @@
-/*
- * HAL.c — SIBA Board
+/**
+ * @file HAL.c
+ * @brief HAL da SIBA: ADC (driver adc_ch32v307), HX711 x6 (bit-bang GPIO),
+ * ESC PWM (TIM4 CH1/PB6, 50 Hz), RPM (TIM3 CH3/PB0, input capture).
  *
- * Hardware Abstraction Layer para:
- *   - ADC (via driver adc_ch32v307, DMA circular)
- *   - HX711 x6 (bit-bang GPIO, protocolo serial síncrono)
- *   - ESC PWM (TIM4 CH1, PB6, 50 Hz)
- *   - RPM counter (TIM3 CH3, PB0, input capture)
- *
- * As threads bloqueantes (ADC, HX711) são criadas com k_thread_create.
- * RPM e estímulo ADC (native_sim) usam k_timer + k_work no siba_wq.
- *
- * PINOS HX711 — AJUSTE CONFORME SEU ESQUEMÁTICO (remapeados para a Porta E
- * de propósito: o ADC1 do CH32V307 só alcança os canais 0-7 / pinos PA0-PA7,
- * então PA1-PA7 ficam reservados para os canais analógicos — ver bloco ADC):
- *   Célula 0: SCK=PE2   DOUT=PE8
- *   Célula 1: SCK=PE3   DOUT=PE9
- *   Célula 2: SCK=PE4   DOUT=PE10
- *   Célula 3: SCK=PE5   DOUT=PE11
- *   Célula 4: SCK=PE6   DOUT=PE12
- *   Célula 5: SCK=PE7   DOUT=PE13   (PB0 reservado para TIM3/RPM)
+ * ADC/HX711 são threads bloqueantes; RPM e o estímulo ADC do native_sim
+ * usam k_timer+k_work. HX711 na Porta E (PE2-7=SCK, PE8-13=DOUT), pois
+ * PA0-PA7 são do ADC.
  */
 
 #include "HAL.h"
@@ -39,42 +26,24 @@
 LOG_MODULE_REGISTER(hal, LOG_LEVEL_DBG);
 
 #ifndef CONFIG_ARCH_POSIX
-/* RCC — registrador de habilitação de clock dos periféricos em APB1.
- * Compartilhado entre RPM (TIM3, RCC_APB1_TIM3EN) e DAC (DAC1,
- * RCC_APB1PCENR_DAC_EN) — fica aqui no topo para não criar dependência
- * entre as seções RPM/DAC quando uma delas é desabilitada via HAL_prm.h. */
+/* RCC de clock em APB1, compartilhado por RPM (TIM3) e DAC (DAC1). */
 #define RCC_BASE         0x40021000UL
 #define RCC_APB1PCENR    (*(volatile uint32_t *)(RCC_BASE + 0x1C))
 #endif /* !CONFIG_ARCH_POSIX */
 
 #ifdef CONFIG_ARCH_POSIX
-/* native_sim: throttle "comandado" do ESC synthetic (percent * 100),
- * compartilhado entre HAL_ESC_Set_Throttle (escritor — ver seção ESC),
- * HAL_thread_RPM_fn (RPM persegue o throttle) e o stimulus do ADC
- * (corrente/temperatura/air_speed dependem do throttle/RPM) — declarado
- * aqui no topo porque é referenciado antes da seção ESC. */
+/* native_sim: throttle synthetic do ESC (percent*100), lido por RPM e
+ * pelo estímulo do ADC — declarado aqui por ser usado antes da seção ESC. */
 static atomic_t hal_sim_throttle_x100;
 #endif
 
-/* ===========================================================
- * ADC — scan circular único (DMA) com 4 canais (ver HAL_ADC_IDX_* em HAL.h).
- *
- * IMPORTANTE: o periférico ADC1 do CH32V307 (único suportado pelo driver
- * custom adc_ch32v307 — daí essa pasta existir em vez de usar o driver ADC
- * genérico do Zephyr) só enxerga os canais 0-7, ligados fisicamente aos
- * pinos PA0-PA7. Canais 8+ (PB0/PB1/PC0-PC5) pertencem ao mux do ADC2 e NÃO
- * são alcançáveis por este driver. Pinagem REAL aplicada (ver HW.md):
- *   idx 0 = CH0 (PA0)  v_batt
- *   idx 1 = CH1 (PA1)  i_batt
- *   idx 2 = CH2 (PA2)  air_speed (Pitot)
- *   idx 3 = CH6 (PA6)  temperature_battery (uso duplo c/ Ensaio_Termistor_1)
- * PA3/PA4/PA7 (Ensaio_Bateria_*) não entram nesse scan — ver siba_board.dts.
- * =========================================================== */
+/* ADC — scan DMA de 4 canais (HAL_ADC_IDX_* em HAL.h). ADC1 só enxerga
+ * CH0-7/PA0-PA7 (driver custom, não o driver ADC genérico do Zephyr):
+ * idx0=CH0(PA0)v_batt, idx1=CH1(PA1)i_batt, idx2=CH2(PA2)air_speed,
+ * idx3=CH6(PA6)temperature_battery. PA3/PA4/PA7 são da bancada de ensaio. */
 #define ADC_NUM_CHANNELS  4
 
-/* adc_raw[]/HAL_ADC_Get() são software puro (nenhum acesso a hardware) —
- * ficam sempre compilados mesmo com HAL_ENABLE_ADC=0 (ver HAL_prm.h),
- * para que HAL_ADC_Get_*()/Test_Shell continuem linkando e devolvendo 0. */
+/* Software puro — compilado mesmo com HAL_ENABLE_ADC=0 pra Test_Shell linkar. */
 static atomic_t adc_raw[ADC_NUM_CHANNELS];
 
 #if HAL_ENABLE_ADC
@@ -123,36 +92,33 @@ static struct adc_sequence adc_seq = {
 
 #endif /* HAL_ENABLE_ADC */
 
-/* Tensão lida no pino do ADC, em mV, a partir da contagem bruta */
+/**
+ * @brief Converte contagem bruta do ADC (12 bits) em tensão no pino (mV).
+ * @param raw contagem bruta (0..HAL_ADC_FULL_SCALE-1)
+ * @return tensão em mV
+ */
 static inline float adc_raw_to_mv(uint16_t raw)
 {
     return (float)raw * (float)HAL_ADC_VREF_MV / (float)HAL_ADC_FULL_SCALE;
 }
 
-/* ---- Calibração genérica dos sensores baseados em ADC (v_batt/i_batt/
- * temperatura/air_speed): y = linear * (tensão_no_pino_mV) + offset — o
- * MESMO padrão e a MESMA estrutura do HX711 (HAL_HX711_Set_Calib), sem
- * nenhuma fórmula física de hardware no meio (divisor resistivo, ACS758,
- * NTC, MPXV7002DP — removidas; ver TODO "calibrar constantes..." em
- * CLAUDE.md: ninguém tem os componentes reais em mãos para confiar nelas).
- * O usuário ajusta linear/offset via CMD/shell com os valores medidos na
- * bancada, exatamente como já faz para as células de carga. Indexado por
- * SENSOR_ID_* (Log_Manager.h); só as posições 6,7,9,10 são usadas (8 = SOC,
- * calculado pelo Battery_Manager via polinômio — não passa por aqui). */
+/* Calibração genérica dos sensores ADC: y = linear*(mV no pino) + offset,
+ * mesmo padrão do HX711, ajustada via CMD/shell. Indexado por SENSOR_ID_*;
+ * só 6,7,9,10 são usados (8=SOC vem do Battery_Manager, não passa por aqui). */
 struct hal_adc_calib { float linear; float offset; };
 
 static struct hal_adc_calib adc_calib[SENSOR_ID_AIR_SPEED + 1];
 
+/** @brief Preenche adc_calib[] com os defaults de SIBA_SENSOR_TABLE. */
 static void hal_adc_calib_init(void)
 {
     for (size_t i = 0; i < ARRAY_SIZE(adc_calib); i++) {
         adc_calib[i].linear = 1.0f;
         adc_calib[i].offset = 0.0f;
     }
-    /* Semeia os defaults de engenharia (mV->V/A/°C) da tabela central
-     * (CMD_Core_prm.h). Aplicado AQUI (e não só no cache do CMD_Core) porque
-     * HAL_Init roda DEPOIS de CMD_Core_Init — senão v_batt/i_batt sairiam em mV
-     * e a segurança dispararia emergência falsa, congelando o RPM. */
+    /* Semeia defaults da tabela central — precisa rodar aqui (não só no
+     * cache do CMD_Core) senão v_batt/i_batt saem em mV e a segurança
+     * dispara emergência falsa. */
 #define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)          \
     if ((size_t)(ID) < ARRAY_SIZE(adc_calib)) {              \
         adc_calib[(ID)].linear = (DEF_LIN);                  \
@@ -162,6 +128,12 @@ static void hal_adc_calib_init(void)
 #undef X
 }
 
+/**
+ * @brief Ajusta a calibração afim (y = linear*x + offset) de um sensor ADC.
+ * @param sensor_id ver SENSOR_ID_V_BATT/I_BATT/TEMPERATURE_BATTERY/AIR_SPEED
+ * @param linear ganho
+ * @param offset deslocamento
+ */
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
 {
     if (sensor_id >= ARRAY_SIZE(adc_calib)) {
@@ -171,6 +143,12 @@ void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
     adc_calib[sensor_id].offset = offset;
 }
 
+/**
+ * @brief Lê a calibração atual de um sensor ADC; fora do range devolve (1.0, 0.0).
+ * @param sensor_id índice do sensor
+ * @param linear [out] ganho atual
+ * @param offset [out] deslocamento atual
+ */
 void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
 {
     float l = 1.0f, o = 0.0f;
@@ -182,26 +160,22 @@ void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
     if (offset) *offset = o;
 }
 
+/**
+ * @brief Aplica a calibração afim de um sensor a um valor físico (mV).
+ * @param sensor_id índice do sensor
+ * @param phys_value tensão bruta no pino (mV)
+ * @return valor calibrado (unidade física do sensor)
+ */
 static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 {
     return phys_value * adc_calib[sensor_id].linear + adc_calib[sensor_id].offset;
 }
 
 #if HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
-/* ---- native_sim: "estímulo" do ADC emulado (zephyr,adc-emul, ver
- * native_sim.overlay). Como HAL_ADC_Get_* agora é calibração linear pura
- * (sem fórmula física — ver bloco de calibração acima), não há mais nada
- * para "inverter": geramos diretamente tendências plausíveis de tensão
- * "no pino" em mV (0-3300) e alimentamos o adc_emul via
- * adc_emul_const_value_set(). Com a calibração default (linear=1, offset=0)
- * o valor relatado é numericamente igual ao mV gerado aqui — comportamento
- * esperado, igual às células de carga não calibradas.
- *
- * Modelo — propositalmente simples (só para gerar sinais plausíveis e
- * variáveis, não um modelo físico de verdade): "i_batt" (mV) sobe com
- * throttle² do ESC; "v_batt" (mV) drena devagar com a corrente; "temperatura"
- * (mV) sobe com a corrente; "air_speed" (mV) acompanha o RPM (já synthetic —
- * ver HAL_thread_RPM_fn). Tudo com pequeno ruído pseudo-aleatório. */
+/* native_sim: gera tensões "no pino" (mV) plausíveis e alimenta o adc_emul
+ * via adc_emul_const_value_set(). Modelo simples: i_batt sobe com
+ * throttle², v_batt drena com a corrente, temperatura sobe com a corrente,
+ * air_speed acompanha o RPM synthetic — tudo com ruído pseudo-aleatório. */
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/random/random.h>
 
@@ -225,13 +199,23 @@ static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 
 static float hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_FULL;
 
+/**
+ * @brief Ruído pseudo-aleatório simétrico, atenuado por HAL_SIM_NOISE_SCALE
+ * (0 = estável, pra testar calibração; 1 = amplitude nominal).
+ * @param amplitude amplitude nominal do ruído
+ * @return ruído em [-amplitude, +amplitude] * HAL_SIM_NOISE_SCALE
+ */
 static inline float hal_sim_noise(float amplitude)
 {
-    /* HAL_SIM_NOISE_SCALE (HAL_prm.h) zera/atenua o ruído p/ testar calibração. */
     int32_t r = (int32_t)(sys_rand32_get() % 2001) - 1000; /* -1000..+1000 */
     return amplitude * HAL_SIM_NOISE_SCALE * ((float)r / 1000.0f);
 }
 
+/**
+ * @brief Satura um valor em mV na faixa físicamente válida do ADC.
+ * @param mv valor em mV (pode vir negativo ou acima da escala)
+ * @return valor saturado em [0, 3300]
+ */
 static inline int32_t hal_sim_clamp_mv(float mv)
 {
     if (mv < 0.0f)    mv = 0.0f;
@@ -241,6 +225,11 @@ static inline int32_t hal_sim_clamp_mv(float mv)
 
 static struct k_work adc_stimulus_work;
 
+/**
+ * @brief native_sim: gera tensões sintéticas (v_batt/i_batt/temp/air_speed)
+ * e alimenta o adc_emul. Roda na siba_wq, disparado por adc_stimulus_timer.
+ * @param w item de trabalho (não usado)
+ */
 static void adc_stimulus_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
@@ -270,6 +259,10 @@ static void adc_stimulus_work_fn(struct k_work *w)
     adc_emul_const_value_set(adc_dev, ADC_CH_AIR_SPEED, (uint32_t)hal_sim_clamp_mv(air_mv));
 }
 
+/**
+ * @brief Agenda adc_stimulus_work_fn na siba_wq. Callback do k_timer.
+ * @param t timer que disparou (não usado)
+ */
 static void adc_stimulus_timer_fn(struct k_timer *t)
 {
     ARG_UNUSED(t);
@@ -279,10 +272,14 @@ static void adc_stimulus_timer_fn(struct k_timer *t)
 K_TIMER_DEFINE(adc_stimulus_timer, adc_stimulus_timer_fn, NULL);
 #endif /* HAL_ENABLE_ADC && CONFIG_ARCH_POSIX */
 
+/**
+ * @brief Inicializa calibração e ADC1 (ou stub, se HAL_ENABLE_ADC=0); em
+ * native_sim também arranca o timer de estímulo synthetic.
+ * @return 0 em sucesso, -ENODEV ou erro do adc_channel_setup
+ */
 int HAL_ADC_Init(void)
 {
-    /* hal_adc_calib_init() é software puro — roda mesmo desabilitado,
-     * para que HAL_ADC_Get_*()/HAL_ADC_Set_Calib() continuem coerentes. */
+    /* Software puro, roda mesmo desabilitado pra manter os getters coerentes. */
     hal_adc_calib_init();
 
 #if HAL_ENABLE_ADC
@@ -312,30 +309,39 @@ int HAL_ADC_Init(void)
     return 0;
 }
 
+/**
+ * @brief Leitura bruta (oversampled) de um canal do scan.
+ * @param channel índice na sequência (ver HAL_ADC_IDX_*)
+ * @return contagem bruta (0 se channel fora do range)
+ */
 uint16_t HAL_ADC_Get(uint8_t channel)
 {
     if (channel >= ADC_NUM_CHANNELS) return 0;
     return (uint16_t)atomic_get(&adc_raw[channel]);
 }
 
+/** @brief Tensão da bateria calibrada. @return V. */
 float HAL_ADC_Get_VBatt(void)
 {
     return hal_adc_apply_calib(SENSOR_ID_V_BATT,
                                adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_V_BATT)));
 }
 
+/** @brief Corrente da bateria calibrada. @return A. */
 float HAL_ADC_Get_IBatt(void)
 {
     return hal_adc_apply_calib(SENSOR_ID_I_BATT,
                                adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_I_BATT)));
 }
 
+/** @brief Temperatura da bateria calibrada. @return °C. */
 float HAL_ADC_Get_Temperature_Batt(void)
 {
     return hal_adc_apply_calib(SENSOR_ID_TEMPERATURE_BATTERY,
                                adc_raw_to_mv(HAL_ADC_Get(HAL_ADC_IDX_TEMP_BATT)));
 }
 
+/** @brief Velocidade do ar (Pitot) calibrada. @return m/s. */
 float HAL_ADC_Get_Air_Speed(void)
 {
     return hal_adc_apply_calib(SENSOR_ID_AIR_SPEED,
@@ -343,6 +349,11 @@ float HAL_ADC_Get_Air_Speed(void)
 }
 
 #if HAL_ENABLE_ADC
+/**
+ * @brief Thread de aquisição do ADC: dispara conversões assíncronas,
+ * acumula oversample e publica as grandezas físicas via OSSI. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -376,10 +387,8 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
         cnt++;
 
 #ifdef CONFIG_ARCH_POSIX
-        /* adc_emul completa a "conversão" instantaneamente — sem isso o
-         * loop nunca bloqueia e trava o scheduler/clock do native_sim
-         * (ver CLAUDE.md "Modo Mock"). Pausa equivalente ao tempo real
-         * de uma conversão+oversample na placa. */
+        /* adc_emul converte na hora; sem pausa o loop trava o clock do
+         * native_sim. */
         k_sleep(K_MSEC(2));
 #endif
 
@@ -400,15 +409,9 @@ void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 }
 #endif /* HAL_ENABLE_ADC */
 
-/* ===========================================================
- * HX711 — Bit-bang GPIO
- *
- * Protocolo:
- *   1. Aguarda DOUT=LOW (conversão pronta, ~100ms @ 10Hz)
- *   2. Pulsa SCK 24 vezes lendo 1 bit por pulso (MSB first)
- *   3. Pulsa SCK (HX711_GAIN_PULSES) vezes extras → seleciona ganho
- *   4. Resultado é complemento de dois de 24 bits com sinal
- * =========================================================== */
+/* HX711 bit-bang: espera DOUT=LOW, pulsa SCK 24x lendo MSB-first, mais
+ * HX711_GAIN_PULSES pulsos pra selecionar ganho; resultado é complemento
+ * de dois de 24 bits. */
 
 #if HAL_ENABLE_HX711 && !defined(CONFIG_ARCH_POSIX)
 /* Mapeamento de pinos — ajuste conforme esquemático */
@@ -448,7 +451,10 @@ static struct {
 static struct k_mutex hx711_mutex;
 
 #if HAL_ENABLE_HX711 && !defined(CONFIG_ARCH_POSIX)
-/* Pulso de clock em torno de 1µs @ 144MHz */
+/**
+ * @brief Gera um pulso de clock (~1µs @ 144MHz) no pino SCK.
+ * @param sck pino SCK da célula
+ */
 static inline void hx711_clock_pulse(const struct gpio_dt_spec *sck)
 {
     gpio_pin_set_dt(sck, 1);
@@ -457,7 +463,13 @@ static inline void hx711_clock_pulse(const struct gpio_dt_spec *sck)
     k_busy_wait(1);
 }
 
-/* Leitura de 1 sensor — bloqueia até DOUT=LOW ou timeout */
+/**
+ * @brief Lê uma célula via bit-bang: bloqueia até DOUT=LOW (ou timeout),
+ * lê 24 bits MSB-first e pulsa o ganho pra próxima conversão.
+ * @param idx índice da célula (0..HX711_COUNT-1)
+ * @param out [out] valor bruto (complemento de dois, 24 bits)
+ * @return true se leu com sucesso, false em timeout
+ */
 static bool hx711_read_one(uint8_t idx, int32_t *out)
 {
     const struct gpio_dt_spec *sck  = &hx711_sck[idx];
@@ -501,37 +513,32 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 #endif /* HAL_ENABLE_HX711 && !CONFIG_ARCH_POSIX */
 
 #if HAL_ENABLE_HX711 && defined(CONFIG_ARCH_POSIX)
-/* native_sim: sem GPIO bit-bang (DT_NODELABEL(hx711_sck/dout_pins) não
- * existem no devicetree do native_sim) — sintetiza o valor "raw" 24 bits
- * direto, modelo de empuxo proporcional ao quadrado do RPM, mesmo padrão
- * synthetic do antigo HAL_mock.c, mas publicado pelo MESMO
- * HAL_thread_HX711_fn / HAL_HX711_Get_.. / Set_Calib / Tare reais — só a
- * leitura do transdutor muda.
- */
+/* native_sim: sem GPIO real — sintetiza o raw 24 bits (empuxo ∝ RPM²),
+ * publicado pelas mesmas HAL_HX711_Get_..., Set_Calib e Tare reais. */
 #define HAL_SIM_HX711_BASE_RAW      8000000L
 #define HAL_SIM_HX711_GAIN_PER_RPM2     0.06f
 #define HAL_SIM_HX711_NOISE_RAW          400L
-/* Escala synthetic (counts/grama): sem isso, com scale=1 os grams saem em
- * centenas de milhar. 0,06·rpm² a 3000 RPM = 540k counts; /270 ~= 2000 g. */
+/* Escala synthetic (counts/grama) — 0,06·rpm² a 3000 RPM = 540k counts. */
 #define HAL_SIM_HX711_SCALE            270.0f
-/* Leitura de REPOUSO (grams) por célula, mesmo com rpm=0 e ruído=0. Sem isto
- * grams=(BASE-tare)/scale=0 e não há NADA para tarar/calibrar no native_sim.
- * Distinto por célula (idle + idx·step) p/ dar pra distinguir uma da outra. */
+/* Leitura de repouso (grams) por célula, distinta por idx, pra ter algo
+ * pra tarar/calibrar mesmo com rpm=0. */
 #define HAL_SIM_HX711_IDLE_GRAMS      1000.0f
 #define HAL_SIM_HX711_IDLE_STEP_G      250.0f
 
+/**
+ * @brief native_sim: sintetiza o raw 24 bits (empuxo ∝ RPM², distinto por
+ * célula), no lugar do bit-bang real.
+ * @param idx índice da célula (0..HX711_COUNT-1)
+ * @param out [out] valor bruto sintético
+ * @return sempre true
+ */
 static bool hx711_read_one(uint8_t idx, int32_t *out)
 {
-    /* A versão real bloqueia aguardando DOUT=LOW (~10Hz por célula — ver
-     * hx711_read_one acima). Sem esse sleep aqui, HAL_thread_HX711_fn roda
-     * em loop apertado sem nunca ceder a CPU: o relógio simulado do
-     * native_sim trava em t=0 e nenhuma outra thread (shell incluído)
-     * consegue progredir. */
+    /* Sem sleep aqui, a thread roda em loop apertado e trava o clock do
+     * native_sim (a versão real bloqueia esperando DOUT=LOW). */
     k_sleep(K_MSEC(100));
 
     float rpm = HAL_RPM_Get();
-    /* Baseline de repouso não-nulo (e distinto por célula): dá um "peso" fixo
-     * em cima do tare para você conseguir tarar (leva a 0) e calibrar o ganho. */
     float idle_g = HAL_SIM_HX711_IDLE_GRAMS + (float)idx * HAL_SIM_HX711_IDLE_STEP_G;
     int32_t noise = (int32_t)(sys_rand32_get() % (2 * HAL_SIM_HX711_NOISE_RAW + 1))
                     - HAL_SIM_HX711_NOISE_RAW;
@@ -543,13 +550,16 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
 }
 #endif /* HAL_ENABLE_HX711 && CONFIG_ARCH_POSIX */
 
+/**
+ * @brief Inicializa estado/mutex das 6 células e configura os GPIOs (ou o
+ * modo synthetic no native_sim).
+ * @return 0 em sucesso, -ENODEV se algum GPIO não estiver pronto
+ */
 int HAL_HX711_Init(void)
 {
     k_mutex_init(&hx711_mutex);
 
-    /* Estado/calibração são software puro — sempre inicializados, mesmo
-     * com HAL_ENABLE_HX711=0 (ver HAL_prm.h), para que HAL_HX711_Get_*()/
-     * Set_Calib/Tare/Get_Calib continuem coerentes para CMD_Core/Test_Shell. */
+    /* Software puro, sempre inicializado mesmo com HX711 desabilitado. */
     for (int i = 0; i < HX711_COUNT; i++) {
         hx711_state[i].raw    = 0;
         hx711_state[i].tare   = 0;
@@ -570,10 +580,8 @@ int HAL_HX711_Init(void)
         gpio_pin_configure_dt(&hx711_dout[i], GPIO_INPUT);
     }
 #else
-    /* Synthetic: "tara" o baseline (BASE_RAW) e usa uma escala realista, senão
-     * grams = raw/scale ~= 8.000.000 (rejeitado pela validação -> células em 0
-     * e imunes a offset/linear). Com isto: repouso ~= 0, sobe com rpm² (empuxo)
-     * e a calibração (offset/linear via CMD) passa a refletir na telemetria. */
+    /* Synthetic: tara o baseline e usa escala realista, senão grams sai em
+     * ~8 milhões e a validação rejeita as células. */
     for (int i = 0; i < HX711_COUNT; i++) {
         hx711_state[i].tare  = HAL_SIM_HX711_BASE_RAW;
         hx711_state[i].scale = HAL_SIM_HX711_SCALE;
@@ -588,6 +596,11 @@ int HAL_HX711_Init(void)
     return 0;
 }
 
+/**
+ * @brief Último valor bruto lido de uma célula.
+ * @param idx índice da célula
+ * @return valor bruto (24 bits com sinal), ou 0 se idx fora do range
+ */
 int32_t HAL_HX711_Get_Raw(uint8_t idx)
 {
     if (idx >= HX711_COUNT) return 0;
@@ -597,15 +610,11 @@ int32_t HAL_HX711_Get_Raw(uint8_t idx)
     return v;
 }
 
-/* Modelo canônico do HX711 (igual às libs de referência, ex.: Bogde/AVR):
- *
- *      grams = (raw - tare) / scale
- *
- * UM só offset — o `tare`, em CONTAGENS BRUTAS (raw), subtraído ANTES de
- * dividir. `scale` = contagens por unidade (counts/grama). NÃO existe um
- * segundo offset aditivo (o antigo `+ offset` era redundante e invertia a
- * intuição da calibração). Ver `HAL_HX711_Tare` (tara = raw) e
- * `HAL_HX711_Calibrate_Weight` (deriva scale de um peso conhecido). */
+/**
+ * @brief Peso calibrado: grams = (raw - tare) / scale.
+ * @param idx índice da célula
+ * @return peso na unidade calibrada, ou 0.0f se idx fora do range
+ */
 float HAL_HX711_Get_Grams(uint8_t idx)
 {
     if (idx >= HX711_COUNT) return 0.0f;
@@ -616,7 +625,12 @@ float HAL_HX711_Get_Grams(uint8_t idx)
     return v;
 }
 
-/* Ajuste direto do par canônico: `scale` (counts/unidade) e `tare` (raw). */
+/**
+ * @brief Ajuste direto do par canônico (scale, tare).
+ * @param idx índice da célula
+ * @param scale contagens por unidade; 0 é tratado como 1.0
+ * @param tare_raw zero de referência, em contagens brutas
+ */
 void HAL_HX711_Set_Calib(uint8_t idx, float scale, float tare_raw)
 {
     if (idx >= HX711_COUNT) return;
@@ -627,6 +641,12 @@ void HAL_HX711_Set_Calib(uint8_t idx, float scale, float tare_raw)
     LOG_INF("HX711[%d]: scale=%.4f tare=%d (counts)", idx, (double)scale, (int)tare_raw);
 }
 
+/**
+ * @brief Lê o par canônico (scale, tare) atualmente aplicado.
+ * @param idx índice da célula; fora do range devolve (1.0, 0.0)
+ * @param scale [out] contagens por unidade
+ * @param tare_raw [out] zero de referência (contagens)
+ */
 void HAL_HX711_Get_Calib(uint8_t idx, float *scale, float *tare_raw)
 {
     float s = 1.0f, t = 0.0f;
@@ -640,8 +660,11 @@ void HAL_HX711_Get_Calib(uint8_t idx, float *scale, float *tare_raw)
     if (tare_raw) *tare_raw = t;
 }
 
-/* Tara canônica: offset = leitura bruta atual (em counts). Zera a leitura
- * (grams = (raw-raw)/scale = 0). Tarar de novo só re-zera — não empilha. */
+/**
+ * @brief Tara canônica: tare = raw atual, zerando a leitura. Tarar de novo
+ * só re-zera, não empilha.
+ * @param idx índice da célula
+ */
 void HAL_HX711_Tare(uint8_t idx)
 {
     if (idx >= HX711_COUNT) return;
@@ -651,9 +674,12 @@ void HAL_HX711_Tare(uint8_t idx)
     LOG_INF("HX711[%d]: tare=%d (counts)", idx, hx711_state[idx].tare);
 }
 
-/* Calibra a escala por PESO CONHECIDO: com a célula já tarada, coloca-se um
- * peso `known_weight` (na unidade desejada) e resolve-se scale de modo que
- * grams == known_weight:  scale = (raw - tare) / known_weight  (counts/unidade). */
+/**
+ * @brief Calibra a escala por peso conhecido: com a célula já tarada,
+ * resolve scale = (raw - tare) / known_weight.
+ * @param idx índice da célula
+ * @param known_weight peso aplicado, na unidade desejada; 0 é ignorado (log)
+ */
 void HAL_HX711_Calibrate_Weight(uint8_t idx, float known_weight)
 {
     if (idx >= HX711_COUNT) return;
@@ -671,10 +697,10 @@ void HAL_HX711_Calibrate_Weight(uint8_t idx, float known_weight)
 }
 
 #if HAL_ENABLE_HX711
-/*
- * HAL_thread_HX711_fn
- * Lê as 6 células em sequência (~10Hz cada) e publica no OSSI→SYS.
- * Sensor IDs: 0-5 mapeiam para load_cell_0 ... load_cell_5 no TELEMETRY_LOG.
+/**
+ * @brief Thread: lê as 6 células em sequência e publica no OSSI (sensor id
+ * 0-5 = load_cell_N). Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
  */
 void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
 {
@@ -708,28 +734,17 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
 }
 #endif /* HAL_ENABLE_HX711 */
 
-/* ===========================================================
- * ESC PWM — TIM4 CH1 (PB6), 50 Hz
- *
- * native_sim/POSIX não tem TIM4 nem um substituto in-tree utilizável: o
- * driver genérico zephyr,fake-pwm é FFF-based e exige
- * subsys/testsuite/include/zephyr/fff.h, que só existe em builds
- * Twister/ztest (não em firmware de aplicação normal — ver
- * native_sim.conf). Só a SAÍDA (aplicar um pulso PWM real vs. guardar o
- * equivalente em RAM) é `#ifdef CONFIG_ARCH_POSIX` — a lógica de negócio
- * (clamp 0-100%, exigir armado antes de aceitar throttle, fórmula
- * percent->pulso) é escrita UMA vez só, em HAL_ESC_Set_Throttle/Arm/Disarm
- * abaixo, chamando o sink específico da plataforma (hal_esc_hw_*) só pro
- * último passo. `hal_sim_throttle_x100` (declarado no topo do arquivo) é
- * consultado por HAL_thread_RPM_fn (também synthetic em POSIX) para que o
- * RPM "siga" o throttle, como no antigo HAL_mock.c.
- * =========================================================== */
+/* ESC PWM — TIM4 CH1 (PB6), 50 Hz. native_sim não tem TIM4 nem PWM fake
+ * utilizável fora de builds ztest, então só a saída é `#ifdef
+ * CONFIG_ARCH_POSIX` (hal_esc_hw_*); a lógica (clamp, armado, percent→pulso)
+ * é uma implementação só em HAL_ESC_Set_Throttle/Arm/Disarm. */
 #if HAL_ENABLE_ESC
 #ifdef CONFIG_ARCH_POSIX
 
 /* hal_sim_throttle_x100 (throttle * 100) declarado no topo do arquivo —
  * compartilhado com o stimulus do ADC e HAL_thread_RPM_fn. */
 
+/** @brief native_sim: stub (não há PWM/TIM4 real). @return sempre 0. */
 static int hal_esc_hw_init(void)
 {
     atomic_set(&hal_sim_throttle_x100, 0);
@@ -737,8 +752,11 @@ static int hal_esc_hw_init(void)
     return 0;
 }
 
-/* Sem PWM real: guarda o throttle comandado (0-100%) em "por cento x100"
- * pro RPM synthetic perseguir (ver HAL_thread_RPM_fn). */
+/**
+ * @brief Sem PWM real: guarda o throttle comandado (0-100%) em "por cento
+ * x100" pro RPM synthetic perseguir.
+ * @param percent throttle em 0.0-100.0
+ */
 static void hal_esc_hw_apply(float percent)
 {
     atomic_set(&hal_sim_throttle_x100, (atomic_val_t)(percent * 100.0f));
@@ -749,6 +767,10 @@ static void hal_esc_hw_apply(float percent)
 #define ESC_PWM_NODE DT_NODELABEL(esc_motor)
 static const struct pwm_dt_spec esc_pwm = PWM_DT_SPEC_GET(ESC_PWM_NODE);
 
+/**
+ * @brief Inicializa o PWM do ESC em posição de disarm (1000µs).
+ * @return 0 em sucesso, -ENODEV/erro do pwm_set_dt
+ */
 static int hal_esc_hw_init(void)
 {
     if (!pwm_is_ready_dt(&esc_pwm)) {
@@ -769,6 +791,10 @@ static int hal_esc_hw_init(void)
     return 0;
 }
 
+/**
+ * @brief Converte percent (0-100) em pulso PWM e aplica no TIM4.
+ * @param percent throttle em 0.0-100.0
+ */
 static void hal_esc_hw_apply(float percent)
 {
     uint32_t pulse_us = HAL_ESC_PWM_MIN_US +
@@ -783,30 +809,35 @@ static void hal_esc_hw_apply(float percent)
 
 static bool esc_armed;
 
+/** @brief Inicializa o ESC desarmado. @return 0 em sucesso, erro de hal_esc_hw_init. */
 int HAL_ESC_Init(void)
 {
     esc_armed = false;
     return hal_esc_hw_init();
 }
 
+/** @brief Sequência de arm: aplica 0% por 2s e marca armado. */
 void HAL_ESC_Arm(void)
 {
-    /* Sequência de arm: mínimo por 2s */
     hal_esc_hw_apply(0.0f);
     k_sleep(K_MSEC(2000));
     esc_armed = true;
     LOG_INF("HAL ESC: armado");
 }
 
+/** @brief Aplica 0% (piso seguro) e marca desarmado. */
 void HAL_ESC_Disarm(void)
 {
-    /* Disarm manda o percentual pro piso (0%) — mesmo pulso/estado "seguro"
-     * que HAL_ESC_Init já deixa configurado antes do primeiro Arm. */
     hal_esc_hw_apply(0.0f);
     esc_armed = false;
     LOG_INF("HAL ESC: desarmado");
 }
 
+/**
+ * @brief Aplica um throttle, se o ESC estiver armado.
+ * @param percent throttle desejado; clampado em [0, 100]
+ * @return 0 em sucesso, -EPERM se não armado
+ */
 int HAL_ESC_Set_Throttle(float percent)
 {
     if (!esc_armed) {
@@ -823,22 +854,26 @@ int HAL_ESC_Set_Throttle(float percent)
 
 #else /* !HAL_ENABLE_ESC */
 
+/** @brief Stub (HAL_ENABLE_ESC=0). @return sempre 0. */
 int HAL_ESC_Init(void)
 {
     LOG_INF("HAL ESC: desabilitado via HAL_prm.h (HAL_DISABLE_ESC)");
     return 0;
 }
 
+/** @brief Stub (HAL_ENABLE_ESC=0): apenas loga. */
 void HAL_ESC_Arm(void)
 {
     LOG_INF("HAL ESC: arm ignorado — módulo desabilitado (HAL_DISABLE_ESC)");
 }
 
+/** @brief Stub (HAL_ENABLE_ESC=0): no-op. */
 void HAL_ESC_Disarm(void)
 {
     /* no-op — módulo desabilitado */
 }
 
+/** @brief Stub (HAL_ENABLE_ESC=0). @param percent não usado. @return -ENODEV. */
 int HAL_ESC_Set_Throttle(float percent)
 {
     ARG_UNUSED(percent);
@@ -847,26 +882,16 @@ int HAL_ESC_Set_Throttle(float percent)
 
 #endif /* HAL_ENABLE_ESC */
 
-/* ===========================================================
- * RPM — TIM3 CH3 (PB0), modo input capture
- *
- * native_sim/POSIX não tem TIM3 — o bloco abaixo acessa registradores via
- * MMIO em endereço físico FIXO (0x40000400): em POSIX esse endereço não
- * mapeia para nada e a primeira escrita derruba o processo (SIGSEGV). Não
- * existe driver Counter genérico equivalente (nem para o "wch,gptm-counter"
- * do .dts real, nem um emulado in-tree minimamente próximo do que
- * precisamos), então — só para esta peça — HAL.c ganha um pequeno
- * substituto `#ifdef CONFIG_ARCH_POSIX`: sintetiza o RPM perseguindo o
- * throttle do ESC (mesma ideia/parâmetros do antigo HAL_mock.c, isolada
- * aqui), publicando pelo MESMO caminho OSSI→SYS.
- * =========================================================== */
+/* RPM — TIM3 CH3 (PB0), input capture. native_sim não tem TIM3 (MMIO em
+ * endereço fixo daria SIGSEGV) nem driver Counter equivalente, então
+ * `#ifdef CONFIG_ARCH_POSIX` sintetiza o RPM perseguindo o throttle do ESC,
+ * publicando pelo mesmo caminho OSSI. */
 
-/* rpm_value (RPM * 10) é consultado por HAL_RPM_Get() — usado pelas threads
- * synthetic do ADC/HX711 em native_sim independentemente de HAL_ENABLE_RPM
- * (ver HAL_prm.h), por isso fica sempre compilado. Permanece 0 (RPM=0) se o
- * módulo RPM estiver desabilitado. */
+/* Sempre compilado (usado pelas threads synthetic do ADC/HX711 mesmo com
+ * RPM desabilitado — fica em 0 nesse caso). */
 static atomic_t rpm_value;
 
+/** @brief Última rotação medida. @return rpm mecânico. */
 float HAL_RPM_Get(void)
 {
     return (float)atomic_get(&rpm_value) / 10.0f;
@@ -883,6 +908,11 @@ static float rpm_sim_current;
 
 static struct k_work  rpm_sim_work;
 
+/**
+ * @brief native_sim: persegue o throttle do ESC com atraso de 1ª ordem +
+ * ruído, atualiza rpm_value e publica no OSSI. Roda na siba_wq.
+ * @param w item de trabalho (não usado)
+ */
 static void rpm_sim_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
@@ -900,6 +930,10 @@ static void rpm_sim_work_fn(struct k_work *w)
     OSSI_Submit_Sensor(SENSOR_ID_RPM, rpm);
 }
 
+/**
+ * @brief Agenda rpm_sim_work_fn na siba_wq. Callback do k_timer.
+ * @param t timer que disparou (não usado)
+ */
 static void rpm_sim_timer_fn(struct k_timer *t)
 {
     ARG_UNUSED(t);
@@ -908,6 +942,10 @@ static void rpm_sim_timer_fn(struct k_timer *t)
 
 K_TIMER_DEFINE(rpm_sim_timer, rpm_sim_timer_fn, NULL);
 
+/**
+ * @brief native_sim: zera o estado e arranca o timer de RPM sintético.
+ * @return sempre 0
+ */
 int HAL_RPM_Init(void)
 {
     rpm_sim_current = 0.0f;
@@ -955,6 +993,10 @@ static atomic_t rpm_pulse_count; /* incrementado na ISR a cada captura */
 
 static struct k_work rpm_work;
 
+/**
+ * @brief ISR de input capture do TIM3 CH3: limpa a flag e conta 1 pulso.
+ * @param arg não usado
+ */
 static void tim3_capture_isr(const void *arg)
 {
     ARG_UNUSED(arg);
@@ -965,7 +1007,10 @@ static void tim3_capture_isr(const void *arg)
     }
 }
 
-/* Timer a cada 100ms: lê e zera o contador ISR, submete cálculo ao siba_wq */
+/**
+ * @brief A cada 100ms, agenda rpm_work_fn na siba_wq. Callback do k_timer.
+ * @param t timer que disparou (não usado)
+ */
 static void rpm_timer_fn(struct k_timer *t)
 {
     ARG_UNUSED(t);
@@ -974,6 +1019,11 @@ static void rpm_timer_fn(struct k_timer *t)
 
 K_TIMER_DEFINE(rpm_timer, rpm_timer_fn, NULL);
 
+/**
+ * @brief Lê e zera o contador de pulsos da ISR, converte pra RPM e publica
+ * no OSSI. Roda na siba_wq.
+ * @param w item de trabalho (não usado)
+ */
 static void rpm_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
@@ -990,6 +1040,11 @@ static void rpm_work_fn(struct k_work *w)
     OSSI_Submit_Sensor(SENSOR_ID_RPM, (float)rpm10 / 10.0f);
 }
 
+/**
+ * @brief Configura o GPIO PB0 e o TIM3 CH3 em input capture, e arranca o
+ * timer de conversão a RPM.
+ * @return 0 em sucesso, erro do gpio_pin_configure_dt
+ */
 int HAL_RPM_Init(void)
 {
     int err = gpio_pin_configure_dt(&rpm_capture_pin, GPIO_INPUT);
@@ -1025,6 +1080,7 @@ int HAL_RPM_Init(void)
 
 #else /* !HAL_ENABLE_RPM */
 
+/** @brief Stub (HAL_ENABLE_RPM=0). @return sempre 0. */
 int HAL_RPM_Init(void)
 {
     LOG_INF("HAL RPM: desabilitado via HAL_prm.h (HAL_DISABLE_RPM)");
@@ -1033,22 +1089,15 @@ int HAL_RPM_Init(void)
 
 #endif /* HAL_ENABLE_RPM */
 
-/* ===========================================================
- * I2C — I2C1 remapeado para PB8(SCL)/PB9(SDA)
- *
- * Infra MÍNIMA e crua sobre a API genérica i2c_* do Zephyr (driver wch,i2c
- * já existe in-tree — só precisava ser instanciado no .dts, ver
- * siba_board.dts/&i2c1). Sem decisão de protocolo: ler/escrever N bytes
- * num endereço, e scan do barramento — quem decidir como falar com um
- * dispositivo específico (vai substituir o HX711 no futuro) constrói por
- * cima disso. Roda igual nos dois alvos (siba_board e native_sim — ambos
- * têm o driver i2c, real ou emulado pelo i2c_emul).
- * =========================================================== */
+/* I2C1 (PB8/PB9, remap=1) — infra crua sobre a API genérica i2c_* do
+ * Zephyr, sem decisão de protocolo. Roda igual em siba_board e native_sim
+ * (driver real ou i2c_emul). */
 #if HAL_ENABLE_I2C
 
 #define I2C_NODE DT_NODELABEL(i2c1)
 static const struct device *i2c_dev = DEVICE_DT_GET(I2C_NODE);
 
+/** @brief Verifica se o device I2C1 está pronto. @return 0 ou -ENODEV. */
 int HAL_I2C_Init(void)
 {
     if (!device_is_ready(i2c_dev)) {
@@ -1059,16 +1108,37 @@ int HAL_I2C_Init(void)
     return 0;
 }
 
+/**
+ * @brief Lê len bytes do endereço addr.
+ * @param addr endereço I2C (7 bits)
+ * @param buf [out] destino dos bytes lidos
+ * @param len quantidade de bytes
+ * @return 0 em sucesso, ou errno negativo do i2c_read
+ */
 int HAL_I2C_Read(uint16_t addr, uint8_t *buf, size_t len)
 {
     return i2c_read(i2c_dev, buf, len, (uint16_t)addr);
 }
 
+/**
+ * @brief Escreve len bytes no endereço addr.
+ * @param addr endereço I2C (7 bits)
+ * @param buf bytes a escrever
+ * @param len quantidade de bytes
+ * @return 0 em sucesso, ou errno negativo do i2c_write
+ */
 int HAL_I2C_Write(uint16_t addr, const uint8_t *buf, size_t len)
 {
     return i2c_write(i2c_dev, buf, len, (uint16_t)addr);
 }
 
+/**
+ * @brief Varre o barramento (HAL_I2C_SCAN_ADDR_MIN..MAX) procurando ACK.
+ * @param found_addrs [out] endereços encontrados (até max)
+ * @param max capacidade de found_addrs
+ * @param out_count [out] número de endereços encontrados (pode exceder max)
+ * @return sempre 0
+ */
 int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 {
     size_t  count = 0;
@@ -1092,24 +1162,28 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 
 #else /* !HAL_ENABLE_I2C */
 
+/** @brief Stub (HAL_ENABLE_I2C=0). @return sempre 0. */
 int HAL_I2C_Init(void)
 {
     LOG_INF("HAL I2C: desabilitado via HAL_prm.h (HAL_DISABLE_I2C)");
     return 0;
 }
 
+/** @brief Stub (HAL_ENABLE_I2C=0). @return -ENODEV. */
 int HAL_I2C_Read(uint16_t addr, uint8_t *buf, size_t len)
 {
     ARG_UNUSED(addr); ARG_UNUSED(buf); ARG_UNUSED(len);
     return -ENODEV;
 }
 
+/** @brief Stub (HAL_ENABLE_I2C=0). @return -ENODEV. */
 int HAL_I2C_Write(uint16_t addr, const uint8_t *buf, size_t len)
 {
     ARG_UNUSED(addr); ARG_UNUSED(buf); ARG_UNUSED(len);
     return -ENODEV;
 }
 
+/** @brief Stub (HAL_ENABLE_I2C=0): out_count=0. @return -ENODEV. */
 int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 {
     ARG_UNUSED(found_addrs); ARG_UNUSED(max);
@@ -1121,20 +1195,14 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 
 #endif /* HAL_ENABLE_I2C */
 
-/* ===========================================================
- * DAC — DAC1 canal 1 (PA5 / DAC_OUT1)
- *
- * Não existe driver/binding Zephyr para o DAC do CH32V307 — acesso via
- * MMIO bruto, mesmo padrão usado para RPM/TIM3 acima (registradores fixos,
- * clock habilitado direto via RCC). Em native_sim/POSIX não há periférico
- * nem endereço mapeado — substituto synthetic guarda o valor numa variável
- * (mesma ideia de hal_sim_throttle_x100 para o ESC).
- * =========================================================== */
+/* DAC1 canal 1 (PA5/DAC_OUT1) — sem driver Zephyr, MMIO bruto (mesmo
+ * padrão do RPM/TIM3). native_sim guarda o valor numa variável, sem periférico. */
 #if HAL_ENABLE_DAC
 #ifdef CONFIG_ARCH_POSIX
 
 static atomic_t hal_sim_dac_value;
 
+/** @brief native_sim: stub (não há DAC real). @return sempre 0. */
 static int hal_dac_hw_init(void)
 {
     atomic_set(&hal_sim_dac_value, 0);
@@ -1142,6 +1210,8 @@ static int hal_dac_hw_init(void)
     return 0;
 }
 
+/** @brief native_sim: guarda o valor numa variável, sem periférico real.
+ * @param value_12bit valor 0-4095 */
 static void hal_dac_hw_write(uint16_t value_12bit)
 {
     atomic_set(&hal_sim_dac_value, value_12bit);
@@ -1158,6 +1228,10 @@ static void hal_dac_hw_write(uint16_t value_12bit)
 
 #define RCC_APB1PCENR_DAC_EN  (1UL << 29)  /* CH32V20X_V30X_CLOCK_DAC = APB1,29 */
 
+/**
+ * @brief Habilita o clock do DAC1 e configura o canal 1 (buffer ligado).
+ * @return sempre 0
+ */
 static int hal_dac_hw_init(void)
 {
     /* Habilita clock do DAC (APB1 bit 29) */
@@ -1174,6 +1248,8 @@ static int hal_dac_hw_init(void)
     return 0;
 }
 
+/** @brief Escreve o valor bruto no registrador do DAC1 canal 1.
+ * @param value_12bit valor 0-4095 */
 static void hal_dac_hw_write(uint16_t value_12bit)
 {
     DAC_R12BDHR1 = value_12bit;
@@ -1181,11 +1257,16 @@ static void hal_dac_hw_write(uint16_t value_12bit)
 
 #endif /* CONFIG_ARCH_POSIX */
 
+/** @brief Inicializa o DAC1. @return sempre 0. */
 int HAL_DAC_Init(void)
 {
     return hal_dac_hw_init();
 }
 
+/**
+ * @brief Escreve um valor no DAC, saturado em HAL_DAC_MAX_VALUE.
+ * @param value_12bit valor 0-4095 (12 bits)
+ */
 void HAL_DAC_Set_Value(uint16_t value_12bit)
 {
     if (value_12bit > HAL_DAC_MAX_VALUE) value_12bit = HAL_DAC_MAX_VALUE;
@@ -1194,12 +1275,14 @@ void HAL_DAC_Set_Value(uint16_t value_12bit)
 
 #else /* !HAL_ENABLE_DAC */
 
+/** @brief Stub (HAL_ENABLE_DAC=0). @return sempre 0. */
 int HAL_DAC_Init(void)
 {
     LOG_INF("HAL DAC: desabilitado via HAL_prm.h (HAL_DISABLE_DAC)");
     return 0;
 }
 
+/** @brief Stub (HAL_ENABLE_DAC=0): no-op. @param value_12bit não usado. */
 void HAL_DAC_Set_Value(uint16_t value_12bit)
 {
     ARG_UNUSED(value_12bit);
@@ -1207,9 +1290,7 @@ void HAL_DAC_Set_Value(uint16_t value_12bit)
 
 #endif /* HAL_ENABLE_DAC */
 
-/* ===========================================================
- * HAL_Init — inicializa periféricos e cria threads bloqueantes
- * =========================================================== */
+/* HAL_Init — inicializa periféricos e cria threads bloqueantes. */
 
 #if HAL_ENABLE_ADC
 K_THREAD_STACK_DEFINE(hal_adc_stack, HAL_STACK_SIZE);
@@ -1221,6 +1302,11 @@ K_THREAD_STACK_DEFINE(hal_hx711_stack, HAL_STACK_SIZE);
 static struct k_thread hal_hx711_thread_data;
 #endif
 
+/**
+ * @brief Inicializa ADC/HX711/ESC/RPM/I2C/DAC nessa ordem e sobe as threads
+ * bloqueantes (ADC, HX711).
+ * @return 0 em sucesso, ou o primeiro erro de inicialização encontrado
+ */
 int HAL_Init(void)
 {
     int r;

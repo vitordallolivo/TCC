@@ -1,16 +1,9 @@
-/*
- * RPM — leitura de rotacao por Input Capture (TIM3 CH3 / PB0).
- *
- * Sensor independente do acionamento (Hall nos imas ou disco optico):
- * 14 polos -> 7 pulsos/volta. NECESSARIO no coast-down, onde a excitacao
- * e' cortada e o ZCP das fases some.
- *
- * Metodo (reaproveitado da SIBA, HAL_thread_RPM_fn): conta pulsos numa
- * janela fixa (SPMM_RPM_SAMPLE_MS) em hardware (ISR de captura, sem carga
- * de CPU) e converte para RPM. omega publicado atomicamente.
- *
- * native_sim (CONFIG_ARCH_POSIX): sem TIM3 -> omega synthetic perseguindo
- * o throttle do ESC (permite testar shell/log fora do hardware).
+/**
+ * @file rpm.c
+ * @brief RPM — Input Capture (TIM3 CH3/PB0), sensor independente do
+ * acionamento (14 pólos -> 7 pulsos/volta), necessário no coast-down onde
+ * o ZCP some. Conta pulsos numa janela fixa (SPMM_RPM_SAMPLE_MS) via ISR e
+ * converte pra RPM. native_sim sintetiza omega perseguindo o throttle do ESC.
  */
 #include "spmm.h"
 #include <zephyr/kernel.h>
@@ -21,7 +14,9 @@ LOG_MODULE_REGISTER(rpm, LOG_LEVEL_INF);
 /* rpm_milli = RPM * 1000, consultado por spmm_get_rpm/omega */
 static atomic_t rpm_milli;
 
+/** @brief Última rotação medida. @return rpm mecânico. */
 float spmm_get_rpm(void)   { return (float)atomic_get(&rpm_milli) / 1000.0f; }
+/** @brief Última rotação medida, em rad/s. @return omega mecânico. */
 float spmm_get_omega(void) { return spmm_rpm_to_rads(spmm_get_rpm()); }
 
 #define RPM_STACK_SIZE 1024
@@ -29,6 +24,10 @@ float spmm_get_omega(void) { return spmm_rpm_to_rads(spmm_get_rpm()); }
 static K_THREAD_STACK_DEFINE(rpm_stack, RPM_STACK_SIZE);
 static struct k_thread rpm_thread;
 
+/**
+ * @brief Converte a contagem de pulsos da janela em RPM e publica em rpm_milli.
+ * @param pulses pulsos contados em SPMM_RPM_SAMPLE_MS
+ */
 static inline void rpm_publish(uint32_t pulses)
 {
     /* RPM = (pulsos / pulsos_por_volta) * (60000 / janela_ms) */
@@ -70,6 +69,10 @@ static const struct gpio_dt_spec rpm_pin =
 
 static atomic_t pulse_count;   /* incrementado na ISR a cada captura */
 
+/**
+ * @brief ISR de input capture do TIM3 CH3: limpa a flag e conta 1 pulso.
+ * @param arg não usado
+ */
 static void tim3_capture_isr(const void *arg)
 {
     ARG_UNUSED(arg);
@@ -80,6 +83,10 @@ static void tim3_capture_isr(const void *arg)
     }
 }
 
+/**
+ * @brief Configura o GPIO PB0 e o TIM3 CH3 em input capture, e conecta a ISR.
+ * @return 0 em sucesso, erro do gpio_pin_configure_dt
+ */
 int rpm_init(void)
 {
     int err = gpio_pin_configure_dt(&rpm_pin, GPIO_INPUT);
@@ -105,6 +112,11 @@ int rpm_init(void)
     return 0;
 }
 
+/**
+ * @brief Thread (hardware): a cada janela, lê e zera o contador de pulsos e
+ * publica o RPM. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void rpm_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -121,12 +133,18 @@ static void rpm_thread_fn(void *p1, void *p2, void *p3)
 #define RPM_SIM_MAX_RPM   9000.0f   /* @ throttle 2000us (arbitrario)         */
 #define RPM_SIM_LAG       0.15f     /* fracao do erro corrigida por amostra   */
 
+/** @brief native_sim: stub (não há TIM3 real). @return sempre 0. */
 int rpm_init(void)
 {
     LOG_INF("RPM: modo synthetic (native_sim) — sem TIM3");
     return 0;
 }
 
+/**
+ * @brief Thread (native_sim): persegue o throttle do ESC com atraso de 1ª
+ * ordem (inclui coast-down). Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void rpm_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -147,6 +165,7 @@ static void rpm_thread_fn(void *p1, void *p2, void *p3)
 }
 #endif /* CONFIG_ARCH_POSIX */
 
+/** @brief Cria a thread de medição de RPM (prioridade média). */
 void rpm_start(void)
 {
     k_thread_create(&rpm_thread, rpm_stack, RPM_STACK_SIZE,

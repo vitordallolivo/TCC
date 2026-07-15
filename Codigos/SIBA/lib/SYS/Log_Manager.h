@@ -6,11 +6,7 @@
 
 /* Auto-generated — edite SIBA.yaml, não este arquivo */
 
-/* ===========================================================
- * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
- * Gerado a partir da ordem dos campos em TELEMETRY_LOG
- * (exclui timestamp, status e error_code, que não são sensores).
- * =========================================================== */
+/* Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG. */
 #define SENSOR_ID_LOAD_CELL_0 0U
 #define SENSOR_ID_LOAD_CELL_1 1U
 #define SENSOR_ID_LOAD_CELL_2 2U

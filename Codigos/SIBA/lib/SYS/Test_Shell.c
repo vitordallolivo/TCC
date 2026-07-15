@@ -1,25 +1,14 @@
 /*
- * Test_Shell.c — SIBA Board
- *
- * Comandos de teste registrados no Zephyr Shell (CONFIG_SHELL), usando o
- * mesmo UART do console (zephyr,console / zephyr,shell-uart, 115200 8N1).
- * O subsistema de shell já cuida de UART, prompt, histórico, autocompletar
- * e tokenização — não há necessidade de thread, polling ou parser próprios.
- *
- * Permite exercitar manualmente as mesmas ações que hoje só chegam via CMD
- * pela rede UDP — útil para validar HX711/ESC/RPM/Battery/Propeller sem
- * depender do link com o PC.
- *
- * IMPORTANTE — camadas: o shell é Application e fala diretamente com a
- * camada Sys (managers) ou, quando inevitável, com o HAL — NUNCA injeta
- * CMD em fila_cmd/CMD_Core. CMD existe só para o protocolo de rede com o
- * PC (ver CLAUDE.md "Application -> Sys -> OS"); reusar esse caminho aqui
- * exporia o OS para a Application e duplicaria/desalinharia a lógica dos
- * managers (ex.: taração de célula é decisão do Sys, não do HAL).
- *
- * Digite "siba" + TAB no terminal serial para ver a lista de subcomandos.
+ * Test_Shell.c — comandos de diagnóstico no Zephyr Shell (mesmo UART do
+ * console), pra exercitar HX711/ESC/RPM/Battery/Propeller sem depender do
+ * link UDP com o PC. Fala direto com os managers (Sys) ou HAL — nunca passa
+ * por CMD_Core, que é só pro protocolo de rede. "siba" + TAB autocompleta.
  */
 
+/**
+ * @file Test_Shell.c
+ * @brief Comandos de diagnóstico "siba ..." no Zephyr Shell.
+ */
 #include "Test_Shell.h"
 #include "HAL.h"
 #include "Battery_Manager.h"
@@ -33,6 +22,12 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+/**
+ * @brief "siba read" — imprime o snapshot atual do TELEMETRY_LOG.
+ * @param sh shell de saída
+ * @param argc, argv não usados
+ * @return sempre 0
+ */
 static int cmd_read(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -53,12 +48,13 @@ static int cmd_read(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-/* ===========================================================
- * siba sensors — lista verbosa de TODOS os sensores: valor
- * convertido (mesmo dado que vai pro TELEMETRY_LOG) + leitura
- * bruta direto do HAL, útil para diagnosticar hardware vs.
- * conversão/calibração.
- * =========================================================== */
+/**
+ * @brief "siba sensors" — lista bruto + convertido de todo sensor, pra
+ * diagnosticar hardware vs. calibração.
+ * @param sh shell de saída
+ * @param argc, argv não usados
+ * @return sempre 0
+ */
 static int cmd_sensors(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -89,11 +85,7 @@ static int cmd_sensors(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-/* ===========================================================
- * siba error — mostra o uint32_t agregado pelo Security_Manager
- * (mesmo campo TELEMETRY_LOG.error_code, em HEX) já decodificado
- * bit a bit — ver Security_Manager.h "siba_error_bit_t".
- * =========================================================== */
+/** @brief Entrada da tabela de decodificação do error_code agregado. */
 struct error_bit_info {
     uint32_t            bit;
     const char         *name;
@@ -116,6 +108,12 @@ static const struct error_bit_info error_bits[] = {
     { ERROR_OS_GPIO_INIT_FAILED,         "OS_GPIO_INIT_FAILED",         "algum modulo GPIO nao inicializou" },
 };
 
+/**
+ * @brief "siba error" — decodifica bit a bit o error_code agregado.
+ * @param sh shell de saída
+ * @param argc, argv não usados
+ * @return sempre 0
+ */
 static int cmd_error(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -139,6 +137,8 @@ static int cmd_error(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba rpm" — imprime a rotação atual. @param sh shell de saída.
+ * @param argc, argv não usados. @return sempre 0. */
 static int cmd_rpm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -148,6 +148,9 @@ static int cmd_rpm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba esc <0-100>" — pede um throttle via Propeller_Manager.
+ * @param sh shell de saída @param argc não usado @param argv argv[1]=percent
+ * @return sempre 0 */
 static int cmd_esc(const struct shell *sh, size_t argc, char **argv)
 {
     float pct = strtof(argv[1], NULL);
@@ -157,6 +160,8 @@ static int cmd_esc(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba arm" — arma o ESC direto no HAL. @param sh shell de saída.
+ * @param argc, argv não usados. @return sempre 0. */
 static int cmd_arm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -167,6 +172,8 @@ static int cmd_arm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba disarm" — desarma o ESC direto no HAL. @param sh shell de saída.
+ * @param argc, argv não usados. @return sempre 0. */
 static int cmd_disarm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -177,6 +184,9 @@ static int cmd_disarm(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba start <0-5>" — informativo (célula já ativa desde o boot).
+ * @param sh shell de saída @param argc não usado @param argv argv[1]=id
+ * @return 0 em sucesso, -EINVAL se id fora de 0-5 */
 static int cmd_start(const struct shell *sh, size_t argc, char **argv)
 {
     int id = atoi(argv[1]);
@@ -193,6 +203,8 @@ static int cmd_start(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba stop" — dispara emergência (Security_Manager). @param sh shell.
+ * @param argc, argv não usados. @return sempre 0. */
 static int cmd_stop(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -203,6 +215,8 @@ static int cmd_stop(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba reset" — reboot do board (sys_reboot). Não retorna de fato.
+ * @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_reset(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -213,6 +227,9 @@ static int cmd_reset(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba tare <0-5>" — tara uma célula de carga.
+ * @param sh shell de saída @param argc não usado @param argv argv[1]=id
+ * @return 0 em sucesso, -EINVAL se id fora de 0-5 */
 static int cmd_tare(const struct shell *sh, size_t argc, char **argv)
 {
     int id = atoi(argv[1]);
@@ -227,28 +244,28 @@ static int cmd_tare(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-/* ===========================================================
- * siba sensor <id> linear|offset <val> | <id> reset
- *
- * Calibração é decisão do Sys, nunca do HAL puro: células de carga
- * (id 0-5) passam por Propeller_Manager_Set_Cell_Calib (que também
- * marca a célula como configurada — ver ERROR_PROP_LOAD_CELL_NOT_CONFIGURED);
- * sensores analógicos (id 6/7/9/10 — v_batt/i_batt/temp/air_speed) vão
- * direto para HAL_ADC_Set_Calib (ADC não tem lógica de Sys própria).
- * SENSOR_ID_SOC (8) e SENSOR_ID_RPM (11) não têm calibração linear/offset
- * (SOC é um polinômio — ver "siba batt poly"; RPM é contagem de pulsos).
- * =========================================================== */
+/** @brief Testa se `id` é uma célula de carga (0-5). @return true/false. */
 static bool sensor_id_is_load_cell(int id)
 {
     return (id >= SENSOR_ID_LOAD_CELL_0 && id <= SENSOR_ID_LOAD_CELL_5);
 }
 
+/** @brief Testa se `id` é um sensor ADC calibrável (afim). @return true/false. */
 static bool sensor_id_is_adc(int id)
 {
     return (id == SENSOR_ID_V_BATT || id == SENSOR_ID_I_BATT ||
             id == SENSOR_ID_TEMPERATURE_BATTERY || id == SENSOR_ID_AIR_SPEED);
 }
 
+/**
+ * @brief "siba sensor <id> linear|offset <val> | <id> reset" — células
+ * (0-5) passam por Propeller_Manager_Set_Cell_Calib; sensores ADC
+ * (6/7/9/10) vão direto pro HAL_ADC_Set_Calib.
+ * @param sh shell de saída
+ * @param argc número de argumentos
+ * @param argv argv[1]=id, argv[2]=ação, argv[3]=valor (se aplicável)
+ * @return 0 em sucesso, -EINVAL em uso/argumentos inválidos
+ */
 static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
 {
     int id = atoi(argv[1]);
@@ -302,6 +319,9 @@ static int cmd_sensor(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba batt poly <0-4> <val>" — sobrescreve um coeficiente do
+ * polinômio SOC. @param sh shell @param argc não usado
+ * @param argv argv[1]=idx, argv[2]=val @return 0 ou -EINVAL */
 static int cmd_batt_poly(const struct shell *sh, size_t argc, char **argv)
 {
     int   idx = atoi(argv[1]);
@@ -317,6 +337,9 @@ static int cmd_batt_poly(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba batt templimit <val>" — sobrescreve o limite de temperatura.
+ * @param sh shell @param argc não usado @param argv argv[1]=val
+ * @return sempre 0 */
 static int cmd_batt_templimit(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -328,6 +351,9 @@ static int cmd_batt_templimit(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba batt relay on|off" — liga/desliga o relé de potência.
+ * @param sh shell @param argc não usado @param argv argv[1]="on"/"off"
+ * @return sempre 0 */
 static int cmd_batt_relay(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -339,6 +365,9 @@ static int cmd_batt_relay(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba batt cells <n>" — fixa a contagem de células (0 = auto).
+ * @param sh shell @param argc não usado @param argv argv[1]=n
+ * @return 0 em sucesso, -EINVAL se n fora de 0-255 */
 static int cmd_batt_cells(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -355,6 +384,9 @@ static int cmd_batt_cells(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba prop maxcurrent <amps>" — sobrescreve o limite de corrente
+ * do motor. @param sh shell @param argc não usado @param argv argv[1]=amps
+ * @return sempre 0 */
 static int cmd_prop_maxcurrent(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -366,13 +398,12 @@ static int cmd_prop_maxcurrent(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-/* ===========================================================
- * siba i2c scan|read|write — infra crua do I2C1 (PB8/PB9 remap,
- * HAL_I2C_*). Sem decisão de protocolo — útil para checar a fiação/
- * endereço de um dispositivo novo antes de implementar o driver dele.
- * =========================================================== */
+/* siba i2c scan|read|write — infra crua do I2C1, pra checar fiação/endereço
+ * antes de implementar o driver de um dispositivo novo. */
 #define I2C_SHELL_MAX_BYTES 32
 
+/** @brief "siba i2c scan" — varre o barramento e lista endereços que
+ * respondem. @param sh shell @param argc, argv não usados @return sempre 0 */
 static int cmd_i2c_scan(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -391,6 +422,9 @@ static int cmd_i2c_scan(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba i2c read <addr> <len>" — lê len bytes do endereço addr.
+ * @param sh shell @param argc não usado @param argv argv[1]=addr, argv[2]=len
+ * @return 0 em sucesso, -EINVAL ou erro do HAL_I2C_Read */
 static int cmd_i2c_read(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);
@@ -418,6 +452,10 @@ static int cmd_i2c_read(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+/** @brief "siba i2c write <addr> <b0> [b1...]" — escreve bytes no endereço addr.
+ * @param sh shell @param argc número de argumentos
+ * @param argv argv[1]=addr, argv[2..]=bytes
+ * @return 0 em sucesso, -EINVAL ou erro do HAL_I2C_Write */
 static int cmd_i2c_write(const struct shell *sh, size_t argc, char **argv)
 {
     unsigned long addr = strtoul(argv[1], NULL, 0);
@@ -443,9 +481,9 @@ static int cmd_i2c_write(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-/* ===========================================================
- * siba dac <0-4095> — DAC1 canal 1 (PA5/DAC_OUT1), valor bruto 12 bits.
- * =========================================================== */
+/** @brief "siba dac <0-4095>" — escreve no DAC1 canal 1 (PA5/DAC_OUT1).
+ * @param sh shell @param argc não usado @param argv argv[1]=valor
+ * @return 0 em sucesso, -EINVAL se fora de 0-HAL_DAC_MAX_VALUE */
 static int cmd_dac(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc);

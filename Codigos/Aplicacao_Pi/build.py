@@ -1,31 +1,14 @@
-"""build.py — gera o executável do Aplicacao_Pi com PyInstaller.
+"""build.py — gera o executável do Aplicacao_Pi com PyInstaller (`python build.py`).
 
-Uso:
-    python build.py
+Sempre --onedir: Config/*.yaml precisa ser gravável entre execuções, e
+--onefile se auto-extrai numa pasta temporária descartada ao fechar.
+--contents-directory . mantém Config/GUI/native_sim_bin ao lado do
+executável (sem o _internal/ padrão), como mainApp.py/manager.py esperam.
 
-Sempre `--onedir` (nunca `--onefile`): Config/*.yaml precisa ser GRAVÁVEL
-entre execuções (perfis de motor, SAME.yaml, preferências) — `--onefile` se
-auto-extrai numa pasta temporária que é apagada ao fechar o app, perdendo
-tudo. Usa `--contents-directory .` pra manter Config/GUI/native_sim_bin
-direto ao lado do executável (em vez do `_internal/` padrão do PyInstaller
-6+), que é o que `mainApp.py`/`mainAlbatrozGUI.py`/`manager.py` esperam
-quando `sys.frozen` é True (ver CLAUDE.md).
-
-No Linux, embute os 3 `zephyr.exe` (SIBA/SAME/SPMM) já compilados via
-`make native_sim` em cada pasta — assim o build gerado pode ser movido pra
-qualquer pasta/máquina (Linux, mesma arquitetura/glibc) e o `native_sim`
-continua funcionando sem depender do repo git do lado (testado e validado
-— ver CLAUDE.md). No Windows/macOS, `native_sim` não roda de qualquer
-forma (zephyr.exe é ELF POSIX de Linux), então esses binários nem são
-empacotados lá.
-
-Também empacota `autotune_cost.py`/`helice_coeff.py` (Scripts/) como
-executáveis PRÓPRIOS em `Scripts/_bin/<nome>/<nome>` — dentro do app
-congelado, `sys.executable` é o próprio app, não um Python genérico, então
-`EstimationRunner` não consegue rodar esses scripts como `[sys.executable,
-script.py]` (ver Communication_Data/estimation.py `_invocation`). Ficam em
-pasta própria por script (não achatada com --contents-directory) pra não
-misturar as libs internas (numpy/scipy bundled) de um build com o outro.
+No Linux embute os zephyr.exe (SIBA/SAME/SPMM) de `make native_sim`. Os
+scripts de Scripts/ viram executáveis próprios (sys.executable no app
+congelado não é um Python genérico) em pastas separadas, pra não misturar
+numpy/scipy de um build com o outro.
 """
 import os
 import platform
@@ -65,17 +48,9 @@ def native_sim_binary_args():
 
 
 def build_estimation_helpers(main_dist_dir):
-    """Empacota cada script de Scripts/ invocado via EstimationRunner como
-    seu próprio executável em <main_dist_dir>/Scripts/_bin/<nome>/<nome>.
-
-    Não usa --contents-directory aqui (layout normal, com _internal/) —
-    cada helper fica na SUA PRÓPRIA pasta, então não tem risco de um helper
-    sobrescrever .so/.dll do outro (os dois embutem numpy/scipy por conta
-    própria). O cwd continua sendo Scripts/ (não a pasta do helper) quando
-    o EstimationRunner sobe o processo, então test_coeff_auto.py (carregado
-    por caminho relativo) é achado igual — está solto em Scripts/, copiado
-    pelo --add-data do build principal.
-    """
+    """Empacota cada script de Scripts/ como executável próprio em
+    <main_dist_dir>/Scripts/_bin/<nome>/<nome>, cada um na sua pasta pra não
+    misturar numpy/scipy bundled entre eles."""
     scripts_dir = os.path.join(SCRIPT_DIR, "Scripts")
     bin_dist = os.path.join(main_dist_dir, "Scripts", "_bin")
     work_root = os.path.join(SCRIPT_DIR, "build")

@@ -1,3 +1,7 @@
+/**
+ * @file NCI.c
+ * @brief Camada de rede da SAME: TX de telemetria e RX de CMD por UDP.
+ */
 #include "NCI.h"
 #include "OSSI.h"
 #include "CMD.h"
@@ -24,12 +28,21 @@ static struct sockaddr_in peer_addr;
 K_THREAD_STACK_DEFINE(nci_rx_stack, NCI_RX_STACK_SIZE);
 static struct k_thread nci_rx_thread_data;
 
+/**
+ * @brief Liga/desliga o envio de telemetria e o processamento de CMD RX.
+ * @param status true = online (transmite/processa), false = offline
+ */
 void NCI_Set_Connection_Status(bool status)
 {
     is_network_connected = status;
     LOG_INF("NCI: conexão %s", status ? "ONLINE" : "OFFLINE");
 }
 
+/**
+ * @brief Envia um buffer por UDP pro peer configurado (pc_rx), se online.
+ * @param buf dados a enviar (tipicamente TELEMETRY_LOG)
+ * @param len tamanho de buf em bytes
+ */
 void NCI_Transmit(const void *buf, size_t len)
 {
     if (!is_network_connected || tx_sock < 0) return;
@@ -42,7 +55,11 @@ void NCI_Transmit(const void *buf, size_t len)
     }
 }
 
-/* NCI RX — bloqueia em recvfrom (evento "CMD recebido") e submete ao same_wq */
+/**
+ * @brief Thread RX: bloqueia em recvfrom (evento "CMD recebido") e submete
+ * o pacote ao same_wq via OSSI_Submit_CMD. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void nci_rx_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -82,6 +99,7 @@ static void nci_rx_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
+/** @brief Cria o socket TX e sobe a thread RX. Chamar em main() antes do HAL. */
 void NCI_Init(void)
 {
     /* Socket TX — criado aqui, reutilizado por NCI_Transmit() */

@@ -1,75 +1,14 @@
-/*
+/**
+ * @file adc_ch32v307.c
+ * @brief Driver ADC do CH32V307 (Zephyr), MMIO direto — suporta ADC1/ADC2.
+ *
  * SPDX-License-Identifier: Apache-2.0
  *
- * Driver ADC para CH32V307 — Zephyr RTOS
- * Implementa a API drivers/adc.h via MMIO direto (sem HAL WCH).
- *
- * Suporta múltiplas instâncias — ADC1 (base 0x40012400) e ADC2
- * (base 0x40012800, = ADC1_BASE + 0x400).
- *
- * ⚠ MODO DUAL SIMULTÂNEO (ADC1 mestre + ADC2 escravo) — OBRIGATÓRIO se as
- * duas instâncias existirem no DTS. O manual de referência confirma
- * (Table 11-2 "Peripheral mapping table of each DMA1 channel", cap. 11.2.3):
- * **só o ADC1 tem linha de request de DMA** — ADC2 NÃO aparece em NENHUM
- * dos 7 canais do DMA1. Um ADC2 "independente" com `dmas = <&dma1 N>`
- * próprio nunca completaria uma transferência (join TC nunca dispara) —
- * toda leitura daria timeout na placa real (native_sim não pega isso, já
- * que emula o ADC por outro caminho, sem esse driver).
- *
- * Por isso, quando as DUAS instâncias existem (caso da SAME — 3 tensões no
- * ADC1, 3 correntes no ADC2), o driver configura DUALMOD=Regular
- * Simultaneous (registrador ADC1_CTLR1, bits 19:16 = 0110 — ver manual de
- * referência 12.3.2): a cada passo da sequência, ADC1 e ADC2 convertem SEUS
- * respectivos canais NO MESMO INSTANTE (V_a com i_a, V_b com i_b, V_c com
- * i_c — pareado por fase, essencial pro Clarke/SMO), e o resultado
- * combinado (ADC2 nos 16 bits altos, ADC1 nos 16 bits baixos de um único
- * word de 32 bits) sai por UMA SÓ transferência de DMA de 32 bits, disparada
- * pelo ADC1 (única linha de DMA que existe de verdade). O ADC2 (escravo)
- * não tem `dmas` no DTS — nem precisa, é acionado pelo trigger simultâneo
- * que o hardware manda pra ele quando DUALMOD está configurado no ADC1.
- *
- * Quando só UMA instância existe (caso da SIBA), o driver cai no modo
- * "independente" de sempre — nada muda pra esse caso.
- *
- * Cada instância:
- *   - (mestre, ou única) aloca seu próprio canal de DMA1 (registradores +
- *     IRQ calculados a partir do número do canal informado no DTS — ver
- *     DMA1_CH_BASE/ADC_CH32V307_DMA_IRQN)
- *   - habilita seu próprio clock em RCC_APB2PCENR (ADC1 = bit 9,
- *     ADC2 = bit 10 — calculado a partir do offset do `base` em relação
- *     a ADC1_BASE, blocos de 0x400)
- *
- * Modo de operação (independente, igual para qualquer instância isolada):
- *   - Scan contínuo de N canais configurados via adc_channel_cfg
- *   - DMA em modo circular → sem intervenção da CPU por amostra
- *   - adc_read() síncrono: dispara software trigger e aguarda semáforo
- *   - adc_read_async() assíncrono: usa k_poll_signal sinalizado na ISR DMA TC
- *
- * Registradores (offsets relativos à base do periférico — ADC1 ou ADC2):
- *   STATR   +0x00   Status
- *   CTLR1   +0x04   Control 1  (SCAN, DUALMOD[19:16] — só ADC1_CTLR1 vale)
- *   CTLR2   +0x08   Control 2  (ADON, CONT, DMA, SWSTART, CAL, RSTCAL)
- *   SAMPTR1 +0x0C   Sample time ch10-17
- *   SAMPTR2 +0x10   Sample time ch0-9
- *   RSQR1   +0x2C   Regular sequence 1  (comprimento L)
- *   RSQR2   +0x30   Regular sequence 2
- *   RSQR3   +0x34   Regular sequence 3  (SQ1..SQ6)
- *   RDATAR  +0x4C   Regular data (lido pelo DMA) — em modo dual, os 32 bits
- *                   do ADC1_RDATAR trazem {ADC2[31:16], ADC1[15:0]}
- *
- * DMA1 (base 0x40020000) — canal N em offset 0x08 + (N-1)*0x14:
- *   CFGR    +0x00   Config
- *   CNTR    +0x04   Count
- *   PADDR   +0x08   Peripheral addr
- *   MADDR   +0x0C   Memory addr
- *   IRQn = 26 + N   (DMA1_CH1=27 .. DMA1_CH7=33, ch32v30x.h openwch)
- *
- * Referências:
- *   openwch/ch32v307 — ch32v30x.h, ch32v30x_adc.c
- *   CH32FV2x_V3xRM-EN (manual de referência) — cap. 11.2.3 "DMA Request
- *   Mapping" (Table 11-2) e cap. 12.2.7 "Dual ADC Mode" (Regular
- *   simultaneous mode, DUALMOD, Figure 12-7)
- *   Seu ADC.c do Projeto_Final_AAM
+ * Só o ADC1 tem linha de DMA de verdade (manual ref. Table 11-2). Com as
+ * duas instâncias juntas (caso da SAME) o driver usa DUALMOD=Regular
+ * Simultaneous: ADC1+ADC2 convertem juntos e saem numa DMA de 32 bits só,
+ * disparada pelo ADC1. Com uma instância só (SIBA), modo independente normal.
+ * Refs: ch32v30x_adc.c, CH32FV2x_V3xRM-EN cap. 11.2.3 e 12.2.7.
  */
 
 #define DT_DRV_COMPAT wch_adc
@@ -83,10 +22,7 @@
 
 LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 
-/* =========================================================
- * Mapa de registradores — MMIO direto, offsets relativos à base
- * (ADC1_BASE para a instância ADC1, ADC1_BASE + 0x400 para ADC2)
- * ========================================================= */
+/* Registradores, offsets relativos à base (ADC1_BASE ou ADC1_BASE+0x400). */
 
 #define ADC1_BASE       0x40012400UL
 #define ADC2_BASE       (ADC1_BASE + 0x400UL)
@@ -176,13 +112,9 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
  * ========================================================= */
 #define CH32_ADC_MAX_CHANNELS  16
 
-/* =========================================================
- * Par dual (mestre ADC1 + escravo ADC2) — resolvido em runtime comparando
- * cfg->base no init() de cada instância, SEM precisar de propriedade nova
- * no DTS. Só existe de verdade se as DUAS instâncias forem instanciadas
- * (caso da SAME); na SIBA (só ADC1) fica sempre {NULL, NULL} e todo o
- * código abaixo cai no caminho independente de sempre.
- * ========================================================= */
+/* Par dual (mestre ADC1 + escravo ADC2), resolvido em runtime comparando
+ * cfg->base no init() de cada instância. Na SIBA (só ADC1) fica {NULL,NULL}
+ * e tudo cai no caminho independente normal. */
 static const struct device *g_adc1_dev;
 static const struct device *g_adc2_dev;
 
@@ -190,6 +122,10 @@ static const struct device *g_adc2_dev;
  * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}. */
 static __attribute__((aligned(4))) uint32_t g_dual_dma_buf[CH32_ADC_MAX_CHANNELS];
 
+/**
+ * @brief Verifica se ADC1 e ADC2 estão ambos instanciados (par dual).
+ * @return true se as duas instâncias existirem (caso da SAME)
+ */
 static inline bool adc_dual_is_paired(void)
 {
     return g_adc1_dev != NULL && g_adc2_dev != NULL;
@@ -230,14 +166,12 @@ struct adc_ch32v307_cfg {
     void (*irq_config_func)(const struct device *dev);  /* NULL se !has_dma */
 };
 
-/* =========================================================
- * ISR do canal DMA1 alocado — Transfer Complete
- *
- * Em modo dual, só o MESTRE (ADC1) tem IRQ própria conectada (o escravo
- * não tem canal de DMA nenhum) — quando ela dispara, o word de 32 bits já
- * traz os resultados dos DOIS ADCs combinados, então esta mesma ISR separa
- * e libera o semáforo/sinal das DUAS instâncias.
- * ========================================================= */
+/**
+ * @brief ISR de Transfer Complete do DMA1. Em modo dual só o mestre (ADC1)
+ * tem IRQ própria; quando dispara, o word de 32 bits já traz os dois
+ * resultados, e esta ISR separa e libera o semáforo/sinal das duas instâncias.
+ * @param dev device que disparou a IRQ (mestre em modo dual, ou único)
+ */
 static void adc_ch32v307_dma_isr(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -291,11 +225,12 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
     }
 }
 
-/* =========================================================
- * Funções internas de HW — todas recebem a base do periférico/canal,
- * permitindo reuso idêntico entre instâncias ADC1 e ADC2
- * ========================================================= */
+/* Funções de HW, recebem a base do periférico/canal — reusadas por ADC1 e ADC2. */
 
+/**
+ * @brief Habilita o clock do DMA1 e do ADC desta instância, e o prescaler.
+ * @param cfg config da instância (usa cfg->base pra achar o índice ADC1/ADC2)
+ */
 static void adc_rcc_enable(const struct adc_ch32v307_cfg *cfg)
 {
     uint32_t adc_index = (cfg->base - ADC1_BASE) / 0x400UL; /* 0=ADC1, 1=ADC2 */
@@ -304,13 +239,18 @@ static void adc_rcc_enable(const struct adc_ch32v307_cfg *cfg)
     RCC_AHBPCENR  |= RCC_AHB_DMA1;
     RCC_APB2PCENR |= RCC_APB2_ADCx(adc_index);
 
-    /* ADC clock = PCLK2 / 6  (144 MHz / 6 = 24 MHz, dentro do limite 14 MHz
-     * do datasheet — ajuste para /8 se usar HSE < 112 MHz). Prescaler é
-     * compartilhado entre ADC1/ADC2 — última instância a inicializar
-     * apenas reafirma o mesmo valor. */
+    /* ADC clock = PCLK2/6 = 24 MHz (limite datasheet 14 MHz... ajustar p/
+     * /8 se HSE < 112 MHz). Prescaler é compartilhado; última instância a
+     * inicializar só reafirma o mesmo valor. */
     RCC_CFGR0 = (RCC_CFGR0 & ~RCC_CFGR0_ADCPRE_MASK) | RCC_CFGR0_ADCPRE_DIV6;
 }
 
+/**
+ * @brief Configura o canal DMA1 em modo circular, 16 bits (modo independente).
+ * @param cfg config da instância (dma_ch_base, base do periférico)
+ * @param buf buffer de destino (uint16_t por canal)
+ * @param count número de canais na sequência
+ */
 static void dma_init(const struct adc_ch32v307_cfg *cfg, uint16_t *buf, uint16_t count)
 {
     uint32_t chb = cfg->dma_ch_base;
@@ -334,9 +274,13 @@ static void dma_init(const struct adc_ch32v307_cfg *cfg, uint16_t *buf, uint16_t
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) |= DMA_CFGR_EN;
 }
 
-/* Igual a dma_init(), mas pro word combinado de 32 bits do modo dual
- * (ADC1_RDATAR traz {ADC2[31:16], ADC1[15:0]} quando DUALMOD=Regular
- * simultaneous). Só chamada pelo mestre (ADC1). */
+/**
+ * @brief Igual a dma_init(), mas pro word combinado de 32 bits do modo dual
+ * (ADC1_RDATAR traz {ADC2[31:16], ADC1[15:0]}). Só chamada pelo mestre (ADC1).
+ * @param cfg config do mestre (ADC1)
+ * @param buf buffer de destino (uint32_t por canal)
+ * @param count número de canais na sequência
+ */
 static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16_t count)
 {
     uint32_t chb = cfg->dma_ch_base;
@@ -358,6 +302,10 @@ static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) |= DMA_CFGR_EN;
 }
 
+/**
+ * @brief Executa a sequência de calibração de hardware do ADC (RSTCAL+CAL).
+ * @param base endereço base do periférico (ADC1_BASE ou ADC2_BASE)
+ */
 static void adc_calibrate(uint32_t base)
 {
     /* Reset calibração */
@@ -372,10 +320,11 @@ static void adc_calibrate(uint32_t base)
     }
 }
 
-/*
- * Configura RSQR3/2/1 com a sequência de canais.
- * Cada SQx é 5 bits; RSQR3 contém SQ1..SQ6 (canais 1 a 6 da sequência),
- * RSQR2 contém SQ7..SQ12, RSQR1 contém SQ13..SQ16 + L (comprimento-1).
+/**
+ * @brief Configura RSQR3/2/1 com a sequência de canais (5 bits por SQx).
+ * @param base endereço base do periférico
+ * @param ids ordem dos IDs de canal na sequência
+ * @param count número de canais (1..16)
  */
 static void adc_set_sequence(uint32_t base, const uint8_t *ids, uint8_t count)
 {
@@ -398,10 +347,11 @@ static void adc_set_sequence(uint32_t base, const uint8_t *ids, uint8_t count)
     ADC_REG(base, ADC_OFF_RSQR1) = rsqr1;
 }
 
-/*
- * Sample time: 239.5 ciclos para todos os canais (máxima precisão).
- * Bits por canal: 3 bits; SAMPTR2 cobre ch0-ch9, SAMPTR1 ch10-ch17.
- * Valor 0b111 = 239.5 ciclos.
+/**
+ * @brief Configura sample time = 239.5 ciclos (máx. precisão) pra todos os canais.
+ * @param base endereço base do periférico
+ * @param ids IDs de canal a configurar
+ * @param count número de canais
  */
 static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t count)
 {
@@ -420,11 +370,9 @@ static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t coun
     ADC_REG(base, ADC_OFF_SAMPTR1) = smp1;
 }
 
-/*
- * Re-arma o PAR dual inteiro (mestre + escravo) — chamada sempre que
- * qualquer um dos dois tiver sua sequência de canais alterada, pra que a
- * config final reflita SEMPRE o estado atual dos dois lados (não importa
- * se o mestre ou o escravo terminou de configurar por último).
+/**
+ * @brief Re-arma o par dual inteiro (DMA/DUALMOD/trigger/calibração);
+ * chamada quando a sequência de um dos dois lados muda.
  */
 static void adc_arm_dual_master(void)
 {
@@ -448,10 +396,8 @@ static void adc_arm_dual_master(void)
      * (ver nota grande no topo do arquivo). */
     dma_init32(mcfg, g_dual_dma_buf, mdata->ch_count);
 
-    /* Mestre: ADON+CONT+DMA+trigger por software — SWSTART no ADC1 dispara
-     * os DOIS simultaneamente uma vez DUALMOD configurado (a placa envia o
-     * trigger simultâneo pro ADC2 sozinha, em hardware).
-     * Escravo: ADON+CONT apenas — SEM DMA própria, SEM trigger próprio. */
+    /* Mestre: ADON+CONT+DMA+trigger por SW (SWSTART dispara os dois juntos).
+     * Escravo: só ADON+CONT, sem DMA nem trigger próprios. */
     ADC_REG(mcfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT | ADC_CTLR2_DMA |
                                         ADC_CTLR2_EXTTRIG | (0x7UL << 17); /* EXTSEL=111: SWSTART */
     ADC_REG(mcfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
@@ -469,9 +415,13 @@ static void adc_arm_dual_master(void)
 
 static void adc_hw_reconfigure(const struct device *dev);
 
-/* =========================================================
- * API Zephyr: channel_setup
- * ========================================================= */
+/**
+ * @brief API Zephyr channel_setup: adiciona um canal à sequência de scan
+ * desta instância e reprograma o hardware.
+ * @param dev instância do driver (ADC1 ou ADC2)
+ * @param cfg config do canal (só ADC_GAIN_1/ADC_REF_INTERNAL suportados)
+ * @return 0 em sucesso, -EINVAL/-ENOTSUP/-ENOMEM em erro
+ */
 static int adc_ch32v307_channel_setup(const struct device *dev,
                                       const struct adc_channel_cfg *cfg)
 {
@@ -505,19 +455,18 @@ static int adc_ch32v307_channel_setup(const struct device *dev,
         LOG_DBG("Canal %d adicionado (total: %d)", cfg->channel_id,
                 data->ch_count);
 
-        /* Reprograma RSQR/SAMPTR/DMA com a sequência atualizada — chamado
-         * uma vez por canal adicionado; a última chamada (todos os canais
-         * já registrados) deixa o scan circular rodando com a sequência
-         * completa. */
+        /* Reprograma RSQR/SAMPTR/DMA a cada canal adicionado. */
         adc_hw_reconfigure(dev);
     }
 
     return 0;
 }
 
-/* =========================================================
- * Reconfiguração do ADC quando os canais mudam
- * ========================================================= */
+/**
+ * @brief Reprograma sequência/sample-time/DMA desta instância quando os
+ * canais mudam; em modo dual, re-arma o par inteiro.
+ * @param dev instância do driver (ADC1 ou ADC2)
+ */
 static void adc_hw_reconfigure(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -558,9 +507,12 @@ static void adc_hw_reconfigure(const struct device *dev)
     ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_SWSTART;
 }
 
-/* =========================================================
- * API Zephyr: read (síncrono)
- * ========================================================= */
+/**
+ * @brief API Zephyr read (síncrono): dispara/aguarda uma conversão completa.
+ * @param dev instância do driver
+ * @param seq sequência solicitada (buffer + máscara de canais)
+ * @return 0 em sucesso, -ENODEV/-EINVAL/-ETIMEDOUT em erro
+ */
 static int adc_ch32v307_read(const struct device *dev,
                              const struct adc_sequence *seq)
 {
@@ -597,9 +549,14 @@ static int adc_ch32v307_read(const struct device *dev,
     return 0;
 }
 
-/* =========================================================
- * API Zephyr: read_async
- * ========================================================= */
+/**
+ * @brief API Zephyr read_async: registra o buffer/sinal e retorna sem
+ * bloquear; o sinal é levantado na ISR do DMA quando a conversão terminar.
+ * @param dev instância do driver
+ * @param seq sequência solicitada (buffer + máscara de canais)
+ * @param async sinal a levantar na conclusão
+ * @return 0 em sucesso, -ENODEV/-EINVAL em erro
+ */
 #ifdef CONFIG_ADC_ASYNC
 static int adc_ch32v307_read_async(const struct device *dev,
                                    const struct adc_sequence *seq,
@@ -626,9 +583,13 @@ static int adc_ch32v307_read_async(const struct device *dev,
 }
 #endif /* CONFIG_ADC_ASYNC */
 
-/* =========================================================
- * API Zephyr: init
- * ========================================================= */
+/**
+ * @brief API Zephyr init: registra a instância (mestre/escravo dual), liga
+ * o clock/ADC e conecta a IRQ do DMA (se esta instância tiver). Calibração
+ * de verdade só ocorre depois, em adc_hw_reconfigure/adc_arm_dual_master.
+ * @param dev instância do driver
+ * @return sempre 0
+ */
 static int adc_ch32v307_init(const struct device *dev)
 {
     const struct adc_ch32v307_cfg *cfg = dev->config;
@@ -641,10 +602,7 @@ static int adc_ch32v307_init(const struct device *dev)
     data->user_buf  = NULL;
 
     /* Registra este device como mestre (ADC1) ou escravo (ADC2) do par
-     * dual — resolvido só comparando a base física, sem depender de
-     * propriedade nova no DTS nem da ordem de inicialização (as duas
-     * instâncias terminam o init() antes de HAL_Init() chamar
-     * channel_setup(), então não há corrida aqui). */
+     * dual, comparando só a base física. */
     if (cfg->base == ADC1_BASE) {
         g_adc1_dev = dev;
     } else if (cfg->base == ADC2_BASE) {
@@ -661,14 +619,8 @@ static int adc_ch32v307_init(const struct device *dev)
         __asm__ volatile("nop");
     }
 
-    /* Conecta/habilita a IRQ do canal DMA1 alocado (transfer-complete) —
-     * só existe se esta instância TEM DMA própria (o escravo ADC2, em modo
-     * dual, não tem — recebe o resultado via ISR do mestre). A partir
-     * daqui adc_ch32v307_dma_isr() pode disparar, mas o canal ainda está
-     * com CFGR.EN=0 (dma_init()/dma_init32() só rodam em
-     * adc_hw_reconfigure()/adc_arm_dual_master(), chamados por
-     * adc_channel_setup() depois que HAL_ADC_Init() configurar os canais)
-     * — sem transferência em andamento, sem TC, sem ISR. */
+    /* Habilita a IRQ do canal DMA1, só se esta instância tiver DMA própria
+     * (o escravo ADC2 recebe o resultado via ISR do mestre). */
     if (cfg->has_dma) {
         cfg->irq_config_func(dev);
     }
@@ -680,9 +632,7 @@ static int adc_ch32v307_init(const struct device *dev)
     return 0;
 }
 
-/* =========================================================
- * Tabela de API do driver
- * ========================================================= */
+/** @brief Tabela de API do driver ADC (interface Zephyr adc_driver_api). */
 static const struct adc_driver_api adc_ch32v307_api = {
     .channel_setup = adc_ch32v307_channel_setup,
     .read          = adc_ch32v307_read,
@@ -692,17 +642,18 @@ static const struct adc_driver_api adc_ch32v307_api = {
     .ref_internal  = 3300,  /* mV — Vref interno CH32V307 */
 };
 
-/* =========================================================
- * Instanciação via DTS — suporta múltiplos nós `wch,adc` (ADC1 e/ou ADC2).
- * Só a instância que tiver `dmas = <&dma1 N>` no DTS ganha canal de DMA e
- * IRQ próprios — o escravo dual (ADC2, quando houver par) não declara
- * `dmas` no DTS de propósito (ver nota grande no topo do arquivo).
- * ========================================================= */
+/* Instanciação via DTS: só quem tem `dmas = <&dma1 N>` ganha DMA/IRQ
+ * próprios — o escravo dual (ADC2) não declara `dmas` de propósito. */
 #define ADC_CH32V307_HAS_DMA(n)      DT_INST_NODE_HAS_PROP(n, dmas)
 #define ADC_CH32V307_DMA_CHANNEL(n)  DT_INST_DMAS_CELL_BY_IDX(n, 0, channel)
 /* IRQn do canal N de DMA1 = 26 + N (DMA1_CH1=27 .. DMA1_CH7=33) */
 #define ADC_CH32V307_DMA_IRQN(n)     (26 + ADC_CH32V307_DMA_CHANNEL(n))
 
+/**
+ * @brief Gera (se a instância `n` tiver `dmas` no DTS) a função de conexão
+ * da IRQ de DMA dessa instância: adc_ch32v307_irq_config_<n>(dev).
+ * @param n índice da instância DTS
+ */
 #define ADC_CH32V307_IRQ_CONFIG_FN(n)                                          \
     IF_ENABLED(ADC_CH32V307_HAS_DMA(n), (                                     \
         static void adc_ch32v307_irq_config_##n(const struct device *dev)    \
@@ -713,6 +664,11 @@ static const struct adc_driver_api adc_ch32v307_api = {
         }                                                                     \
     ))
 
+/**
+ * @brief Instancia o driver pra instância DTS `n`: dados/config + registro
+ * no dispositivo Zephyr (DEVICE_DT_INST_DEFINE).
+ * @param n índice da instância DTS
+ */
 #define ADC_CH32V307_INIT(n)                                                   \
     ADC_CH32V307_IRQ_CONFIG_FN(n)                                              \
     static struct adc_ch32v307_data adc_ch32v307_data_##n;                    \

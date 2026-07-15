@@ -1,3 +1,7 @@
+/**
+ * @file CMD_Core.c
+ * @brief Despacho de CMD (rede) da SIBA: START/STOP/RESET/SENSOR/ESC/BATTERY.
+ */
 #include "CMD_Core.h"
 #include "CMD_Core_prm.h"
 #include "CMD.h"
@@ -15,6 +19,10 @@ LOG_MODULE_REGISTER(cmd_core, LOG_LEVEL_DBG);
  * CMD_Core_Init() a partir da tabela SIBA_SENSOR_TABLE (CMD_Core_prm.h). */
 static SENSORS sensor_cfg[CMD_CORE_SENSOR_COUNT];
 
+/**
+ * @brief FUNC_START: informativo — células e telemetria já estão sempre ativas.
+ * @param cmd comando recebido
+ */
 static void handle_func_start(const CMD *cmd)
 {
     switch (cmd->target_id) {
@@ -32,6 +40,11 @@ static void handle_func_start(const CMD *cmd)
     }
 }
 
+/**
+ * @brief FUNC_STOP: se target for TARGET_DEFAULT, dispara emergência (desarma
+ * o ESC).
+ * @param cmd comando recebido
+ */
 static void handle_func_stop(const CMD *cmd)
 {
     if (cmd->target_id == TARGET_DEFAULT) {
@@ -40,17 +53,23 @@ static void handle_func_stop(const CMD *cmd)
     }
 }
 
+/**
+ * @brief FUNC_ESC: aplica o throttle (0-100%) via Propeller_Manager.
+ * @param cmd comando recebido (usa instruction e value)
+ */
 static void handle_func_esc(const CMD *cmd)
 {
-    /* value = throttle 0.0-100.0%
-     * O pedido passa pelo Propeller_Manager (em vez de chamar o HAL
-     * diretamente): ele arma o ESC se preciso e sobrescreve/reduz o PWM
-     * sempre que a corrente do motor ultrapassar o limite configurado. */
+    /* value = throttle 0-100%. Passa pelo Propeller_Manager (não o HAL
+     * direto): ele arma o ESC e limita o PWM por corrente se preciso. */
     if (cmd->instruction == INSTR_WRITE) {
         Propeller_Manager_Request_Throttle(cmd->value);
     }
 }
 
+/**
+ * @brief FUNC_BATTERY: roteia pra Battery_Manager conforme a action.
+ * @param cmd comando recebido (action_or_status = battery_action)
+ */
 static void handle_func_battery(const CMD *cmd)
 {
     battery_action act = (battery_action)cmd->action_or_status;
@@ -69,20 +88,19 @@ static void handle_func_battery(const CMD *cmd)
     }
 }
 
-/* Aplica Linear_Coeff/Offset_Coeff ao hardware do sensor `tid`, de forma
- * genérica — célula de carga (HX711) ou sensor analógico (ADC). `sensor_cfg[]`
- * (struct SENSORS, Common_Types.h/Log_Manager.h) é só um cache local; quem
- * guarda os valores de verdade é o HAL/Propeller_Manager (ver
- * read_sensor_calib abaixo). SENSOR_ID_SOC não tem hardware próprio
- * (calculado via polinômio pelo Battery_Manager) — não recebe calibração
- * linear/offset. */
+/**
+ * @brief Aplica linear/offset ao sensor `tid` (célula HX711 ou ADC).
+ * sensor_cfg[] é só cache local — quem guarda de verdade é o
+ * HAL/Propeller_Manager. SENSOR_ID_SOC não recebe calibração (polinômio).
+ * @param tid índice do sensor (SENSOR_ID_*)
+ * @param linear ganho
+ * @param offset deslocamento
+ */
 static void apply_sensor_calib(int8_t tid, float linear, float offset)
 {
     switch (tid) {
         case SENSOR_ID_LOAD_CELL_0 ... SENSOR_ID_LOAD_CELL_5:
-            /* Taração/calibração de célula é decisão do Sys, não do HAL —
-             * Propeller_Manager decide e só então aciona o hardware
-             * (ver CLAUDE.md "o HAL é apenas questões de configuração"). */
+            /* Taração/calibração de célula é decisão do Sys, não do HAL. */
             Propeller_Manager_Set_Cell_Calib((uint8_t)tid, linear, offset);
             break;
 
@@ -98,12 +116,14 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
     }
 }
 
-/* Lê o par (linear, offset) hoje aplicado no HAL/Propeller_Manager para o
- * sensor `tid` — HAL é a fonte única de verdade da calibração (pode ter
- * sido alterada pelo shell `siba sensor`, fora do cache sensor_cfg[]).
- * Usado para alterações PARCIAIS (só linear ou só offset): lê o par atual,
- * troca apenas o campo pedido e regrava os dois — sem isso, alterar um
- * coeficiente sobrescreveria o outro com o default (1.0/0.0). */
+/**
+ * @brief Lê (linear, offset) atual do HAL/Propeller_Manager (fonte de
+ * verdade), pra alterações parciais não sobrescreverem o campo não
+ * tocado com o default.
+ * @param tid índice do sensor (SENSOR_ID_*)
+ * @param linear [out] ganho atual
+ * @param offset [out] deslocamento atual
+ */
 static void read_sensor_calib(int8_t tid, float *linear, float *offset)
 {
     switch (tid) {
@@ -125,6 +145,11 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
     }
 }
 
+/**
+ * @brief FUNC_SENSOR: calibração de célula de carga (modelo grams=(raw-tare)/scale)
+ * ou sensor ADC (afim), e limites de faixa.
+ * @param cmd comando recebido
+ */
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
@@ -135,14 +160,9 @@ static void handle_func_sensor(const CMD *cmd)
 
     default_action act = (default_action)cmd->action_or_status;
 
-    /* ---- Célula de carga (HX711): modelo CANÔNICO grams=(raw-tare)/scale ----
-     * Diferente do ADC (afim y=linear·x+offset): a célula tem UM só offset (o
-     * tare, em counts) e a "escala" é derivada de um PESO conhecido — não é um
-     * ganho digitado à mão. Por isso:
-     *   OFFSET  -> TARA (tare = raw atual; zera; `value` ignorado)
-     *   LINEAR  -> calibra a escala pelo PESO conhecido em `value`
-     *              (scale = (raw-tare)/value  =>  leitura passa a valer o peso)
-     *   RESET   -> restaura defaults e re-tara (tratado no bloco genérico) */
+    /* Célula de carga: grams=(raw-tare)/scale, diferente do ADC (afim).
+     * OFFSET->tara (tare=raw atual); LINEAR->calibra scale pelo peso
+     * conhecido em `value`; RESET->defaults (bloco genérico abaixo). */
     if (tid >= SENSOR_ID_LOAD_CELL_0 && tid <= SENSOR_ID_LOAD_CELL_5 &&
         (act == DEFAULT_ACTION_SENSE_OFFSET_COEF ||
          act == DEFAULT_ACTION_SENSE_LINEAR_COEF)) {
@@ -211,6 +231,10 @@ static void handle_func_sensor(const CMD *cmd)
     }
 }
 
+/**
+ * @brief FUNC_RESET: reinicia o sistema (sys_reboot). Não retorna.
+ * @param cmd comando recebido (não usado)
+ */
 static void handle_func_reset(const CMD *cmd)
 {
     ARG_UNUSED(cmd);
@@ -220,10 +244,10 @@ static void handle_func_reset(const CMD *cmd)
     sys_reboot(0);
 }
 
-/*
- * CMD_Core_Dispatch
- * Desserializa struct CMD do buffer binário e executa o handler.
- * Chamado pelo cmd_dispatch_fn do OSSI (siba_wq).
+/**
+ * @brief Desserializa um CMD do buffer binário e despacha pro handler.
+ * @param buf bytes do pacote recebido
+ * @param len tamanho de buf; se menor que sizeof(CMD), o pacote é descartado
  */
 void CMD_Core_Dispatch(const uint8_t *buf, size_t len)
 {
@@ -259,12 +283,24 @@ static const uint32_t sensor_err_bit[CMD_CORE_SENSOR_COUNT] = {
 #undef X
 };
 
+/**
+ * @brief Lê a config/faixa de validade cacheada de um sensor.
+ * @param id índice do sensor
+ * @return ponteiro pra entrada em sensor_cfg[], ou NULL se id fora do range
+ */
 const SENSORS *CMD_Core_Get_Sensor_Cfg(uint32_t id)
 {
     if (id >= CMD_CORE_SENSOR_COUNT) return NULL;
     return &sensor_cfg[id];
 }
 
+/**
+ * @brief Valida um valor contra a faixa do sensor.
+ * @param id índice do sensor; fora do range é sempre válido
+ * @param value valor a validar
+ * @return 0 se dentro da faixa (ou sensor sem bit de erro); senão o bit de
+ * erro configurado (siba_error_bit_t) pra Security_Manager sinalizar
+ */
 uint32_t CMD_Core_Validate_Sensor(uint32_t id, float value)
 {
     if (id >= CMD_CORE_SENSOR_COUNT) return 0U;
@@ -277,6 +313,10 @@ uint32_t CMD_Core_Validate_Sensor(uint32_t id, float value)
     return 0U;                  /* dentro da faixa */
 }
 
+/**
+ * @brief Preenche sensor_cfg[] com os defaults de SIBA_SENSOR_TABLE.
+ * Chamar em main() antes de qualquer CMD chegar.
+ */
 void CMD_Core_Init(void)
 {
     /* Inicializa a tabela de sensores a partir de SIBA_SENSOR_TABLE

@@ -1,15 +1,9 @@
-"""SensorConfigDialog — ajusta ganho, offset e limites (mín/máx) de TODOS os
-sensores da SIBA e da SAME num só lugar.
+"""SensorConfigDialog — ajusta ganho, offset e limites de todos os sensores
+da SIBA e da SAME num só lugar.
 
-Cada célula editável vira um comando `<siba|same> set <sensor> <linear|offset|
-min|max> <valor>` (reaproveitando o parser do TinyTerminal) endereçado à placa
-DONA daquele sensor. Só as células que o usuário EDITAR são enviadas ao clicar
-em "Aplicar" — assim não se tara/recalibra um sensor sem querer.
-
-Limites mín/máx: o firmware guarda em sensor_cfg[] (CMD_Core_prm.h) e os managers
-(Security, só na SIBA) reagem quando o valor sai da faixa — ver
-Communication_Data/errors.py. A SAME não tem Security_Manager (ver
-SAME/CLAUDE.md), então lá mín/máx só ficam registrados, sem alarme.
+Cada célula editada vira um comando `<siba|same> set <sensor> <campo>
+<valor>`, e só o que foi editado é enviado ao clicar "Aplicar". Mín/máx
+só disparam alarme na SIBA (Security_Manager) — a SAME apenas registra.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (

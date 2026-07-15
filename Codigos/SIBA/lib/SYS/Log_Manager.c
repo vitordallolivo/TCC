@@ -1,3 +1,8 @@
+/**
+ * @file Log_Manager.c
+ * @brief Mantém o TELEMETRY_LOG e transmite por UDP a 10 Hz (k_timer ->
+ * siba_wq -> NCI_Transmit).
+ */
 #include "Log_Manager.h"
 #include "NCI.h"
 #include "OSSI.h"
@@ -16,12 +21,20 @@ static struct k_mutex log_mutex;
  * sensores e CMDs, sem concorrência com Log_Manager_Update. */
 static struct k_work log_tx_work;
 
+/**
+ * @brief Item de trabalho que efetivamente transmite o log. Roda na siba_wq.
+ * @param w item de trabalho (não usado)
+ */
 static void log_tx_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
     Log_Manager_Transmit();
 }
 
+/**
+ * @brief Callback do k_timer: só agenda log_tx_work na siba_wq.
+ * @param t timer que disparou (não usado)
+ */
 static void log_tx_timer_fn(struct k_timer *t)
 {
     ARG_UNUSED(t);
@@ -30,6 +43,10 @@ static void log_tx_timer_fn(struct k_timer *t)
 
 K_TIMER_DEFINE(log_tx_timer, log_tx_timer_fn, NULL);
 
+/**
+ * @brief Inicializa o log (status LOG_VALID) e arranca o timer de TX
+ * periódico. Chamar em main() antes do HAL.
+ */
 void Log_Manager_Init(void)
 {
     k_mutex_init(&log_mutex);
@@ -47,6 +64,11 @@ void Log_Manager_Init(void)
     LOG_INF("Log_Manager inicializado (TX a cada %d ms via timer)", LOG_MANAGER_PERIOD_MS);
 }
 
+/**
+ * @brief Atualiza um campo do TELEMETRY_LOG corrente. Thread-safe.
+ * @param sensor_id ver SENSOR_ID_* em Log_Manager.h
+ * @param value valor a gravar; sensor_id desconhecido só loga um aviso
+ */
 void Log_Manager_Update(uint32_t sensor_id, float value)
 {
     k_mutex_lock(&log_mutex, K_FOREVER);
@@ -70,6 +92,10 @@ void Log_Manager_Update(uint32_t sensor_id, float value)
     k_mutex_unlock(&log_mutex);
 }
 
+/**
+ * @brief Copia o TELEMETRY_LOG corrente (thread-safe).
+ * @return cópia do snapshot atual
+ */
 TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
 {
     TELEMETRY_LOG snap;
@@ -79,6 +105,9 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
     return snap;
 }
 
+/**
+ * @brief Marca timestamp/error_code e transmite o log corrente por UDP (NCI).
+ */
 void Log_Manager_Transmit(void)
 {
     TELEMETRY_LOG snap;

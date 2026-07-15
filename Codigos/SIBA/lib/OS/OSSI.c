@@ -1,3 +1,7 @@
+/**
+ * @file OSSI.c
+ * @brief Fila de trabalho única da SIBA (siba_wq): despacho de sensores e CMD.
+ */
 #include "OSSI.h"
 #include "Log_Manager.h"
 #include "Battery_Manager.h"
@@ -30,8 +34,11 @@ K_MSGQ_DEFINE(sensor_queue, sizeof(sensor_item_t), SENSOR_QUEUE_LEN, 4);
 
 static struct k_work sensor_dispatch_work;
 
-/* Despacha TODOS os itens pendentes da sensor_queue para os managers.
- * Roda no siba_wq — serializado com cmd_dispatch_fn e log_tx_fn. */
+/**
+ * @brief Drena sensor_queue e despacha cada item pros managers (Log,
+ * Battery, Propeller, Security conforme o sensor_id). Roda na siba_wq.
+ * @param w item de trabalho (não usado)
+ */
 static void sensor_dispatch_fn(struct k_work *w)
 {
     sensor_item_t item;
@@ -54,6 +61,12 @@ static void sensor_dispatch_fn(struct k_work *w)
     }
 }
 
+/**
+ * @brief Enfileira um valor de sensor pra despacho na siba_wq. Thread-safe
+ * e ISR-safe; descarta e loga se a fila estiver cheia.
+ * @param sensor_id ver SENSOR_ID_* em Log_Manager.h
+ * @param value valor já convertido
+ */
 void OSSI_Submit_Sensor(uint32_t sensor_id, float value)
 {
     sensor_item_t item = { sensor_id, value };
@@ -75,6 +88,10 @@ K_MSGQ_DEFINE(cmd_queue, sizeof(cmd_item_t), CMD_QUEUE_LEN, 4);
 
 static struct k_work cmd_dispatch_work;
 
+/**
+ * @brief Drena cmd_queue e despacha cada CMD pendente no CMD_Core.
+ * @param w item de trabalho (não usado)
+ */
 static void cmd_dispatch_fn(struct k_work *w)
 {
     cmd_item_t item;
@@ -83,6 +100,11 @@ static void cmd_dispatch_fn(struct k_work *w)
     }
 }
 
+/**
+ * @brief Enfileira um pacote CMD recebido pra despacho na siba_wq.
+ * @param buf bytes do pacote (copiados internamente, truncado a sizeof(CMD))
+ * @param len tamanho de buf
+ */
 void OSSI_Submit_CMD(const uint8_t *buf, size_t len)
 {
     cmd_item_t item;
@@ -95,7 +117,7 @@ void OSSI_Submit_CMD(const uint8_t *buf, size_t len)
     k_work_submit_to_queue(&siba_wq, &cmd_dispatch_work);
 }
 
-/* ── Inicialização ───────────────────────────────────────────────────── */
+/** @brief Inicializa os work items e sobe a siba_wq. Chamar no início de main(). */
 void OSSI_Init(void)
 {
     k_work_init(&sensor_dispatch_work, sensor_dispatch_fn);

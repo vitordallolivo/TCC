@@ -1,13 +1,9 @@
-/*
- * Propeller_Manager.c — SIBA Board
- *
- * Responsável por proteger o conjunto motor/ESC/hélice contra sobrecorrente:
- * monitora i_batt (corrente do motor) e nunca permite que ela ultrapasse
- * PROPELLER_DEFAULT_MAX_CURRENT_A — se isso acontecer, o throttle pedido
- * pelo usuário (via CMD FUNC_ESC) é sobrescrito/reduzido progressivamente
- * até a corrente normalizar, e só então o pedido original é retomado.
- *
- * Cálculo de Ct/Cp da hélice (força + RPM) continua como TODO — ver CLAUDE.md.
+/**
+ * @file Propeller_Manager.c
+ * @brief Protege motor/ESC/hélice contra sobrecorrente: monitora i_batt e
+ * nunca deixa passar de PROPELLER_DEFAULT_MAX_CURRENT_A, reduzindo o
+ * throttle progressivamente até normalizar e só então retomando o pedido
+ * original. Cálculo de Ct/Cp da hélice ainda é TODO.
  */
 
 #include "Propeller_Manager.h"
@@ -27,25 +23,19 @@ static float last_current_a     = 0.0f;
 static float requested_throttle = 0.0f;  /* último pedido do usuário (%)     */
 static float applied_throttle   = 0.0f;  /* throttle de fato aplicado no ESC */
 
-/* ---------------------------------------------------------------------
- * Células de carga — taração/calibração e inferência de conectividade
- * são responsabilidade do Sys (Propeller_Manager), não do HAL: o HAL
- * só expõe leitura bruta/configuração de hardware (ver CLAUDE.md
- * "o HAL é apenas questões de configuração").
- *
- * "Configurada" = usuário já escreveu uma calibração explícita via CMD/
- * shell (Linear_Coeff/Offset_Coeff != default — ver Propeller_Manager_Set_Cell_Calib).
- * "Conectada" = HX711 responde algo diferente de "todos os bits em 1"
- * (DOUT flutuando em pull-up = HX711 ausente/desconectado — sign-extend
- * de 24 bits todos '1' vira -1 em int32_t, daí a checagem `raw == -1`).
- * --------------------------------------------------------------------- */
+/* Taração/calibração e conectividade das células são do Sys, não do HAL.
+ * "Configurada" = calibração explícita já gravada via CMD/shell.
+ * "Conectada" = HX711 não devolve raw==-1 (24 bits em 1 = DOUT flutuando,
+ * sensor ausente). */
 #define PROPELLER_HX711_DISCONNECTED_RAW   (-1)
 
 static bool cell_configured[HX711_COUNT];
 
-/* Atualiza o bit agregado ERROR_PROP_LOAD_CELL_NOT_CONFIGURED/_NOT_CONNECTED
- * a partir do estado de TODAS as células — basta uma estar com problema
- * para o bit ficar setado (loga só na borda, ver Error_Detect/Error_Erase). */
+/**
+ * @brief Reavalia todas as 6 células e atualiza os bits agregados
+ * ERROR_PROP_LOAD_CELL_NOT_CONFIGURED/_NOT_CONNECTED (basta uma com
+ * problema pra setar o bit; loga só na borda).
+ */
 static void check_load_cells_health(void)
 {
     bool any_unconfigured = false;
@@ -77,8 +67,10 @@ static void check_load_cells_health(void)
     }
 }
 
-/* Aplica o throttle no ESC, armando-o automaticamente se necessário
- * (mesmo comportamento que CMD_Core::handle_func_esc tinha antes). */
+/**
+ * @brief Aplica o throttle no ESC, armando-o automaticamente se necessário.
+ * @param pct throttle desejado; clampado em [0, 100]
+ */
 static void apply_throttle(float pct)
 {
     if (pct < 0.0f)   pct = 0.0f;
@@ -96,6 +88,7 @@ static void apply_throttle(float pct)
     }
 }
 
+/** @brief Zera estado (mutex, throttle, limite default, células) do manager. */
 void Propeller_Manager_Init(void)
 {
     k_mutex_init(&prop_mutex);
@@ -113,8 +106,10 @@ void Propeller_Manager_Init(void)
             (double)max_current_a);
 }
 
-/* Tara a célula `idx` — ponto de entrada único (Sys/Propeller decide
- * QUANDO/SE tarar; HAL só executa a operação de hardware). */
+/**
+ * @brief Tara a célula `idx` (ponto de entrada único; HAL só executa).
+ * @param idx índice da célula (0..HX711_COUNT-1)
+ */
 void Propeller_Manager_Tare_Cell(uint8_t idx)
 {
     if (idx >= HX711_COUNT) {
@@ -126,8 +121,12 @@ void Propeller_Manager_Tare_Cell(uint8_t idx)
     LOG_INF("Propeller: celula[%u] tarada", idx);
 }
 
-/* Calibra a célula `idx` (Linear_Coeff/Offset_Coeff) — marca a célula
- * como "configurada" para Error_Erase(ERROR_PROP_LOAD_CELL_NOT_CONFIGURED). */
+/**
+ * @brief Ajuste direto de scale/tare de uma célula; marca como configurada.
+ * @param idx índice da célula
+ * @param scale contagens por unidade
+ * @param tare_raw zero de referência (contagens)
+ */
 void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float scale, float tare_raw)
 {
     if (idx >= HX711_COUNT) {
@@ -141,10 +140,12 @@ void Propeller_Manager_Set_Cell_Calib(uint8_t idx, float scale, float tare_raw)
             idx, (double)scale, (int)tare_raw);
 }
 
-/* Calibra a escala da célula por PESO CONHECIDO (modelo canônico do HX711):
- * com a célula tarada, aplica-se `known_weight` e resolve-se
- * scale = (raw - tare)/known_weight, de modo que a leitura passe a valer o
- * próprio peso. É a forma correta de "ganho" (o app manda o peso, não o ganho). */
+/**
+ * @brief Calibra a escala de uma célula por peso conhecido (com a célula
+ * já tarada); marca a célula como configurada.
+ * @param idx índice da célula
+ * @param known_weight peso aplicado, na unidade desejada
+ */
 void Propeller_Manager_Calibrate_Cell_Weight(uint8_t idx, float known_weight)
 {
     if (idx >= HX711_COUNT) {
@@ -158,6 +159,12 @@ void Propeller_Manager_Calibrate_Cell_Weight(uint8_t idx, float known_weight)
             idx, (double)known_weight);
 }
 
+/**
+ * @brief Aplica o pedido de throttle do usuário, retendo aumentos se a
+ * corrente já estiver acima do limite (Propeller_Manager_Update reduz).
+ * @param percent throttle pedido (0-100%)
+ * @return sempre 0
+ */
 int Propeller_Manager_Request_Throttle(float percent)
 {
     k_mutex_lock(&prop_mutex, K_FOREVER);
@@ -180,6 +187,13 @@ int Propeller_Manager_Request_Throttle(float percent)
     return 0;
 }
 
+/**
+ * @brief Recebe atualizações de células de carga (reavalia saúde) e de
+ * i_batt (protege contra sobrecorrente, reduzindo/restaurando o throttle).
+ * @param sensor_id SENSOR_ID_LOAD_CELL_0..5 ou SENSOR_ID_I_BATT (outros
+ * são ignorados)
+ * @param value valor do sensor
+ */
 void Propeller_Manager_Update(uint32_t sensor_id, float value)
 {
     /* Células de carga: a cada amostra (qualquer uma das 6), reavalia a
@@ -229,6 +243,10 @@ void Propeller_Manager_Update(uint32_t sensor_id, float value)
     k_mutex_unlock(&prop_mutex);
 }
 
+/**
+ * @brief Sobrescreve o limite máximo de corrente do motor.
+ * @param amps novo limite (A); valores <= 0 são ignorados
+ */
 void Propeller_Manager_Set_Max_Current(float amps)
 {
     if (amps <= 0.0f) {

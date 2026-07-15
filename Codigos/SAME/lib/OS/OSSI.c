@@ -1,3 +1,7 @@
+/**
+ * @file OSSI.c
+ * @brief Fila de trabalho única da SAME (same_wq): despacho de telemetria e CMD.
+ */
 #include "OSSI.h"
 #include "Log_Manager.h"
 #include "CMD_Core.h"
@@ -7,20 +11,16 @@
 
 LOG_MODULE_REGISTER(ossi, LOG_LEVEL_WRN);
 
-/* ── same_wq ─────────────────────────────────────────────────────────────
- * Thread única de processamento de eventos: telemetria + CMDs.
- * Prioridade 5 (menor prioridade que a thread do ADC, que é 7 e roda o
- * observador — o passo do SMO nunca deve esperar a same_wq). Stack 2048B. */
+/* same_wq: thread única de eventos (telemetria + CMDs), prioridade menor
+ * que a thread do ADC (7) — o passo do SMO nunca espera a fila. */
 #define SAME_WQ_STACK_SIZE  2048
 #define SAME_WQ_PRIORITY       5
 
 K_THREAD_STACK_DEFINE(same_wq_stack, SAME_WQ_STACK_SIZE);
 struct k_work_q same_wq;
 
-/* ── Fila de telemetria ──────────────────────────────────────────────────
- * A thread do ADC publica os 13 campos do TELEMETRY_LOG (6 medidas + 4 αβ +
- * rpm/Te/torque) a cada decimação. 32 slots absorvem uma rajada inteira sem
- * perda mesmo com a same_wq ocupada por um TX UDP. */
+/* Fila de telemetria: 32 slots absorvem uma rajada mesmo com a same_wq
+ * ocupada num TX UDP. */
 typedef struct { uint32_t sensor_id; float value; } sensor_item_t;
 
 #define SENSOR_QUEUE_LEN 32
@@ -28,9 +28,11 @@ K_MSGQ_DEFINE(sensor_queue, sizeof(sensor_item_t), SENSOR_QUEUE_LEN, 4);
 
 static struct k_work sensor_dispatch_work;
 
-/* Escreve no log TODOS os itens pendentes. Roda na same_wq — serializado com
- * o CMD dispatch e com o TX do log. O observador já rodou (na thread do ADC);
- * aqui só se copia o resultado para o snapshot do log. */
+/**
+ * @brief Drena sensor_queue e grava cada item no TELEMETRY_LOG. Roda na
+ * same_wq, serializado com o CMD dispatch e o TX do log.
+ * @param w item de trabalho (não usado)
+ */
 static void sensor_dispatch_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
@@ -40,6 +42,12 @@ static void sensor_dispatch_fn(struct k_work *w)
     }
 }
 
+/**
+ * @brief Enfileira um valor de sensor pra despacho na same_wq. Thread-safe
+ * e ISR-safe; descarta e loga se a fila estiver cheia.
+ * @param sensor_id ver SENSOR_ID_* em Log_Manager.h
+ * @param value valor já calculado
+ */
 void OSSI_Submit_Sensor(uint32_t sensor_id, float value)
 {
     sensor_item_t item = { sensor_id, value };
@@ -61,6 +69,10 @@ K_MSGQ_DEFINE(cmd_queue, sizeof(cmd_item_t), CMD_QUEUE_LEN, 4);
 
 static struct k_work cmd_dispatch_work;
 
+/**
+ * @brief Drena cmd_queue e despacha cada CMD pendente no CMD_Core.
+ * @param w item de trabalho (não usado)
+ */
 static void cmd_dispatch_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
@@ -70,6 +82,11 @@ static void cmd_dispatch_fn(struct k_work *w)
     }
 }
 
+/**
+ * @brief Enfileira um pacote CMD recebido pra despacho na same_wq.
+ * @param buf bytes do pacote (copiados internamente, truncado a sizeof(CMD))
+ * @param len tamanho de buf
+ */
 void OSSI_Submit_CMD(const uint8_t *buf, size_t len)
 {
     cmd_item_t item;
@@ -82,7 +99,7 @@ void OSSI_Submit_CMD(const uint8_t *buf, size_t len)
     k_work_submit_to_queue(&same_wq, &cmd_dispatch_work);
 }
 
-/* ── Inicialização ───────────────────────────────────────────────────── */
+/** @brief Inicializa os work items e sobe a same_wq. Chamar no início de main(). */
 void OSSI_Init(void)
 {
     k_work_init(&sensor_dispatch_work, sensor_dispatch_fn);

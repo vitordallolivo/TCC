@@ -1,3 +1,8 @@
+/**
+ * @file Battery_Manager.c
+ * @brief SOC por polinômio, auto-detecção de nº de células, relé de
+ * potência e limites de segurança da bateria.
+ */
 #include "Battery_Manager.h"
 #include "Security_Manager.h"
 #include <zephyr/kernel.h>
@@ -29,11 +34,8 @@ static float i_batt = 0.0f;
 
 static bool relay_state = false; /* espelha o último Set_Relay — ver Error_Detect(ERROR_BATT_RELAY_MISMATCH) */
 
-/* ---------------------------------------------------------------------
- * Limiares de alarme (Error_Detect/Error_Erase — ver Security_Manager.h).
- * Mantidos folgados em relação aos limites "duros" do Security_Manager
- * (LIMIT_V_BATT_MIN/MAX): aqui é alerta cedo, lá é parada de emergência.
- * --------------------------------------------------------------------- */
+/* Limiares de alarme, mais folgados que os limites "duros" do
+ * Security_Manager: aqui é alerta cedo, lá é parada de emergência. */
 #define BATTERY_LOW_SOC_THRESHOLD_PCT     20.0f  /* abaixo disso, alerta de SOC baixo  */
 #define BATTERY_LOW_VOLTAGE_VC_THRESHOLD   3.5f  /* V/célula — abaixo disso, alerta    */
 #define BATTERY_RELAY_MISMATCH_CURRENT_A   1.0f  /* corrente fluindo com relé OFF      */
@@ -45,14 +47,8 @@ static bool relay_state = false; /* espelha o último Set_Relay — ver Error_De
 #define BATTERY_POLY_SANE_SOC_MIN        -20.0f
 #define BATTERY_POLY_SANE_SOC_MAX        120.0f
 
-/* ---------------------------------------------------------------------
- * Contagem de células — a placa pode ser usada com packs LiPo de
- * tamanhos diferentes (não só 6S). Se o usuário nunca configurar via
- * CMD (BAT_ACTION_CELL_COUNT_OVERWRITE), o número de células é
- * auto-detectado pela tensão do pack através da lookup table abaixo
- * (faixas de tensão de pack “seguras” — 3.5-4.2V por célula; abaixo de
- * 3.5V/célula o pack já está em descarga tardia/perigosa para LiPo).
- * --------------------------------------------------------------------- */
+/* Contagem de células: se o usuário não configurar via CMD, é auto-
+ * detectada pela tensão do pack na lookup table abaixo (3.5-4.2V/célula). */
 #define BATTERY_MAX_CELLS  12U
 
 struct cell_count_lut_entry {
@@ -75,9 +71,12 @@ static const struct cell_count_lut_entry cell_count_lut[] = {
 static uint8_t cell_count        = 6U;    /* valor corrente em uso          */
 static bool    cell_count_is_set = false; /* true quando o usuário define   */
 
-/* Procura na lookup table a contagem de células cuja faixa de tensão
- * "segura" contém v. Se nenhuma faixa bater (pack desconectado, fora
- * de faixa, etc.), aproxima pelo nominal de 3.7V/célula. */
+/**
+ * @brief Detecta o nº de células cuja faixa de tensão "segura" contém v;
+ * se nenhuma faixa bater, aproxima pelo nominal de 3.7V/célula.
+ * @param v tensão do pack (V)
+ * @return número de células estimado (1..BATTERY_MAX_CELLS)
+ */
 static uint8_t detect_cell_count(float v)
 {
     for (size_t i = 0; i < ARRAY_SIZE(cell_count_lut); i++) {
@@ -92,11 +91,12 @@ static uint8_t detect_cell_count(float v)
     return (uint8_t)approx;
 }
 
-/* Avalia o polinômio para Vc e reporta também se o resultado faz sentido
- * (Error_Detect(ERROR_BATT_POLY_MISCONFIGURED) — não corta o ESC, só
- * sinaliza: um polinômio mal calibrado não é uma condição de segurança,
- * mas distorce o SOC reportado). soc_raw_out recebe o valor ANTES do
- * clamp [0,100], usado para o teste de plausibilidade. */
+/**
+ * @brief Avalia o polinômio SOC(Vc) e satura em [0, 100].
+ * @param vc tensão por célula (V)
+ * @param soc_raw_out [out] valor antes do clamp, para teste de plausibilidade
+ * @return SOC em % (0-100)
+ */
 static float eval_poly(float vc, float *soc_raw_out)
 {
     float soc = poly[0]
@@ -114,6 +114,13 @@ static float eval_poly(float vc, float *soc_raw_out)
     return soc;
 }
 
+/**
+ * @brief Calcula o SOC a partir da tensão do pack: auto-detecta (ou usa) a
+ * contagem de células, avalia o polinômio e sinaliza polinômio
+ * desconfigurado / tensão por célula baixa.
+ * @param v tensão do pack (V)
+ * @return SOC em % (0-100)
+ */
 static float eval_soc(float v)
 {
     if (!cell_count_is_set) {
@@ -155,6 +162,7 @@ static float eval_soc(float v)
     return soc;
 }
 
+/** @brief Configura o GPIO do relé (desligado) e zera o estado. */
 void Battery_Manager_Init(void)
 {
     if (relay_gpio.port && gpio_is_ready_dt(&relay_gpio)) {
@@ -169,6 +177,13 @@ void Battery_Manager_Init(void)
     LOG_INF("Battery_Manager inicializado");
 }
 
+/**
+ * @brief Processa uma atualização de sensor relevante à bateria
+ * (v_batt/i_batt/temperatura), atualiza SOC e checa alarmes.
+ * @param sensor_id SENSOR_ID_V_BATT, SENSOR_ID_I_BATT ou
+ * SENSOR_ID_TEMPERATURE_BATTERY (outros são ignorados)
+ * @param value valor do sensor
+ */
 void Battery_Manager_Update(uint32_t sensor_id, float value)
 {
     if (sensor_id == SENSOR_ID_V_BATT) {
@@ -218,6 +233,11 @@ void Battery_Manager_Update(uint32_t sensor_id, float value)
     }
 }
 
+/**
+ * @brief Sobrescreve um coeficiente do polinômio SOC.
+ * @param idx índice do coeficiente (0..4); fora do range é ignorado
+ * @param coeff novo valor
+ */
 void Battery_Manager_Set_Poly(uint8_t idx, float coeff)
 {
     if (idx > 4) return;
@@ -225,12 +245,21 @@ void Battery_Manager_Set_Poly(uint8_t idx, float coeff)
     LOG_INF("Battery: poly[%d]=%.4f", idx, (double)coeff);
 }
 
+/**
+ * @brief Sobrescreve o limite de temperatura que dispara emergência.
+ * @param limit_c novo limite em °C
+ */
 void Battery_Manager_Set_Temp_Limit(float limit_c)
 {
     temp_limit_c = limit_c;
     LOG_INF("Battery: temp_limit=%.1f°C", (double)limit_c);
 }
 
+/**
+ * @brief Fixa manualmente o nº de células (0 = volta a auto-detectar).
+ * @param cells número de células; 0 reativa auto-detecção; >BATTERY_MAX_CELLS
+ * é ignorado
+ */
 void Battery_Manager_Set_Cell_Count(uint8_t cells)
 {
     if (cells == 0U) {
@@ -250,11 +279,16 @@ void Battery_Manager_Set_Cell_Count(uint8_t cells)
     LOG_INF("Battery: contagem de células fixada em %uS", cell_count);
 }
 
+/** @brief Contagem de células em uso (fixada ou auto-detectada). @return nº de células. */
 uint8_t Battery_Manager_Get_Cell_Count(void)
 {
     return cell_count;
 }
 
+/**
+ * @brief Liga/desliga o relé de potência da bateria.
+ * @param on true = liga, false = desliga
+ */
 void Battery_Manager_Set_Relay(bool on)
 {
     relay_state = on;
@@ -264,6 +298,7 @@ void Battery_Manager_Set_Relay(bool on)
     LOG_INF("Battery: relé %s", on ? "ON" : "OFF");
 }
 
+/** @brief Último estado comandado do relé. @return true = ligado. */
 bool Battery_Manager_Get_Relay(void)
 {
     return relay_state;

@@ -1,15 +1,11 @@
-/*
- * SPMM — main. Inicializa os perifericos e sobe as threads de bancada.
+/**
+ * @file main.c
+ * @brief SPMM — ponto de entrada: inicializa os periféricos e sobe as
+ * threads de bancada.
  *
- * Threads (prioridades importam — ver CLAUDE.md):
- *   Aquisicao   prio 4 (ALTA)   ADC1/ADC2 -> Clarke/Park -> Iq. Ts constante,
- *                               nunca preemptada pelo shell/telemetria.
- *   RPM         prio 6 (MEDIA)  input capture -> omega.
- *   Telemetria  prio 7 (BAIXA)  empacota e envia (n, omega, Te, ...) por UDP.
- *   Shell(Telnet) prio SHELL_*  (BAIXA, preemptiva) — gerida pelo subsistema.
- *
- * O shell (Telnet) e' iniciado automaticamente pelo subsistema SHELL do
- * Zephyr (CONFIG_SHELL_BACKEND_TELNET); os comandos vivem em shell_cmds.c.
+ * Threads: Aquisição (prio 4, alta), RPM (prio 6, média), Telemetria
+ * (prio 7, baixa), Shell/Telnet (gerida pelo subsistema SHELL do Zephyr,
+ * comandos em shell_cmds.c).
  */
 #include "spmm.h"
 #include <zephyr/kernel.h>
@@ -17,6 +13,11 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
+/**
+ * @brief Inicializa ESC/RPM/Aquisição/Telemetria e sobe as threads de
+ * aquisição e RPM (telemetria já cria a sua própria em telemetry_init).
+ * @return 0 sempre (Zephyr chama main() uma vez e segue no scheduler)
+ */
 int main(void)
 {
     LOG_INF("=== SPMM — Sistema Provisorio de Medicao Mecanica ===");

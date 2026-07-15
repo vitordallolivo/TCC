@@ -1,15 +1,11 @@
-/*
- * Telemetria / log UDP — streaming binario das amostras (n, omega, Te, dq,
- * fases) para o PC. Pacote = cabecalho (count, ts_us) + lote de amostras,
- * empacotado ate ~MTU. Little-endian, sem padding (ver spmm_pkt_hdr_t).
+/**
+ * @file telemetry.c
+ * @brief Telemetria — streaming UDP binário (spmm_pkt_hdr_t, little-endian,
+ * sem padding).
  *
- * BASE DE TEMPO: cada amostra carrega o contador `n`; o PC reconstroi
- * t = n * Ts (Ts vem daqui, nominal do rate configurado), NUNCA o horario
- * de chegada do pacote UDP. Saltos em `n` -> perda/reordenacao detectavel.
- *
- * Prioridade BAIXA/MEDIA — nao pode preemptar a aquisicao. Em native_sim
- * os sockets sao "offloaded" (NSOS) direto pro host: o Python recebe UDP de
- * verdade do binario rodando no PC.
+ * Cada amostra carrega o contador `n`; o PC reconstrói t=n*Ts (nunca o
+ * horário de chegada do pacote) — saltos em `n` = perda/reordenação
+ * detectável. Prioridade baixa, não preempta a aquisição.
  */
 #include "spmm.h"
 #include <zephyr/kernel.h>
@@ -37,8 +33,13 @@ static uint32_t          sample_n;
 /* Buffer do pacote: cabecalho + lote de amostras */
 static uint8_t pkt_buf[sizeof(spmm_pkt_hdr_t) + TELE_BATCH_MAX * sizeof(spmm_sample_t)];
 
+/** @brief Ts atual do streaming. @return período em µs (0 = parado). */
 uint32_t telemetry_get_ts_us(void) { return log_ts_us; }
 
+/**
+ * @brief (Re)inicia o streaming e acorda a thread de telemetria.
+ * @param hz taxa desejada; 0 é tratado como 1 Hz
+ */
 void telemetry_start_log(uint32_t hz)
 {
     if (hz == 0) hz = 1;
@@ -49,6 +50,7 @@ void telemetry_start_log(uint32_t hz)
     LOG_INF("LOG: iniciado @ %u Hz (Ts=%u us)", hz, log_ts_us);
 }
 
+/** @brief Pausa o streaming (a thread volta a dormir). */
 void telemetry_stop_log(void)
 {
     log_active = false;
@@ -56,6 +58,10 @@ void telemetry_stop_log(void)
     LOG_INF("LOG: parado (%u amostras)", sample_n);
 }
 
+/**
+ * @brief Preenche uma amostra com a medida atual e incrementa o contador.
+ * @param s [out] amostra a preencher
+ */
 static void fill_sample(spmm_sample_t *s)
 {
     spmm_meas_t m;
@@ -70,6 +76,11 @@ static void fill_sample(spmm_sample_t *s)
     s->va = m.va; s->vb = m.vb; s->vc = m.vc;
 }
 
+/**
+ * @brief Thread de telemetria: dorme enquanto parada; enquanto ativa, junta
+ * lotes de amostras respeitando Ts e envia por UDP. Nunca retorna.
+ * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
+ */
 static void tele_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
@@ -117,6 +128,11 @@ static void tele_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
+/**
+ * @brief Sobe a thread de telemetria e inicia o streaming contínuo (100 Hz
+ * default), como SIBA/SAME.
+ * @return sempre 0
+ */
 int telemetry_init(void)
 {
     k_sem_init(&tele_wake, 0, 1);

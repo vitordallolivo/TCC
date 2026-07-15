@@ -1,17 +1,12 @@
 """Camada 1 · Transporte — TelnetLink (SPMM).
 
-Protocolo da SPMM (diferente de SIBA/SAME):
-- Comandos de bancada por TCP (shell Telnet do Zephyr) em texto:
-  arm/disarm/throttle/ramp/patamar/coast/log ...
-- Log rápido por UDP binário: `<HH>` (count, ts_us) + N×`<Iff>` (n, omega, te),
-  decodificado por `codecs.decode_spmm_log` com `t = n*Ts`.
+Protocolo diferente de SIBA/SAME: comandos de bancada em texto por TCP
+(shell Telnet do Zephyr), log rápido por UDP binário (decodificado por
+codecs.decode_spmm_log). Usa socket TCP puro, não telnetlib (removido no
+Python 3.13) — o shell aceita linhas cruas terminadas em CRLF.
 
-`telnetlib` foi REMOVIDO no Python 3.13 — usamos socket TCP puro (o shell do
-Zephyr aceita linhas cruas terminadas em CRLF).
-
-SEGURANÇA (crítico): ao parar, envia SEMPRE `disarm` + `throttle 1000` para o
-motor nunca ficar girando se a GUI cair (replica a filosofia do script Python
-da bancada — ver ../SPMM/CLAUDE.md).
+Segurança: ao parar, envia sempre disarm + throttle 1000 pro motor nunca
+ficar girando se a GUI cair.
 """
 import math
 import socket

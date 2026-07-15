@@ -20,19 +20,10 @@ RPM_MIN     = 1000.0                    # ignora patamares abaixo disso
 LP_HZ       = 40.0                     # corte do filtro de tendência (figura)
 # =================================================
 
-# ----------------------------------------------------------------------
-# Modo CSV (dados de bancada reais) — consome o CSV COMPLETO exportado pela
-# GUI (on_save_csv): coluna Timestamp (tempo do PC) + todas as variáveis de
-# telemetria da SIBA e da SAME. A partir das colunas de RPM, TRAÇÃO (uma força
-# escolhida pelo usuário), TORQUE (por padrão o estimado pela SAME) e VELOCIDADE
-# DO AR, calcula por PONTO DE OPERAÇÃO os coeficientes reais da hélice:
-#   n = RPM/60 [rev/s] ;  J = V/(n·D)  (razão de avanço)
-#   CT = T / (ρ·n²·D⁴)  (tração)  ;  CQ = Q / (ρ·n²·D⁵)  (torque)
-#   CP = 2π·CQ          ;  η = J·CT/CP (se V>0)
-# NÃO é um único coeficiente — é uma LISTA, um ponto por condição
-# (RPM/velocidade do ar/tração/torque).
-# Se --csv for passado roda ESTE modo e sai; senão cai no modo simulação.
-# ----------------------------------------------------------------------
+# Modo CSV: consome o CSV exportado pela GUI e calcula, por ponto de
+# operação, J=V/(n*D), CT=T/(rho*n²*D⁴), CQ=Q/(rho*n²*D⁵), CP=2*pi*CQ,
+# eta=J*CT/CP. É uma lista de pontos, não um coeficiente único.
+# --csv roda este modo e sai; senão cai no modo simulação.
 def _read_telemetry_csv(path):
     """Lê o CSV exportado (cabeçalho + colunas por nome). Retorna
     (header, {coluna: np.array})."""

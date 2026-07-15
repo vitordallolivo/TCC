@@ -1,23 +1,15 @@
-"""
-autotune_cost.py — função-custo modular para o autotuning do SMO.
+"""autotune_cost.py — função-custo modular pro autotuning do SMO.
 
 Importa run_sim_core/params de test_coeff_auto.py, otimiza os ganhos e
-salva smo_gains.json, gerando TODAS as figuras no fim (convergência,
-sensibilidade, diagnóstico FFT) + chama plot_pi.py.
+salva smo_gains.json, gerando as figuras (convergência, sensibilidade,
+FFT) + chama plot_pi.py.
 
-GANHOS CONTÍNUOS (invariantes ao passo Ts)
-------------------------------------------
-Na discretização por Euler progressivo, os ganhos atuam no observador via
-    Gamma_s1 = Ks1 * Ts ,  Gamma_s2 = Ks2 * Ts ,  Gamma_t = Kt * Ts .
-A otimização é feita sobre Gamma (invariante a Ts); o ganho discreto efetivo
-é recuperado por  K = Gamma / Ts  — tanto na simulação quanto no firmware,
-usando o Ts real de cada um. Isso torna o resultado transferível entre passos.
+Otimiza sobre Gamma = K*Ts (invariante ao passo), não K direto — assim o
+resultado é transferível entre simulação e firmware (cada um recupera
+K = Gamma/Ts com seu próprio Ts).
 
-Modos (COST_MODE):
-  "time"   -> SEGUIMENTO no tempo de torque e RPM (objetivo principal)
-  "fft"    -> domínio da frequência sobre a BEMF (amplitude/chattering/fase)
-  "hybrid" -> soma dos dois
-Métricas (TIME_METRIC): "mae" | "mse" | "rmse" | "mape" | "huber"
+COST_MODE: "time" (torque+RPM) | "fft" (BEMF) | "hybrid". TIME_METRIC:
+mae/mse/rmse/mape/huber.
 """
 import numpy as np
 from scipy.optimize import minimize, differential_evolution

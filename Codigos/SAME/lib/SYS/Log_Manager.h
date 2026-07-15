@@ -6,11 +6,7 @@
 
 /* Auto-generated — edite SAME.yaml, não este arquivo */
 
-/* ===========================================================
- * Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG
- * Gerado a partir da ordem dos campos em TELEMETRY_LOG
- * (exclui timestamp, status e error_code, que não são sensores).
- * =========================================================== */
+/* Mapeamento sensor_id (OSSI sys_req) → campo do TELEMETRY_LOG. */
 #define SENSOR_ID_V_A 0U
 #define SENSOR_ID_V_B 1U
 #define SENSOR_ID_V_C 2U
