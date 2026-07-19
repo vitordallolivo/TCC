@@ -6,6 +6,9 @@
 %
 %  Compilar (quando houver pdflatex disponivel):
 %      pdflatex SensorCorrente.tex
+%      bibtex SensorCorrente
+%      pdflatex SensorCorrente.tex
+%      pdflatex SensorCorrente.tex
 % =============================================================================
 \documentclass[12pt,a4paper]{article}
 
@@ -15,9 +18,11 @@
 \usepackage{geometry}
 \geometry{a4paper, margin=2.5cm}
 \usepackage{graphicx}
+\usepackage{float}
 \usepackage{amsmath}
 \usepackage{siunitx}
 \sisetup{output-decimal-marker = {,}, exponent-product = \cdot, tight-spacing=true, group-digits=false}
+\DeclareSIUnit{\gauss}{G}
 \usepackage{booktabs}
 \usepackage{caption}
 \usepackage[colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
@@ -32,22 +37,70 @@
 \begin{document}
 \maketitle
 
-\section{Sensor SS49E}
+\section{Sensor de Corrente de Fase: SS49E com Núcleo Toroidal}
+\label{sec:sensor_corrente_fase}
+
+\subsection{Sensor SS49E e Ganho de Transferência}
 \label{sec:ss49e}
 
-A medição de corrente de fase é realizada por um sensor Hall linear e
-ratiométrico (SS49E): a tensão de saída varia linearmente com a densidade de
-fluxo magnético ($B$) aplicada perpendicularmente ao elemento sensor, em
-torno de um nível de repouso. O elemento é posicionado no entreferro de um
-núcleo toroidal de ferrite que envolve o condutor de potência em uma única
-espira, atuando como concentrador de fluxo: o caminho magnético de alta
-permeabilidade intensifica, no entreferro, a densidade de fluxo produzida
-pela corrente muito além do que se obteria com o sensor exposto diretamente
-ao campo do condutor. A caracterização elétrica do próprio SS49E, extraída
-do \textit{datasheet} do fabricante, está resumida na
-Tabela~\ref{tab:datasheet_ss49e}.
+Para o controle do acionamento trifásico é necessária a medição, em tempo
+real, da corrente em cada fase do motor. Módulos de sensor de corrente Hall
+integrados e prontos para uso -- como o ACS758, de \SI{100}{\ampere} --
+custam da ordem de R\$130 cada\footnote{Ex.: ACS758 100A Efeito Hall,
+R\$132,62, Usinainfo (cotação de 2026).}, e seriam necessárias três
+unidades, uma por fase. Como alternativa de custo muito menor, um sensor
+Hall linear discreto (SS49E) associado a um núcleo de ferrite com
+entreferro, atuando como concentrador de fluxo, totaliza cerca de R\$9,90
+por fase\footnote{Cotação própria: R\$21,00 por 10 unidades de SS49E e
+R\$78,00 por 10 núcleos de ferrite com entreferro.} -- cerca de treze vezes
+mais barato. Optou-se por essa segunda abordagem, que exige em
+contrapartida caracterizar experimentalmente o ganho, a linearidade e o
+acoplamento entre sensores adjacentes, tratados a seguir.
 
-\begin{table}[h]
+O sensor Hall utilizado é o SS49E, linear e ratiométrico: a tensão de saída
+varia linearmente com a densidade de fluxo magnético ($B$) aplicada ao
+elemento sensor, em torno de um nível de repouso. O elemento fica no
+entreferro do núcleo toroidal de ferrite, que envolve o condutor de
+potência em uma única espira e intensifica ali a densidade de fluxo muito
+além do que se teria com o sensor exposto diretamente ao
+condutor~\cite{hall_dc_sensor_2016}. A Figura~\ref{fig:topologia_sensor}
+ilustra essa topologia.
+
+\begin{figure}[H]
+\centering
+\caption{Topologia do sensor: núcleo toroidal envolvendo o condutor ($i(t)$), sensor Hall no entreferro.}
+\label{fig:topologia_sensor}
+\begin{tikzpicture}[>=Latex]
+    % Nucleo toroidal em "C", com entreferro no topo (80 a 100 graus)
+    \draw[fill=black!12, draw=black, thick]
+        (100:2.0) arc (100:440:2.0) -- (80:1.3) arc (80:-260:1.3) -- cycle;
+
+    % Fluxo magnetico circulando no nucleo
+    \draw[->, thick, blue!55!black] (200:1.65) arc (200:260:1.65);
+    \draw[->, thick, blue!55!black] (280:1.65) arc (280:340:1.65);
+    \node[blue!55!black] at (270:1.95) {$\Phi$};
+
+    % Condutor de potencia atravessando o nucleo
+    \draw[thick, ->] (-2.6,0) -- (2.6,0) node[right] {$i(t)$};
+    \node[below] at (0,-2.3) {condutor de potência};
+
+    % Sensor Hall no entreferro
+    \fill[black] (-0.15,1.48) rectangle (0.15,1.82);
+    \draw[gray] (0.15,1.68) -- (1.1,2.15);
+    \node[right] at (1.1,2.15) {Sensor Hall};
+
+    % Rotulo do nucleo
+    \draw[gray] (145:2.0) -- (-2.5,1.35);
+    \node[left] at (-2.5,1.35) {Núcleo toroidal (ferrite)};
+\end{tikzpicture}
+
+{\small Fonte: Autor (2026).}
+\end{figure}
+
+A caracterização elétrica do SS49E, extraída do \textit{datasheet} do
+fabricante, está na Tabela~\ref{tab:datasheet_ss49e}.
+
+\begin{table}[H]
 \centering
 \caption{Características elétricas do SS49E ($T_A = \SI{25}{\celsius}$, $V_{CC} = \SI{5,0}{\volt}$).}
 \label{tab:datasheet_ss49e}
@@ -74,32 +127,95 @@ Deriva de sensibilidade ($T_A < 25\si{\celsius}$) & -- & -0,04 & -- & 0,185 & \%
 {\small Fonte: Autor (2026), a partir do \textit{datasheet} do fabricante.}
 \end{table}
 
-Dois pontos do \textit{datasheet} merecem destaque para o restante desta
-seção. Primeiro, a tensão de repouso ($V_O$) e a sensibilidade ($S_H$) têm
-tolerância de fabricação considerável ($\pm$\SI{10}{\percent} e
-$\pm$\SI{20}{\percent} do valor típico, respectivamente), além de deriva com
-a temperatura -- ambas devem ser tratadas como parâmetros de calibração por
-unidade, não como constantes de projeto. Segundo, os limites de tensão de
-saída (\SI{0,86}{\volt} e \SI{4,21}{\volt}) são dados nos pontos
-$B=\SI{\mp 1500}{\gauss}$: como a sensibilidade $S_H$ é especificada como a
-inclinação local em torno de $B=0$, ela não pode ser extrapolada
-diretamente até esses extremos (fazer isso resultaria em uma tensão de saída
-maior que a máxima especificada), de modo que os pontos $\pm\SI{1500}{\gauss}$
-são tratados aqui como o limite físico de excursão do sensor, não como uma
-simples continuação linear da sensibilidade típica.
-
-\section{Ganho de Transferência}
-\label{sec:ganho_transferencia}
+Para este tipo de sensor, a tolerância de fabricação de $V_O$ e $S_H$ e a
+deriva térmica não são desprezíveis (Tabela~\ref{tab:datasheet_ss49e}), de
+modo que a calibração individual de cada unidade em bancada é necessária
+antes da medição final. Nesta seção, adotam-se os valores típicos de
+\textit{datasheet} para caracterizar o sensor; a curva de ganho é
+posteriormente corrigida a partir dessa calibração por unidade. Cabe notar
+ainda que os limites de tensão de saída são especificados nos extremos de
+excursão do elemento Hall (Tabela~\ref{tab:datasheet_ss49e}), e não podem
+ser obtidos por extrapolação direta de $S_H$, que é a inclinação local em
+torno do repouso: esse extremo é tratado aqui como o limite físico de
+excursão do sensor, não como continuação linear da sensibilidade típica.
 
 A sensibilidade do SS49E, por si só, converte apenas Gauss em milivolts; a
-grandeza de interesse é a corrente no condutor primário, o que exige
-conhecer também a relação entre a corrente ($I$) e a densidade de fluxo
-efetivamente vista pelo elemento Hall dentro do entreferro ($B_{gap}$).
-Essa relação depende inteiramente da geometria do núcleo e do entreferro, e
-foi obtida por simulação eletromagnética (\autoref{sec:simulacao_femm}):
-$G_{núcleo} = \SI{5,355}{\gauss\per\ampere}$, constante ao longo de toda a
-faixa de corrente avaliada (\SI{1}{\ampere} a \SI{100}{\ampere}, fundo de
-escala do projeto).
+grandeza de interesse é a corrente no condutor primário, o que exige também
+a relação entre a corrente e a densidade de fluxo efetivamente vista pelo
+elemento Hall dentro do entreferro ($B_{gap}$), obtida por simulação
+eletromagnética (\autoref{sec:simulacao_femm}). O modelo de transferência
+completo do sensor, combinando essa relação com $S_H$, é apresentado ao
+final da subseção seguinte, junto aos resultados de simulação de que
+depende.
+
+\subsection{Simulação Eletromagnética}
+\label{sec:simulacao_femm}
+
+A relação $B_{gap}(I)$ poderia ser estimada por um circuito magnético
+equivalente (lei de Ampère e relutância do entreferro), mas essa
+simplificação não captura efeitos de borda no entreferro, a não linearidade
+do material nem a geometria real do núcleo. Optou-se, em vez disso, por
+simulação de elementos finitos, que representa esses efeitos com maior
+fidelidade sem o custo de deduzir e validar um modelo analítico
+simplificado.
+
+Considerou-se duas condições de simulação para caracterizar o núcleo e o
+acoplamento entre sensores vizinhos: um núcleo único e isolado
+(Figura~\ref{fig:single_gap}), que caracteriza a curva intrínseca
+$B_{gap}(I)$ do núcleo em corrente contínua (CC); e o arranjo
+físico de montagem, com três núcleos idênticos lado a lado sobre uma placa
+de circuito impresso (PCB), cada um com o entreferro voltado para o plano de
+terra (GND) de cobre da placa e folga de montagem de \SI{1}{\milli\meter}
+(Figura~\ref{fig:trifase_geral}), simulado em corrente alternada (CA), a
+\SI{12}{\kilo\hertz} -- regime em que correntes de Foucault podem se
+estabelecer no plano de GND. A distância entre os centros dos três núcleos
+foi variada de \SI{28}{\milli\meter} (limite físico de montagem) a
+\SI{80}{\milli\meter}.
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo no sensor único isolado, a \SI{100}{\ampere}.}
+\label{fig:single_gap}
+\includegraphics[width=0.7\textwidth]{single_gap.pdf}
+
+{\small Fonte: Autor (2026), simulação FEMM.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo nos três sensores a \SI{100}{\ampere}, menor distância testada (\SI{28}{\milli\meter}).}
+\label{fig:trifase_geral}
+\includegraphics[width=\textwidth]{trifase_geral_d028mm.pdf}
+
+{\small Fonte: Autor (2026), simulação FEMM.}
+\end{figure}
+
+O núcleo simulado é o NT-27/16/12-100-IP6 (ferrite MnZn -- manganês-zinco --,
+$\mu_r = 2500$, entreferro de \SI{2,3}{\milli\meter}), com condutor primário
+AWG12. A placa de cobre foi modelada como material condutor real, sem
+corrente própria (referência de terra, não caminho de retorno de potência),
+permitindo capturar eventuais correntes parasitas.
+
+A simulação foi feita no \textit{software} FEMM 4.2 (\textit{Finite Element
+Method Magnetics}); construção de geometria, varredura de parâmetros e
+extração de resultados foram automatizadas por \textit{script} Python via
+interface pyFEMM, permitindo reproduzir integralmente a varredura a partir
+do código-fonte.
+
+A varredura de corrente da configuração de núcleo único (\SI{1}{\ampere} a
+\SI{100}{\ampere}) mostra que a densidade de fluxo no entreferro cresce
+proporcionalmente à corrente, com sensibilidade $G_{núcleo}$ constante --
+dentro da resolução numérica -- em toda a faixa avaliada
+(Figura~\ref{fig:I_vs_B}): $G_{núcleo} = \SI{5,355}{\gauss\per\ampere}$.
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo no entreferro em função da corrente primária.}
+\label{fig:I_vs_B}
+\includegraphics[width=0.75\textwidth]{fig_I_vs_B.pdf}
+
+{\small Fonte: Autor (2026).}
+\end{figure}
 
 Combinando essa sensibilidade de núcleo com a sensibilidade típica do
 SS49E, o modelo de transferência do sensor de corrente completo é:
@@ -120,263 +236,140 @@ com
     \label{eq:ganho_offset_valores}
 \end{equation}
 
-No fundo de escala do projeto ($I=\SI{100}{\ampere}$), isso resulta em
-$V_{sense} \approx \SI{3,84}{\volt}$, dentro da faixa de saída do sensor
-(\SIrange{0,86}{4,21}{\volt}).
+No fundo de escala do projeto ($I=\pm\SI{100}{\ampere}$, já que a corrente
+de fase de um acionamento trifásico é sempre alternada), isso resulta em
+$V_{sense} \approx \SI{3,84}{\volt}$ ($+100\,$A) e $\approx\SI{1,16}{\volt}$
+($-100\,$A), dentro da faixa de saída do sensor
+(Tabela~\ref{tab:datasheet_ss49e}).
 
-Entretanto, como $V_O$ e $S_H$ têm tolerância de fabricação, é importante
-verificar os cantos de pior caso, combinando os extremos de cada parâmetro em
-$I = \pm\SI{100}{\ampere}$ (a corrente de fase de um acionamento trifásico é
-sempre alternada, portanto ambos os sentidos de corrente ocorrem em
-operação). A Tabela~\ref{tab:pior_caso_saida} resume o resultado.
+A Figura~\ref{fig:erro_sensor} mostra o efeito da tolerância de fabricação e
+da deriva térmica do SS49E sobre essa curva típica. No pior caso -- unidade
+no extremo da tolerância de fabricação --, o envelope resultante ultrapassa
+os limites físicos de saída do sensor nos dois extremos de corrente; a
+deriva térmica, isoladamente, tem efeito bem menor. Isso reforça a
+necessidade de calibração por unidade discutida na
+\autoref{sec:ss49e}. O erro de linearidade não é mostrado por ser
+desprezível nessa escala (Tabela~\ref{tab:datasheet_ss49e}).
 
-\begin{table}[h]
+\begin{figure}[H]
 \centering
-\caption{Tensão de saída em $I=\pm\SI{100}{\ampere}$ para combinações de
-$V_O$ e $S_H$ nos extremos de tolerância.}
-\label{tab:pior_caso_saida}
-\begin{tabular}{lccc}
-\toprule
-\textbf{Cenário} & \textbf{$V_{sense}$ ($+100$~A)} & \textbf{$V_{sense}$ ($-100$~A)} & \textbf{Dentro da faixa?} \\
-\midrule
-Típico ($V_O=2,50$~V, $S_H=2,5$~mV/G) & 3,84~V & 1,16~V & Sim \\
-Pior caso alto ($V_O=2,75$~V, $S_H=3,0$~mV/G) & 4,36~V & 1,68~V & \textbf{Não} (excede 4,21~V) \\
-Pior caso baixo ($V_O=2,25$~V, $S_H=3,0$~mV/G) & 4,11~V & 0,64~V & \textbf{Não} (abaixo de 0,86~V) \\
-\bottomrule
-\end{tabular}
+\caption{$V_{sense}(I)$ típico frente ao envelope de tolerância de
+fabricação e à deriva térmica do SS49E.}
+\label{fig:erro_sensor}
+\includegraphics[width=0.85\textwidth]{fig_erro_sensor.pdf}
 
-\vspace{2pt}
-{\small Fonte: Autor (2026).}
-\end{table}
-
-Com os valores típicos de catálogo, o fundo de escala de projeto
-($\pm\SI{100}{\ampere}$) fica confortavelmente dentro da faixa de saída do
-sensor. Porém, nos cantos de tolerância de fabricação -- $V_O$ e $S_H$
-simultaneamente no extremo que empurra a saída para o mesmo lado --, a
-tensão calculada ultrapassa minimamente os limites especificados
-(\SI{4,36}{\volt} $>$ \SI{4,21}{\volt}; \SI{0,64}{\volt} $<$
-\SI{0,86}{\volt}). Isso não invalida o projeto -- os dois extremos ocorrendo
-simultaneamente na mesma unidade é o pior caso estatístico, não o
-comportamento típico --, mas reforça que $G$ e $V_{offset}$ devem ser
-calibrados individualmente por unidade fabricada (e não assumidos como os
-valores típicos de catálogo), especialmente considerando que ambos também
-derivam com a temperatura (Tabela~\ref{tab:datasheet_ss49e}).
-
-Quanto à margem até o limite físico de excursão do sensor
-($B=\pm\SI{1500}{\gauss}$): como $B_{gap} = \SI{535,5}{\gauss}$ em
-$I=\SI{100}{\ampere}$ (simulado, \autoref{sec:simulacao_femm}), a margem
-disponível é de \SI{180}{\percent} -- ou seja, o núcleo levaria a densidade
-de fluxo até \SI{1500}{\gauss} apenas próximo de \SI{280}{\ampere}, valor
-bem acima do fundo de escala de projeto. Essa margem, porém, assume que o
-núcleo permanece linear além dos \SI{100}{\ampere} simulados -- extrapolação
-não verificada nesta simulação, ainda que fisicamente razoável, já que o
-joelho de saturação típico de um ferrite de potência MnZn
-($\approx\SI{0,39}{\tesla}$) fica bem acima do ponto de operação avaliado.
-
-\section{Simulação Eletromagnética}
-\label{sec:simulacao_femm}
-
-A relação $B_{gap}(I)$ e o acoplamento magnético entre sensores vizinhos
-foram obtidos por simulação de elementos finitos no \textit{software} FEMM
-4.2 (\textit{Finite Element Method Magnetics}), em modelo planar
-bidimensional, com o núcleo NT-27/16/12-100-IP6 (ferrite MnZn,
-$\mu_r = 2500$, entreferro de \SI{2,3}{\milli\meter}) e condutor primário
-AWG12. A automação (construção de geometria, varredura de parâmetros,
-extração de resultados) foi feita via \textit{script} Python usando a
-interface pyFEMM, permitindo reproduzir integralmente a varredura a partir
-do código-fonte.
-
-Foram modeladas duas configurações. A primeira, um único núcleo isolado
-(Figura~\ref{fig:single_gap}), caracteriza a curva de transferência
-$B_{gap}(I)$ intrínseca do núcleo -- conduzida em corrente contínua, por se
-tratar de uma característica de ganho/linearidade do núcleo, não de uma
-medição do sinal real. A segunda reproduz o arranjo físico de montagem: três
-núcleos idênticos lado a lado sobre uma placa de circuito impresso (PCB),
-cada um com o entreferro voltado para o plano de terra (GND) de cobre da
-placa, com folga de montagem de \SI{1}{\milli\meter}
-(Figura~\ref{fig:trifase_geral}). Essa segunda etapa foi conduzida em
-corrente alternada, em \SI{12}{\kilo\hertz} -- a corrente de fase de um
-acionamento trifásico é, por natureza, sempre alternada, nunca CC de
-verdade, e é apenas em regime CA que correntes de Foucault podem se
-estabelecer no plano de GND, um efeito fisicamente inexistente em CC. A
-placa de cobre foi modelada sem corrente própria (serve apenas de
-referência de terra para a medição, não de caminho de retorno de potência),
-mas como material condutor real, permitindo capturar essas correntes
-parasitas caso existam. A distância entre os centros dos três núcleos foi
-variada de \SI{28}{\milli\meter} (par de núcleos praticamente encostados,
-limite físico de montagem) até \SI{80}{\milli\meter}.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.7\textwidth]{single_gap.pdf}
-\caption{Densidade de fluxo magnético no sensor único isolado, a
-\SI{100}{\ampere}. O entreferro (região clara à direita do núcleo)
-concentra o campo no ponto de medição do elemento Hall.}
-\label{fig:single_gap}
-{\small Fonte: Autor (2026), simulação FEMM.}
-\end{figure}
-
-A varredura de corrente da Configuração~1 (\SI{1}{\ampere} a
-\SI{100}{\ampere}) confirma o comportamento linear assumido em
-\autoref{sec:ganho_transferencia}: a densidade de fluxo no entreferro cresce
-proporcionalmente à corrente (Figura~\ref{fig:I_vs_B}), e a sensibilidade
-$G_{núcleo}$ permanece constante -- dentro da resolução numérica -- em toda
-a faixa avaliada (Figura~\ref{fig:linearidade}).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.75\textwidth]{fig_I_vs_B.pdf}
-\caption{Densidade de fluxo no entreferro em função da corrente primária.}
-\label{fig:I_vs_B}
 {\small Fonte: Autor (2026).}
 \end{figure}
 
-\begin{figure}[h]
+Quanto ao acoplamento entre sensores adjacentes (\textit{crosstalk}): com
+três núcleos próximos em uma mesma placa, o campo de uma fase pode
+vazar para o entreferro das fases vizinhas e distorcer sua leitura
+(\textit{crosstalk}). Para quantificar esse efeito, sete combinações de
+corrente foram simuladas em cada distância avaliada: cada fase isolada
+(\SI{100}{\ampere} em uma fase, demais em zero), cada par simultâneo, e as
+três fases simultâneas. A leitura de cada sensor com apenas sua própria
+fase energizada serve de referência ``sem interferência''; o desvio nos
+demais cenários quantifica o \textit{crosstalk} introduzido pelos sensores
+vizinhos.
+
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.75\textwidth]{fig_linearidade.pdf}
-\caption{Sensibilidade $G_{núcleo}$ (G/A) em função da corrente primária --
-uma curva horizontal indica comportamento linear.}
-\label{fig:linearidade}
-{\small Fonte: Autor (2026).}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\textwidth]{trifase_geral_d028mm.pdf}
-\caption{Densidade de fluxo magnético nos três sensores de fase, três
-condutores energizados simultaneamente a \SI{100}{\ampere}, menor distância
-testada (\SI{28}{\milli\meter} entre centros). A faixa horizontal abaixo dos
-núcleos é o plano de GND do PCB.}
-\label{fig:trifase_geral}
-{\small Fonte: Autor (2026), simulação FEMM.}
-\end{figure}
-
-Duas simplificações relevantes foram adotadas. O modelo planar (2D) ignora
-o vazamento de fluxo pela altura do núcleo (\SI{12}{\milli\meter}), tratando
-o resultado de ganho como um limite superior de referência, a confirmar por
-medição direta em bancada. O ferrite foi modelado como material linear
-($\mu_r$ constante, sem curva $B$--$H$), válido enquanto a densidade de
-fluxo no núcleo permanecer abaixo do joelho de saturação -- confirmado pela
-linearidade observada em toda a faixa de corrente simulada. A fronteira do
-domínio de solução foi fechada pela condição de contorno assintótica
-embutida do FEMM, dimensionada para envolver toda a geometria com folga.
-
-\section{Acoplamento Entre Sensores Adjacentes (\textit{Crosstalk})}
-\label{sec:crosstalk}
-
-Para quantificar o acoplamento magnético entre sensores adjacentes, sete
-combinações de correntes foram simuladas em cada distância avaliada: cada
-fase isoladamente (\SI{100}{\ampere} em uma fase, demais em zero), cada par
-de fases simultaneamente, e as três fases simultaneamente. A leitura de cada
-sensor no cenário em que apenas sua própria fase está energizada serve de
-referência ``sem interferência''; o desvio nos demais cenários quantifica o
-\textit{crosstalk} introduzido pelos sensores vizinhos.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{fig_crosstalk.pdf}
-\caption{Maior desvio de leitura por \textit{crosstalk} entre fases, em
-função da distância entre centros dos núcleos, \SI{12}{\kilo\hertz}.}
+\caption{Maior desvio por \textit{crosstalk} em função da distância entre núcleos, \SI{12}{\kilo\hertz}.}
 \label{fig:crosstalk}
+\includegraphics[width=0.85\textwidth]{fig_crosstalk.pdf}
+
 {\small Fonte: Autor (2026).}
 \end{figure}
-
-\begin{table}[h]
-\centering
-\caption{Maior desvio por \textit{crosstalk} em função da distância entre
-centros dos núcleos (CA, \SI{12}{\kilo\hertz}).}
-\label{tab:crosstalk_resumo}
-\begin{tabular}{cc}
-\toprule
-\textbf{Distância entre centros} & \textbf{Maior desvio} \\
-\midrule
-\SI{28}{\milli\meter} & \SI{0,00262}{\percent} \\
-\SI{30}{\milli\meter} & \SI{0,00216}{\percent} \\
-\SI{35}{\milli\meter} & \SI{0,00158}{\percent} \\
-\SI{40}{\milli\meter} & \SI{0,00124}{\percent} \\
-\SI{50}{\milli\meter} & \SI{0,00084}{\percent} \\
-\SI{60}{\milli\meter} & \SI{0,00061}{\percent} \\
-\SI{80}{\milli\meter} & \SI{0,00037}{\percent} \\
-\bottomrule
-\end{tabular}
-
-\vspace{2pt}
-{\small Fonte: Autor (2026), simulação FEMM.}
-\end{table}
 
 O desvio máximo observado foi de \SI{0,0026}{\percent}, na menor distância
 testada, decaindo monotonicamente com o afastamento entre núcleos
-(Figura~\ref{fig:crosstalk} e Tabela~\ref{tab:crosstalk_resumo}). Mesmo no
-pior caso -- núcleos no limite físico de proximidade --, o
-\textit{crosstalk} está três ordens de grandeza abaixo de um limiar de
-\SI{1}{\percent}, adotado como referência de desprezibilidade. A proximidade
-entre os sensores de corrente das três fases, portanto, não compromete a
-precisão da medição individual de cada fase em nenhum espaçamento
-fisicamente viável de PCB.
+(Figura~\ref{fig:crosstalk}). Mesmo no pior caso, o \textit{crosstalk} está
+três ordens de grandeza abaixo do limiar de \SI{1}{\percent} adotado como
+desprezível: a proximidade entre os sensores das três fases não compromete
+a medição individual em nenhum espaçamento fisicamente viável de PCB.
 
-\section{Acoplamento Indutivo Parasita}
-\label{sec:acoplamento_indutivo}
+Quanto ao acoplamento indutivo parasita: avaliou-se também se os três
+núcleos e o plano de GND perturbam a dinâmica elétrica do
+acionamento. O núcleo de ferrite envolve o próprio condutor de potência em
+uma espira; a indutância tratada aqui é a que esse núcleo insere \emph{em
+série no condutor de fase}, no circuito de força entre o inversor e o
+motor -- sem relação com a saída de sinal do sensor Hall, que é um circuito
+separado de baixa potência. Cada fase foi modelada como um indutor com
+indutância própria ($L_{AA}$, $L_{BB}$, $L_{CC}$) e indutância mútua com as
+demais ($M_{AB}$, $M_{AC}$, $M_{BC}$), conforme a
+Figura~\ref{fig:indutores_acoplados}, extraídas do enlace de fluxo já
+calculado pelo FEMM durante a resolução do campo.
 
-Além do acoplamento de campo na leitura (\textit{crosstalk},
-\autoref{sec:crosstalk}), avaliou-se se a introdução dos três núcleos e do
-plano de GND perturba a própria dinâmica elétrica do acionamento,
-modelando cada condutor de fase -- com seu núcleo e vizinhança -- como um
-indutor acoplado aos demais, conforme a Figura~\ref{fig:indutores_acoplados}.
-A indutância própria de cada fase ($L_{AA}$, $L_{BB}$, $L_{CC}$) e a
-indutância mútua entre pares ($M_{AB}$, $M_{AC}$, $M_{BC}$) foram extraídas
-do enlace de fluxo de cada circuito, já calculado pelo FEMM durante a
-resolução do campo -- sem simulações adicionais.
-
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\begin{tikzpicture}[
-    decoration={coil, aspect=0.5, segment length=3.2pt, amplitude=2.6pt},
-    >=Latex,
-    font=\small
-]
-    % tres indutores (fases A, B, C)
-    \draw[decorate] (0,0) -- (2.2,0);
-    \draw[decorate] (3.6,0) -- (5.8,0);
-    \draw[decorate] (7.2,0) -- (9.4,0);
-
-    \node[below] at (1.1,-0.05) {$L_{AA}$};
-    \node[below] at (4.7,-0.05) {$L_{BB}$};
-    \node[below] at (8.3,-0.05) {$L_{CC}$};
-    \node[below, yshift=-12pt] at (1.1,-0.05) {\footnotesize$\approx\SI{59,3}{\nano\henry}$};
-    \node[below, yshift=-12pt] at (4.7,-0.05) {\footnotesize$\approx\SI{59,3}{\nano\henry}$};
-    \node[below, yshift=-12pt] at (8.3,-0.05) {\footnotesize$\approx\SI{59,3}{\nano\henry}$};
-
-    \node[above] at (-0.3,0) {Fase $A$};
-    \node[above] at (3.3,0) {Fase $B$};
-    \node[above] at (6.9,0) {Fase $C$};
-
-    % acoplamentos mutuos -- arcos com seta dupla
-    \draw[<->, thick] (1.1,0.55) to[bend left=35] node[above, yshift=1pt] {$M_{AB}$} (4.7,0.55);
-    \draw[<->, thick] (4.7,0.55) to[bend left=35] node[above, yshift=1pt] {$M_{BC}$} (8.3,0.55);
-    \draw[<->, thick] (1.1,1.55) to[bend left=18] node[above, yshift=1pt] {$M_{AC}$} (8.3,1.55);
-
-    \node[align=center, font=\footnotesize] at (2.9,0.95) {$\approx\SI{0,72}{\pico\henry}$};
-    \node[align=center, font=\footnotesize] at (6.5,0.95) {$\approx\SI{0,72}{\pico\henry}$};
-    \node[align=center, font=\footnotesize] at (4.7,2.05) {$\approx\SI{0,29}{\pico\henry}$};
-
-    % distancia entre centros
-    \draw[<->] (1.1,-0.9) -- node[below] {$d$} (4.7,-0.9);
-    \draw[<->] (4.7,-0.9) -- node[below] {$d$} (8.3,-0.9);
-\end{tikzpicture}
-\caption{Modelo de indutores acoplados das três fases: indutância própria
-$L$ de cada núcleo e indutância mútua $M$ entre pares, com valores extraídos
-da simulação para $d=\SI{28}{\milli\meter}$ (menor distância testada).}
+\caption{Indutância própria $L$ e mútua $M$ inseridas em série no condutor de potência de cada fase (indutor representa o núcleo toroidal da Figura~\ref{fig:topologia_sensor}).}
 \label{fig:indutores_acoplados}
+\begin{tikzpicture}[
+    decoration={coil, aspect=0.5, segment length=3pt, amplitude=2.2pt},
+    >=Latex,
+    font=\footnotesize
+]
+    % Fase A
+    \node[left] at (-0.1,4) {$A$};
+    \draw[->] (0,4) -- (1.1,4) node[midway, above] {$i_a$};
+    \fill (1.15,4.1) circle (1.3pt);
+    \draw[decorate] (1.1,4) -- (2.5,4);
+    \draw (2.5,4) -- (4.5,4);
+    \node[below] at (1.8,3.82) {$L_{AA}$};
+
+    % Fase B
+    \node[left] at (-0.1,2) {$B$};
+    \draw[->] (0,2) -- (1.1,2) node[midway, above] {$i_b$};
+    \fill (1.15,2.1) circle (1.3pt);
+    \draw[decorate] (1.1,2) -- (2.5,2);
+    \draw (2.5,2) -- (4.5,2);
+    \node[below] at (1.8,1.82) {$L_{BB}$};
+
+    % Fase C
+    \node[left] at (-0.1,0) {$C$};
+    \draw[->] (0,0) -- (1.1,0) node[midway, above] {$i_c$};
+    \fill (1.15,0.1) circle (1.3pt);
+    \draw[decorate] (1.1,0) -- (2.5,0);
+    \draw (2.5,0) -- (4.5,0);
+    \node[below] at (1.8,-0.18) {$L_{CC}$};
+
+    % Acoplamentos mutuos, arcos aninhados do lado direito (espaco livre antes do motor)
+    \draw[<->, thick] (3.1,4) to[bend right=22] node[midway, right=4pt] {$M_{AB}$} (3.1,2);
+    \draw[<->, thick] (3.1,2) to[bend right=22] node[midway, right=4pt] {$M_{BC}$} (3.1,0);
+    \draw[<->, thick] (3.1,4.15) to[bend right=45] node[pos=0.5, above=9pt] {$M_{AC}$} (3.1,-0.15);
+
+    % Continuacao ate o motor (BLDC), pontos de entrada espalhados no circulo
+    \draw[->] (4.5,4) -- (6.55,2.55);
+    \draw[->] (4.5,2) -- (6.4,2.0);
+    \draw[->] (4.5,0) -- (6.55,1.45);
+    \draw[fill=white, thick] (7.5,2) circle (1.1);
+    \node at (7.5,2) {BLDC};
+\end{tikzpicture}
+
 {\small Fonte: Autor (2026).}
 \end{figure}
 
-A Tabela~\ref{tab:inducao_resumo} apresenta os valores extraídos nos dois
-extremos da varredura de distância, incluindo o coeficiente de acoplamento
-$k_{xy} = M_{xy}/\sqrt{L_{xx}L_{yy}}$, que normaliza a mútua pelas próprias
-indutâncias e é diretamente comparável ao $k$ usado para transformadores e
-indutores acoplados convencionais ($k=1$ representa acoplamento perfeito).
+A indutância própria, $\approx\SI{59,3}{\nano\henry}$ por fase e praticamente
+constante com a distância entre núcleos (Tabela~\ref{tab:inducao_resumo}), é
+desprezível frente à indutância de fase típica de um acionamento trifásico
+(dezenas de \si{\micro\henry} a poucos \si{\milli\henry}). A indutância
+mútua entre fases (Figura~\ref{fig:inductancia_mutua}) é ainda menor -- na
+faixa de \si{\pico\henry}, seis ordens de grandeza abaixo da própria --
+mesmo no pior caso, com os núcleos no limite físico de proximidade
+($d=\SI{28}{\milli\meter}$): o arranjo de sensores não introduz perturbação
+elétrica mensurável na dinâmica do acionamento.
 
-\begin{table}[h]
+\begin{figure}[H]
+\centering
+\caption{Indutância mútua entre pares de fases em função da distância entre
+centros (escala logarítmica).}
+\label{fig:inductancia_mutua}
+\includegraphics[width=0.75\textwidth]{fig_inductancia_mutua.pdf}
+
+{\small Fonte: Autor (2026).}
+\end{figure}
+
+\begin{table}[H]
 \centering
 \caption{Indutância própria, mútua e coeficiente de acoplamento nos extremos
 da varredura de distância (CA, \SI{12}{\kilo\hertz}).}
@@ -397,64 +390,7 @@ $k_{AC}$ & \num{4.92e-6} & \num{6.98e-7} \\
 {\small Fonte: Autor (2026), simulação FEMM.}
 \end{table}
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{fig_inductancia_self.pdf}
-\caption{Indutância própria de cada fase em função da distância entre
-centros, com referência tracejada do núcleo isolado (sem chapa/vizinhos).}
-\label{fig:inductancia_self}
-{\small Fonte: Autor (2026).}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{fig_inductancia_mutua.pdf}
-\caption{Indutância mútua entre pares de fases em função da distância entre
-centros (escala logarítmica).}
-\label{fig:inductancia_mutua}
-{\small Fonte: Autor (2026).}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.85\textwidth]{fig_coef_acoplamento.pdf}
-\caption{Coeficiente de acoplamento $k=M/\sqrt{L_xL_y}$ entre pares de fases
-em função da distância entre centros (escala logarítmica).}
-\label{fig:coef_acoplamento}
-{\small Fonte: Autor (2026).}
-\end{figure}
-
-A indutância própria (Figura~\ref{fig:inductancia_self}) mantém-se
-praticamente constante ao longo de toda a varredura de distância -- esperado,
-já que a geometria de cada sensor com a placa de GND não muda com o
-espaçamento entre sensores, apenas a distância \emph{entre} eles.
-Notavelmente, esse valor ($\approx\SI{59,3}{\nano\henry}$) é \emph{menor}
-que a indutância própria de um núcleo isolado, sem chapa nem vizinhos
-(\SI{78,3}{\nano\henry} em CC, \SI{78,2}{\nano\henry} em
-\SI{12}{\kilo\hertz}): a proximidade do plano de cobre reduz a indutância
-própria em cerca de \SI{24}{\percent}, um efeito de plano-imagem causado
-pelas correntes de Foucault induzidas na placa, que se opõem à penetração do
-fluxo -- efeito real e mensurável, ainda que de magnitude irrelevante frente
-à indutância de fase típica de um acionamento trifásico (tipicamente dezenas
-de \si{\micro\henry} a poucos \si{\milli\henry}).
-
-A indutância mútua (Figura~\ref{fig:inductancia_mutua}) decai de
-aproximadamente \SI{0,72}{\pico\henry} entre fases adjacentes na menor
-distância testada até \SI{0,10}{\pico\henry} em \SI{80}{\milli\meter}; o par
-de fases nos extremos do arranjo apresenta consistentemente cerca da metade
-do acoplamento dos pares adjacentes. O coeficiente de acoplamento
-(Figura~\ref{fig:coef_acoplamento}) varia entre $k\approx\num{1.2e-5}$ e
-$k\approx\num{7e-7}$ -- ordens de grandeza abaixo de qualquer acoplamento
-indutivo relevante. Como verificação de consistência, a indutância mútua foi
-calculada de duas formas independentes para cada par (energizando cada fase
-separadamente); a maior divergência entre os dois cálculos foi de apenas
-\SI{0,43}{\percent}, confirmando a qualidade da malha e da geometria.
-
-Tanto a indutância própria adicionada (dezenas de \si{\nano\henry}) quanto o
-acoplamento mútuo entre fases (frações de \si{\pico\henry}) são desprezíveis
-frente à indutância de fase típica de acionamentos trifásicos de pequeno/médio
-porte. Conclui-se que o arranjo de sensores de corrente proposto não deve
-introduzir perturbação elétrica mensurável na dinâmica do acionamento, em
-nenhuma das distâncias de montagem avaliadas.
+\bibliographystyle{plain}
+\bibliography{referencias}
 
 \end{document}

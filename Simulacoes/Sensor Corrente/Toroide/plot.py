@@ -23,6 +23,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 plt.rcParams.update({
@@ -84,6 +85,64 @@ def fig_linearidade(df: pd.DataFrame, base: Path) -> None:
 
     fig.tight_layout()
     fig.savefig(base / "fig_linearidade.pdf")
+    plt.close(fig)
+
+
+# Ganho de nucleo extraido da simulacao FEMM (fig_I_vs_B), constante com I.
+G_NUCLEO_GA = 5.355  # G/A
+
+# SS49E, valores de datasheet (Tabela 1).
+VO_TYP, VO_MIN, VO_MAX = 2.50, 2.25, 2.75   # V, tensao de repouso
+SH_TYP, SH_MIN, SH_MAX = 2.5, 2.0, 3.0      # mV/G, sensibilidade
+V_OUT_MIN, V_OUT_MAX = 0.86, 4.21           # V, limite fisico de saida
+
+# Deriva termica ilustrativa: T >= 25 C, pior caso de cada coeficiente.
+DELTA_T = 50.0          # C acima da referencia (T_A = 25 C)
+ERRO_TEMP_PCT = 0.10    # %/C, null drift (pior caso, Tabela 1)
+DERIVA_SH_PCT = -0.15   # %/C, deriva de sensibilidade p/ T >= 25 C (pior caso)
+
+
+def fig_erro_sensor(base: Path) -> None:
+    """
+    Vsense(I) tipico vs. envelope de tolerancia de fabricacao (VO, SH) e
+    deriva termica, combinando o ganho de nucleo (FEMM) com os parametros
+    de datasheet do SS49E (Tabela 1). Erro de linearidade (0,007% do span)
+    nao e plotado por ser desprezivel nesta escala.
+    """
+    I = np.linspace(-100, 100, 400)
+
+    def vsense(vo, sh, i):
+        return vo + (sh * G_NUCLEO_GA / 1000.0) * i
+
+    v_typ = vsense(VO_TYP, SH_TYP, I)
+
+    # Envelope: SH_MAX sempre amplia o desvio (p/ +I e p/ -I); VO desloca.
+    v_env_hi = np.where(I >= 0, vsense(VO_MAX, SH_MAX, I), vsense(VO_MAX, SH_MIN, I))
+    v_env_lo = np.where(I >= 0, vsense(VO_MIN, SH_MIN, I), vsense(VO_MIN, SH_MAX, I))
+
+    vo_hot = VO_TYP * (1 + ERRO_TEMP_PCT / 100 * DELTA_T)
+    sh_hot = SH_TYP * (1 + DERIVA_SH_PCT / 100 * DELTA_T)
+    v_hot = vsense(vo_hot, sh_hot, I)
+
+    fig, ax = plt.subplots(figsize=(LARGURA, 3.6))
+
+    ax.fill_between(I, v_env_lo, v_env_hi, color=VERM, alpha=0.15, lw=0,
+                     label="Envelope de tolerância de fabricação")
+    ax.plot(I, v_hot, "--", lw=1.2, color=VERDE, alpha=0.6,
+            label=f"Deriva térmica (+{DELTA_T:.0f}$\\,^\\circ$C, pior caso)")
+    ax.plot(I, v_typ, "-", lw=1.6, color=AZUL, label="Típico (catálogo)")
+
+    ax.axhline(V_OUT_MAX, ls=":", lw=1.0, color=CINZA)
+    ax.axhline(V_OUT_MIN, ls=":", lw=1.0, color=CINZA,
+               label="Limite físico de saída do sensor")
+
+    ax.set_xlabel("Corrente de fase $I$ [A]")
+    ax.set_ylabel("$V_{sense}$ [V]")
+    ax.set_xlim(-100, 100)
+    ax.legend(frameon=False, fontsize=7, loc="upper left")
+
+    fig.tight_layout()
+    fig.savefig(base / "fig_erro_sensor.pdf")
     plt.close(fig)
 
 
@@ -330,6 +389,7 @@ def main() -> None:
     df = pd.read_csv(f, sep=";")
     fig_I_vs_B(df, base)
     fig_linearidade(df, base)
+    fig_erro_sensor(base)
     comb = fig_crosstalk(base)
     relatorio(df, comb)
 
@@ -342,6 +402,7 @@ def main() -> None:
     print(f"\nGerado em {base.resolve()}:")
     print("  fig_I_vs_B.pdf              curva principal (sensor único)")
     print("  fig_linearidade.pdf         sensibilidade G/A")
+    print("  fig_erro_sensor.pdf         Vsense vs tolerância/deriva do SS49E")
     if comb is not None:
         print("  fig_crosstalk.pdf           crosstalk vs distância entre toroides")
     if df_ind is not None:
