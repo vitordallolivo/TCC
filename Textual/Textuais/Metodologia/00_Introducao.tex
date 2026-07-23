@@ -9,16 +9,274 @@ Este capítulo descreve os procedimentos e decisões de projeto adotados no dese
     Fonte: Autor (2026)
 \end{figure}
 
-A execução metodológica e a sequência lógica deste trabalho orientam-se pelo fluxo detalhado na \autoref{fig:TCC_planejmamento}. É imperativo notar a presença dos estágios Q1, Q2 e Q3: estes atuam como as principais janelas de transição do projeto, concentrando as deliberações e decisões mais críticas que fundamentam o desenvolvimento da pesquisa.
-
-A etapa Q1 é a etapa de decisão de projeto, onde são definidas as restrições e definições de projeto, Q2 é a etapa de validação de cada uma das \textit{features} de forma individual, já Q3 é a finalização do projeto, marcando seu término.
+A execução metodológica e a sequência lógica deste trabalho são organizadas
+em três janelas de transição --- Q1, Q2 e Q3 ---, que concentram as
+deliberações e decisões mais críticas do desenvolvimento, resumidas na
+\autoref{fig:portao_metodologia}: Q1 é a etapa de decisão de projeto, onde
+são definidas as restrições e definições de projeto; Q2 é a etapa de
+validação individual de cada \textit{feature}; e Q3 é a finalização do
+projeto, marcando seu término. As quatro frentes de trabalho ---
+\textit{Computer-Aided Design} (CAD), SIBA, Interface de Usuário (PC) e
+SAME --- percorrem essas mesmas três janelas de forma independente, cada
+uma com seu próprio fluxo de passos, apresentados nas
+\autoref{fig:fluxo_cad} a \autoref{fig:fluxo_same}.
 
 \begin{figure}[H]
     \centering
-    \caption{Metodologia Principal do TCC}
+    \caption{Janelas de transição da metodologia (Q1, Q2, Q3)}
+    \label{fig:portao_metodologia}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        gate/.style={draw, diamond, aspect=2, align=center, minimum width=2.3cm, minimum height=1.4cm, fill=black!85, text=white, font=\bfseries\small},
+        lbl/.style={align=center, text width=3.6cm, font=\small},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[gate] (q1) at (0,0)    {Q1};
+        \node[gate] (q2) at (5,0)    {Q2};
+        \node[gate] (q3) at (10,0)   {Q3};
+        \node[gate, fill=black!60] (fim) at (15,0)  {FIM};
 
-    \includegraphics[angle=90, scale=0.45]{Textuais/Imgs/Metodologia/TCC Planejamento.png}
-    \label{fig:TCC_planejmamento}
+        \draw[arrow] (q1) -- (q2);
+        \draw[arrow] (q2) -- (q3);
+        \draw[arrow] (q3) -- (fim);
+
+        \node[lbl] at (0,-1.6)  {Decisão de projeto:\\restrições e definições};
+        \node[lbl] at (5,-1.6)  {Validação individual\\de cada \textit{feature}};
+        \node[lbl] at (10,-1.6) {Finalização\\do projeto};
+        \node[lbl] at (15,-1.6) {Término\\do TCC};
+    \end{tikzpicture}%
+    }
 
     Fonte: Autor (2026)
 \end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Planejamento: CAD}
+    \label{fig:fluxo_cad}
+    \begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4.6cm, minimum height=0.9cm, text width=4.3cm},
+        halfbox/.style={draw, rounded corners, fill=white, align=center, minimum width=2.9cm, minimum height=1cm, text width=2.6cm},
+        arrow/.style={-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
+    ]
+        % Faixas de fase (fundo), horizontais
+        \fill[green!45!black!25]  (-3.5,2.9) rectangle (3.5,6.9);
+        \fill[orange!55!black!20] (-3.5,0.4) rectangle (3.5,2.9);
+        \fill[red!55!black!20]    (-3.5,-3)  rectangle (3.5,0.4);
+
+        % Marcadores de transição de fase, na borda esquerda das faixas
+        \node[qmark] at (-4.2,6.9) {Q1};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-4.2,6.6) -- (-4.2,3.2);
+        \node[qmark] at (-4.2,2.9) {Q2};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-4.2,2.6) -- (-4.2,0.7);
+        \node[qmark] at (-4.2,0.4) {Q3};
+
+        \node[halfbox] (s1) at (-1.9,6.3)  {Diagrama simples\\de alimentação};
+        \node[halfbox] (s2) at (1.9,6.3)   {Definição dos\\equipamentos principais};
+        \node[flowbox] (s3) at (0,4.6)     {Localização das placas};
+        \node[flowbox] (s4) at (0,3.4)     {Definição de restrição\\física das placas};
+        \node[flowbox] (s5) at (0,1.6)     {Esboço da bancada física};
+        \node[halfbox] (s6) at (-1.9,-0.5) {Montagem das\\placas no gabinete};
+        \node[halfbox] (s7) at (1.9,-0.5)  {Modificações\\da bancada};
+
+        \draw[arrow] (s1) -- (s3);
+        \draw[arrow] (s2) -- (s3);
+        \draw[arrow] (s3) -- (s4);
+        \draw[arrow] (s4) -- (s5);
+        \draw[arrow] (s5) -- (s6);
+        \draw[arrow] (s5) -- (s7);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A frente SIBA se desdobra em duas trilhas paralelas --- \textit{hardware}
+(PCB) e \textit{firmware} (código) ---, lado a lado na
+\autoref{fig:fluxo_siba}, convergindo para a validação completa que
+antecede a integração descrita na \autoref{sec:siba}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Planejamento: SIBA}
+    \label{fig:fluxo_siba}
+    \begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4.4cm, minimum height=0.9cm, text width=4.1cm},
+        small/.style={draw, rounded corners, fill=white, align=center, minimum width=2cm, minimum height=0.6cm, text width=1.9cm, font=\scriptsize},
+        coltitle/.style={align=center, font=\bfseries},
+        arrow/.style={-{Latex}, thick}
+    ]
+        % Faixas de fase (fundo), horizontais, cobrindo as duas colunas
+        \fill[green!45!black!25]  (-7.6,-0.7) rectangle (7.6,5.6);
+        \fill[orange!55!black!20] (-7.6,-3.4) rectangle (7.6,-0.7);
+        \fill[red!55!black!20]    (-7.6,-7)   rectangle (7.6,-3.4);
+
+        % Marcadores de transição de fase
+        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,5.6) {Q1};
+        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,-0.7) {Q2};
+        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,-3.4) {Q3};
+
+        % --- Coluna esquerda: Hardware (PCB) ---
+        \node[coltitle] at (-3.8,6) {\textit{Hardware} (PCB)};
+        \node[flowbox] (consid) at (-3.8,4.7) {Safety, Alimentação, ETH,\\Escolha de micro, Esquemáticos};
+
+        \node[flowbox] (readeq) at (-3.8,2.4) {Readequação dos componentes\\conforme disponibilidade};
+        \node[flowbox] (restr)  at (-3.8,1.2) {Restrições físicas};
+        \node[small]   (esqpcb) at (-4.9,-1.6) {Esquemático};
+        \node[small]   (proto)  at (-2.7,-1.6) {Protótipo};
+        \node[flowbox] (valpcb) at (-3.8,-4.5) {Validação PCB};
+
+        \draw[arrow] (consid) -- (readeq);
+        \draw[arrow] (readeq) -- (restr);
+        \draw[arrow] (restr) -- (esqpcb);
+        \draw[arrow] (restr) -- (proto);
+        \draw[arrow] (esqpcb) -- (valpcb);
+        \draw[arrow] (proto) -- (valpcb);
+        \draw[-{Latex}, thick, dashed] (valpcb.west) to[bend right=35] node[left, font=\scriptsize, align=center]{se reprovado,\\refatora} (esqpcb.south west);
+
+        % --- Coluna direita: Firmware (Código) ---
+        \node[coltitle] at (3.8,6) {\textit{Firmware} (Código)};
+        \node[flowbox] (cod)    at (3.8,5.1)  {Código};
+        \node[flowbox] (dev)    at (3.8,3.9)  {Compra \textit{dev boards}};
+        \node[flowbox] (zephyr) at (3.8,2.7)  {Criação do projeto em Zephyr};
+        \node[flowbox] (amb)    at (3.8,1.5)  {Criação de ambiente de Teste};
+        \node[flowbox] (vcore)  at (3.8,-1.5) {Validação Vcore};
+        \node[flowbox] (valsys) at (3.8,-3.9) {Validação System\\e Application};
+
+        \draw[arrow] (cod) -- (dev);
+        \draw[arrow] (dev) -- (zephyr);
+        \draw[arrow] (zephyr) -- (amb);
+        \draw[arrow] (amb) -- (vcore);
+        \draw[arrow] (vcore) -- (valsys);
+
+        % Convergência
+        \node[flowbox, fill=black!85, text=white] (siba_ok) at (0,-6.2) {SIBA Completa};
+        \draw[arrow] (valpcb.south) |- (siba_ok.west);
+        \draw[arrow] (valsys.south) |- (siba_ok.east);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Planejamento: Interface de Usuário (PC)}
+    \label{fig:fluxo_interface}
+    \begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4cm, minimum height=0.9cm, text width=3.7cm},
+        halfbox/.style={draw, rounded corners, fill=white, align=center, minimum width=2.5cm, minimum height=0.9cm, text width=2.2cm},
+        arrow/.style={-{Latex}, thick},
+        barrow/.style={{Latex}-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
+    ]
+        \fill[green!45!black!25]  (-5.6,2)    rectangle (5.6,5.4);
+        \fill[orange!55!black!20] (-5.6,-1.7) rectangle (5.6,2);
+        \fill[red!55!black!20]    (-5.6,-6.3) rectangle (5.6,-1.7);
+
+        \node[qmark] at (-6.3,5.4) {Q1};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.3,5.1) -- (-6.3,2.3);
+        \node[qmark] at (-6.3,2) {Q2};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.3,1.7) -- (-6.3,-1.4);
+        \node[qmark] at (-6.3,-1.7) {Q3};
+
+        \node[flowbox] (pc) at (0,4.9)   {PC/\textit{Python}};
+        \node[halfbox] (cfg) at (-4.3,3.6) {Arquivos de\\configuração};
+        \node[halfbox] (gui) at (4.3,3.6)  {GUI};
+        \node[halfbox] (qt)  at (4.3,2.4)  {\textit{Qt Designer}};
+        \node[flowbox] (yaml) at (0,2.4)   {Arquivos \textit{yaml}};
+
+        \draw[arrow] (pc) -- (cfg);
+        \draw[arrow] (pc) -- (gui);
+        \draw[arrow] (gui) -- (qt);
+        \draw[arrow] (cfg) -- (yaml);
+        \draw[arrow] (gui) -- (yaml);
+
+        \node[flowbox] (tiny) at (0,0.9)  {\textit{TinyTerminal}};
+        \node[halfbox] (teste) at (-4.3,0.9) {Teste dos parâmetros\\e comunicação};
+        \node[halfbox] (fb) at (4.3,0.9)   {Feedback Membros};
+
+        \draw[arrow] (yaml) -- (tiny);
+        \draw[barrow] (tiny) -- (teste);
+        \draw[arrow] (tiny) -- (fb);
+
+        % Q3: funcionalidades já implementadas na interface
+        \node[flowbox, text width=7.5cm, minimum width=8cm] (feat) at (0,-2.7) {Configuração de sensores, calibração de\\células de carga, \textit{scripts} de estimação\\(SMO, hélice) e registro em CSV};
+
+        \draw[arrow] (teste.south) -- ++(0,-0.7) -| (feat.north);
+        \draw[arrow] (fb.south) -- ++(0,-0.7) -| (feat.north);
+
+        \node[flowbox, fill=black!85, text=white] (gui_ok) at (0,-4.6) {Interface Funcional};
+        \draw[arrow] (feat) -- (gui_ok);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Planejamento: SAME}
+    \label{fig:fluxo_same}
+    \begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=3.6cm, minimum height=0.9cm, text width=3.3cm},
+        small/.style={draw, rounded corners, fill=white, align=center, minimum width=2.4cm, minimum height=0.9cm, text width=2.1cm},
+        wide/.style={draw, rounded corners, fill=white, align=center, minimum width=4.6cm, minimum height=0.9cm, text width=4.3cm},
+        arrow/.style={-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
+    ]
+        \fill[green!45!black!25]  (-6.2,1) rectangle (7.6,6.2);
+        \fill[orange!55!black!20] (-6.2,-1.7) rectangle (7.6,1);
+        \fill[red!55!black!20]    (-6.2,-5.2) rectangle (7.6,-1.7);
+
+        \node[qmark] at (-6.9,6.2) {Q1};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.9,5.9) -- (-6.9,1.3);
+        \node[qmark] at (-6.9,1) {Q2};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.9,0.7) -- (-6.9,-1.4);
+        \node[qmark] at (-6.9,-1.7) {Q3};
+
+        % Três trilhas de entrada (topo)
+        \node[flowbox] (cod)  at (-4.4,5.7) {Código};
+        \node[flowbox] (pcb)  at (0,5.7)    {PCB da SAME};
+        \node[flowbox] (bldc) at (5.8,5.7)  {BLDC};
+        \node[flowbox] (par)  at (5.8,4.5)  {Parâmetros};
+        \node[flowbox] (sim)  at (5.8,3.3)  {Simulações};
+        \node[small]   (obs)  at (2.7,3.3)  {Observador};
+        \node[flowbox] (teste) at (5.8,2.1) {Teste simples\\com \textit{dev board}};
+
+        \draw[arrow] (bldc) -- (par);
+        \draw[arrow] (par) -- (sim);
+        \draw[arrow] (sim) -- (obs);
+        \draw[arrow] (obs) -- (sim);
+        \draw[arrow] (sim) -- (teste);
+
+        % Convergência para a trilha única
+        \node[wide]  (alim)  at (0,1.9)    {Alimentação e\\condicionamentos};
+        \node[wide]  (restr) at (0,0.3)    {Restrições físicas};
+        \node[small] (esqsame) at (-1.1,-1.4) {Esquemático};
+        \node[small] (protosame) at (1.1,-1.4) {Protótipo};
+        \node[wide]  (valid) at (0,-3.5)   {Validações};
+
+        \draw[arrow] (cod) -- (alim);
+        \draw[arrow] (pcb) -- (alim);
+        \draw[arrow] (teste) |- (valid.east);
+        \draw[arrow] (alim) -- (restr);
+        \draw[arrow] (restr) -- (esqsame);
+        \draw[arrow] (restr) -- (protosame);
+        \draw[arrow] (esqsame) -- (valid);
+        \draw[arrow] (protosame) -- (valid);
+        \draw[-{Latex}, thick, dashed] (valid.west) to[bend right=35] node[left, font=\scriptsize, align=center]{se reprovado,\\refatora} (esqsame.south west);
+
+        \node[flowbox, fill=black!85, text=white] (same_ok) at (0,-4.8) {SAME Completa};
+        \draw[arrow] (valid) -- (same_ok);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+As quatro frentes convergem para os testes completos do sistema integrado,
+marcando o encerramento da janela Q3 e o término do planejamento do
+trabalho.

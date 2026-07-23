@@ -7,9 +7,24 @@
 \subsection{Resistência}
 A resistência de linha foi obtida pelo método de quatro terminais (Kelvin),
 aplicando corrente entre dois terminais e medindo a queda de tensão sobre $A$ e
-$B$, com $R_{eq} = V_{AB}/I$. Obteve-se $R_{LL} = 17{,}37\ \text{m}\Omega$
+$B$, com $R_{eq} = V_{AB}/I$, na montagem da \autoref{fig:setup_kelvin}.
+Obteve-se $R_{LL} = 17{,}37\ \text{m}\Omega$
 (desvio padrão $0{,}02\ \text{m}\Omega$), correspondendo a
 $R_{Y} = R_{LL}/2 = 8{,}69\ \text{m}\Omega$ no modelo em estrela equivalente.
+
+\begin{figure}[H]
+    \centering
+    \caption{Montagem do ensaio de resistência pelo método de quatro terminais (espaço reservado)}
+    \label{fig:setup_kelvin}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.75\textwidth,
+              minimum height=5cm, text width=0.65\textwidth, font=\small]
+              {Fotografia da montagem do ensaio de resistência pelo método
+               de quatro terminais (Kelvin)};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \begin{table}[htb]
     \centering
@@ -45,10 +60,26 @@ $R_{Y} = R_{LL}/2 = 8{,}69\ \text{m}\Omega$ no modelo em estrela equivalente.
 \end{table}
 
 \subsection{Indutância}
-A indutância foi determinada pelo método da ressonância, associando capacitores
+A indutância foi determinada pelo método da ressonância, na montagem da
+\autoref{fig:setup_ressonancia}, associando capacitores
 de capacitância conhecida em paralelo aos terminais do motor e excitando o
-circuito $LC$ com um gerador em modo de varredura (\textit{AC sweep}). Na
-ressonância, $f_{res} = 1/(2\pi\sqrt{LC})$, de onde $L = 1/[(2\pi f_{res})^2 C]$.
+circuito $LC$ com um gerador em modo de varredura (\textit{AC sweep}).
+
+\begin{figure}[H]
+    \centering
+    \caption{Montagem do ensaio de ressonância para determinação da indutância (espaço reservado)}
+    \label{fig:setup_ressonancia}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.75\textwidth,
+              minimum height=5cm, text width=0.65\textwidth, font=\small]
+              {Fotografia da montagem do ensaio de ressonância: gerador,
+               resistor série e capacitor em paralelo com o motor};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Na ressonância, $f_{res} = 1/(2\pi\sqrt{LC})$, de onde $L = 1/[(2\pi f_{res})^2 C]$.
 A frequência de cada pico foi refinada manualmente. O uso de diferentes
 capacitores, medidos individualmente, fornece estimativas independentes de $L$
 para o mesmo conjunto, e a convergência entre elas valida a medição. Obteve-se $L_{LL} = 13{,}90 \pm 0{,}14\ \mu\text{H}$ e
@@ -81,8 +112,56 @@ $L_{Y} = L_{LL}/2 = 6{,}95 \pm 0{,}07\ \mu\text{H}$.
 \end{table}
 
 
-\subsection{Coeficientes Mecânicos}
-aaa
+\subsection{Coeficientes Mecânicos (placeholder)}
+
+\textit{Pendente: resultado do ensaio de atrito e do ensaio de
+desaceleração livre descritos na
+\autoref{sec:atrito_viscoso}/\autoref{sec:momento_inercia} --- depende de
+ensaio de bancada ainda não realizado.}
+
+O ensaio de atrito estabiliza a rotação em múltiplos patamares e registra
+o par $(\omega_{m,k}, T_{e,k})$ de cada um, usado na regressão da
+Equação~\eqref{eq:ensaio_vazio_iq} para obter $B$ e $\tau_c$
+(\autoref{tab:resultado_atrito}).
+
+\begin{table}[H]
+    \centering
+    \caption{Patamares de rotação e torque médio do ensaio de atrito (espaço reservado)}
+    \label{tab:resultado_atrito}
+    \begin{tabular}{ccc}
+        \toprule
+        \textbf{Patamar} & \textbf{$\omega_{m,k}$ [rad/s]} & \textbf{$T_{e,k}$ [N·m]} \\
+        \midrule
+        \multicolumn{3}{c}{\textit{Pendente: dados dos patamares de regime permanente}} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+\begin{equation}
+    B = \text{\textit{[pendente]}}, \qquad \tau_c = \text{\textit{[pendente]}}
+    \label{eq:resultado_b_tauc}
+\end{equation}
+
+O momento de inércia $J$ é extraído do ensaio de desaceleração livre
+(\autoref{eq:coast_down_iq}), a partir da curva $\omega_m(t)$ registrada
+pelo sensor óptico na região de decaimento (\autoref{fig:coastdown}).
+
+\begin{figure}[H]
+    \centering
+    \caption{Curva de desaceleração livre e ajuste do momento de inércia (espaço reservado)}
+    \label{fig:coastdown}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.75\textwidth,
+              minimum height=5cm, text width=0.65\textwidth, font=\small]
+              {Curva $\omega_m(t)$ medida no ensaio de desaceleração livre,
+               com o ajuste usado para extrair $J$};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \section{Modelagem do SMO}
 
@@ -597,38 +676,10 @@ natural para as oscilações de alta frequência, de modo que a hélice interage
 apenas com o valor médio contínuo do torque. Por essa razão, adota-se o valor
 médio do torque em cada patamar como referência física para o cálculo do
 coeficiente, tanto para a grandeza real da planta quanto para a estimativa do
-observador. O \autoref{alg:kq_identificacao} formaliza as duas etapas do
-procedimento: a detecção automática dos patamares de regime permanente a
-partir do perfil de referência e o cálculo do coeficiente por patamar.
-
-\begin{algorithm}[H]
-\caption{Identificação do coeficiente aerodinâmico global $k_Q$ por patamar}
-\label{alg:kq_identificacao}
-\begin{algorithmic}[1]
-\Require $\omega_m,\hat{\omega}_e,T_e,\hat{T}_e$ (vetores), $R$ (perfil de RPM), $T_s$, $\tau_{\mathrm{PI}}$, $\mathrm{RPM}_{\min}$
-\Function{DetectaPatamares}{$R$}
-    \State $M \gets (\Delta R = 0) \wedge (R > \mathrm{RPM}_{\min})$
-    \State $P \gets$ pares $(s,e)$ dos blocos contínuos de $M$
-    \State \Return $P$
-\EndFunction
-\Statex
-\Function{CalculaKQ}{$\omega_m,\hat{\omega}_e,T_e,\hat{T}_e,P$}
-    \State $n \gets \tau_{\mathrm{PI}}/T_s$
-    \ForAll{$(s,e) \in P$}
-        \If{$e-s \le n$} 
-        \State \textbf{continue} 
-        \EndIf
-        \State $i,j \gets s+n,\ e-1$
-        \State $k_1 \gets \overline{T_e[i:j]} \,/\, \overline{\omega_m[i:j]}^{\,2}$
-        \State $k_2 \gets \overline{\hat{T}_e[i:j]} \,/\, \overline{\hat{\omega}_e[i:j]}^{\,2}$
-        \State guarda $(k_1,k_2)$ em $K$
-    \EndFor
-    \State $\bar{k}_1,\bar{k}_2 \gets$ médias de $K$
-    \State $\epsilon \gets 100\,|\bar{k}_2-k_{Q,\mathrm{nom}}|/k_{Q,\mathrm{nom}}$
-    \State \Return $K,\ \bar{k}_1,\ \bar{k}_2,\ \epsilon$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
+observador. O procedimento segue as duas etapas formalizadas no
+\autoref{alg:kq_identificacao} (\autoref{sec:coef_aero_bancada}): a
+detecção automática dos patamares de regime permanente a partir do perfil
+de referência e o cálculo do coeficiente por patamar.
 
 A identificação foi conduzida sob quatro patamares de operação em malha fechada.
 A estimação \textit{sensorless} obteve um erro relativo global de apenas
@@ -688,15 +739,528 @@ definitiva depende dos ensaios com o motor real na bancada, nos quais o
 coeficiente estimado será confrontado com as medições físicas de tração e
 velocidade do escoamento.
 
+\subsection{Identificação dos Coeficientes $C_T$ e $C_Q$ em Bancada (placeholder)}
+\label{sec:resultado_coef_aero_bancada}
+
+\textit{Pendente: resultado do ensaio descrito na
+\autoref{sec:coef_aero_bancada} --- depende de ensaio de bancada com a
+hélice montada, ainda não realizado.}
+
+\begin{table}[H]
+    \centering
+    \caption{Coeficientes $C_T$ e $C_Q$ por patamar de rotação (espaço reservado)}
+    \label{tab:resultado_ct_cq}
+    \begin{tabular}{cccc}
+        \toprule
+        \textbf{Patamar (RPM)} & \textbf{$C_T$} & \textbf{$C_Q$} & \textbf{$\rho$ [kg/m³]} \\
+        \midrule
+        \multicolumn{4}{c}{\textit{Pendente: dados por patamar de rotação}} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \caption{$C_T$ e $C_Q$ medidos em bancada frente às tabelas de desempenho da APC e ao banco de dados UIUC (espaço reservado)}
+    \label{fig:resultado_ct_cq_comparacao}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+              minimum height=5cm, text width=0.7\textwidth, font=\small]
+              {$C_T(J)$ e $C_Q(J)$ medidos, sobrepostos às curvas de
+               referência do fabricante (APC) e do banco UIUC};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
 \section{Modelagem Física}
 
 A estrutura mecânica da bancada — mesa de suporte e células de carga — já era utilizada pela equipe Albatroz Aerodesign em ensaios anteriores. O escopo deste trabalho não abrange a construção dessa estrutura, mas sim sua instrumentação e
 integração a um sistema unificado de aquisição, processamento e supervisão. Parte-se, portanto, da bancada existente (\autoref{fig:bancada_fisica}), formalizando-a por meio do acoplamento das placas de medição, do gabinete de instrumentação e da rede de comunicação descritos nesta seção.
 
+\begin{figure}[H]
+    \centering
+    \caption{Estrutura mecânica da bancada utilizada pela equipe (espaço reservado)}
+    \label{fig:bancada_fisica}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+              minimum height=5cm, text width=0.7\textwidth, font=\small]
+              {Fotografia da estrutura mecânica da bancada (mesa de suporte
+               e células de carga) já usada pela equipe Albatroz Aerodesign};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\subsection{Montagem Final do Conjunto (placeholder)}
+\label{sec:resultado_montagem_final}
+
+As figuras a seguir registram o sistema já integrado: o conjunto
+motopropulsor montado na bancada, a fiação interna da caixa de
+instrumentação após a integração das placas, e o sistema completo em
+operação durante um ensaio.
+
+\begin{figure}[H]
+    \centering
+    \caption{Conjunto motopropulsor (motor e hélice) montado na bancada (espaço reservado)}
+    \label{fig:resultado_motor_helice_montado}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.75\textwidth,
+              minimum height=5cm, text width=0.65\textwidth, font=\small]
+              {Fotografia do motor com a hélice acoplada, fixado na
+               bancada, pronto para ensaio};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Conexões internas da placa após a integração final (espaço reservado)}
+    \label{fig:resultado_conexoes_internas}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.85\textwidth,
+              minimum height=6cm, text width=0.75\textwidth, font=\small]
+              {Fotografia em detalhe da fiação e dos conectores internos da
+               placa/caixa de instrumentação, já integrados};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Bancada completa montada, em operação durante um ensaio (espaço reservado)}
+    \label{fig:resultado_bancada_operacao}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.85\textwidth,
+              minimum height=6cm, text width=0.75\textwidth, font=\small]
+              {Fotografia geral da bancada montada --- motor, caixa de
+               instrumentação, cabeamento e computador de supervisão ---
+               durante um ensaio em operação};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\section{SIBA (placeholder)}
+\label{sec:resultado_validacao_siba}
+
+\textit{Pendente: dados de validação da cadeia de medição da SIBA (bateria,
+células de carga, tubo de Pitot) --- depende de ensaio de bancada ainda não
+realizado.}
+
+\begin{table}[H]
+    \centering
+    \caption{Ganho, \textit{offset} e erro por sensor da SIBA (espaço reservado)}
+    \label{tab:resultado_validacao_siba}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Sensor} & \textbf{Ganho medido} & \textbf{\textit{Offset} medido} & \textbf{Erro vs. referência} \\
+        \midrule
+        Tensão de bateria & \multicolumn{3}{c}{\textit{Pendente}} \\
+        Corrente de bateria & \multicolumn{3}{c}{\textit{Pendente}} \\
+        Células de carga (0--5) & \multicolumn{3}{c}{\textit{Pendente}} \\
+        Tubo de Pitot & \multicolumn{3}{c}{\textit{Pendente}} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+\section{SAME}
+\label{sec:resultado_validacao_same}
+
+\subsection{Calibração de Canal e Formas de Onda Reais (placeholder)}
+\label{sec:resultado_calibracao_canal_same}
+
+\textit{Pendente: ganho e \textit{offset} obtidos por canal após
+calibração, erro frente a um instrumento de referência, e piso de ruído
+medido com o motor parado e com o ESC chaveando --- depende de ensaio de
+bancada ainda não realizado.}
+
+\begin{table}[H]
+    \centering
+    \caption{Ganho, \textit{offset} e piso de ruído por canal da SAME (espaço reservado)}
+    \label{tab:resultado_calibracao_canal_same}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Canal} & \textbf{Ganho} & \textbf{\textit{Offset}} & \textbf{Erro vs. referência} & \textbf{Ruído (RMS)} \\
+        \midrule
+        Tensão --- fases $A,B,C$ & \multicolumn{4}{c}{\textit{Pendente}} \\
+        Corrente --- fases $A,B,C$ & \multicolumn{4}{c}{\textit{Pendente}} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \caption{Tensão e corrente de fase adquiridas com o motor em operação (espaço reservado)}
+    \label{fig:formas_onda_reais}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.85\textwidth,
+              minimum height=5cm, text width=0.75\textwidth, font=\small]
+              {Formas de onda de tensão e corrente de fase capturadas com o
+               motor em operação};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\subsection{Sensor de Corrente}
+\label{sec:resultado_sensor_corrente}
+
+A Figura~\ref{fig:resultado_single_gap} mostra a densidade de fluxo obtida
+por elementos finitos no núcleo único isolado, no fundo de escala do
+projeto (\SI{100}{\ampere}).
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo no sensor único isolado, a \SI{100}{\ampere}}
+\label{fig:resultado_single_gap}
+\includegraphics[width=0.7\textwidth]{Textuais/Imgs/Resultados/sensor_single_gap.pdf}
+
+Fonte: Autor (2026), simulação FEMM
+\end{figure}
+
+Para a condição isolada em corrente contínua, a varredura de corrente de
+\SI{1}{\ampere} a \SI{100}{\ampere} mostra que a densidade de fluxo no
+entreferro cresce proporcionalmente à corrente primária, com sensibilidade
+de núcleo constante --- dentro da resolução numérica --- em toda a faixa
+avaliada (Figura~\ref{fig:resultado_I_vs_B}): $G_{núcleo} =
+\SI{5,355}{\gauss\per\ampere}$.
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo no entreferro em função da corrente primária}
+\label{fig:resultado_I_vs_B}
+\includegraphics[width=0.75\textwidth]{Textuais/Imgs/Resultados/sensor_fig_I_vs_B.pdf}
+
+Fonte: Autor (2026)
+\end{figure}
+
+Combinando essa sensibilidade de núcleo com a sensibilidade típica do
+SS49E (Tabela~\ref{tab:datasheet_ss49e}), o modelo de transferência do
+sensor de corrente completo é:
+
+\begin{equation}
+    V_{sense} = G \cdot I + V_{offset}
+    \label{eq:transferencia_sensor}
+\end{equation}
+
+com
+
+\begin{equation}
+    G = G_{núcleo} \cdot S_H
+      = \SI{5,355}{\gauss\per\ampere} \times \SI{2,5}{\milli\volt\per\gauss}
+      \approx \SI{13,39}{\milli\volt\per\ampere},
+    \qquad
+    V_{offset} = V_O \approx \SI{2,50}{\volt}.
+    \label{eq:ganho_offset_valores}
+\end{equation}
+
+No fundo de escala do projeto ($I = \pm\SI{100}{\ampere}$, já que a
+corrente de fase de um acionamento trifásico é sempre alternada), isso
+resulta em $V_{sense} \approx \SI{3,84}{\volt}$ ($+100\,$A) e
+$\approx\SI{1,16}{\volt}$ ($-100\,$A), dentro da faixa de saída do sensor
+(Tabela~\ref{tab:datasheet_ss49e}).
+
+Quanto à margem de saturação do núcleo: pela lei de Ampère, desprezando a
+relutância do ferrite frente à do entreferro (aproximação válida para
+$\mu_r$ elevado), $H_{gap} = I/l_{gap}$, que no fundo de escala do projeto
+($I = \SI{100}{\ampere}$, $l_{gap} = \SI{2,3}{\milli\meter}$) resulta em
+$B_{gap} = \mu_0 H_{gap} \approx \SI{54,6}{\milli\tesla}$ --- valor
+consistente com o $G_{núcleo}$ obtido por elementos finitos. Como o fluxo
+é o mesmo em série pelo núcleo e pelo entreferro, a densidade no ferrite em
+si é da mesma ordem de grandeza, ainda que tipicamente maior por efeito do
+estreitamento de seção pelo espraiamento do fluxo nas bordas do entreferro
+\cite{mclyman2011}. Mesmo nesse caso, o valor permanece uma ordem de
+grandeza abaixo da densidade de saturação típica de ferrites MnZn (entre
+\SI{380}{\milli\tesla} e \SI{500}{\milli\tesla}, segundo o material,
+\cite{mclyman2011}), preservando margem folgada mesmo no fundo de escala de
+corrente do projeto.
+
+A Figura~\ref{fig:resultado_erro_sensor} mostra o efeito da tolerância de
+fabricação e da deriva térmica do SS49E sobre essa curva típica. No pior
+caso --- unidade no extremo da tolerância de fabricação ---, o envelope
+resultante ultrapassa os limites físicos de saída do sensor nos dois
+extremos de corrente; a deriva térmica, isoladamente, tem efeito bem menor,
+reforçando a necessidade de calibração por unidade
+(\autoref{sec:same_sensor_corrente}). O erro de linearidade não é mostrado
+por ser desprezível nessa escala ($\SI{0,007}{\percent}$ do \textit{span},
+Tabela~\ref{tab:datasheet_ss49e}).
+
+\begin{figure}[H]
+\centering
+\caption{$V_{sense}(I)$ típico frente ao envelope de tolerância de
+fabricação e à deriva térmica do SS49E}
+\label{fig:resultado_erro_sensor}
+\includegraphics[width=0.85\textwidth]{Textuais/Imgs/Resultados/sensor_fig_erro_sensor.pdf}
+
+Fonte: Autor (2026)
+\end{figure}
+
+A Figura~\ref{fig:resultado_trifase_geral} mostra a densidade de fluxo nos
+três núcleos montados lado a lado sobre a PCB, na menor distância entre
+centros testada.
+
+\begin{figure}[H]
+\centering
+\caption{Densidade de fluxo nos três sensores a \SI{100}{\ampere}, menor
+distância testada (\SI{28}{\milli\meter})}
+\label{fig:resultado_trifase_geral}
+\includegraphics[width=\textwidth]{Textuais/Imgs/Resultados/sensor_trifase_geral_d028mm.pdf}
+
+Fonte: Autor (2026), simulação FEMM
+\end{figure}
+
+Adotou-se como critério de \textit{crosstalk} desprezível um desvio máximo
+de \SI{1}{\percent} entre a leitura de uma fase com e sem as fases vizinhas
+energizadas --- patamar acima do próprio erro de conversão do ADC do
+CH32V307 em pior caso ($\pm 4$~LSB $\approx \SI{3,2}{\milli\volt}$ sobre um
+fundo de escala de \SI{3,3}{\volt}, $\approx \SI{0,1}{\percent}$,
+Tabela~\ref{tab:adc_error}): um \textit{crosstalk} dentro desse limiar não
+acrescenta incerteza superior à que a própria cadeia de aquisição já
+introduz.
+
+Quanto ao acoplamento entre sensores adjacentes (\textit{crosstalk}): sete
+combinações de corrente foram simuladas em cada distância avaliada --- cada
+fase isolada (\SI{100}{\ampere} em uma fase, demais em zero), cada par
+simultâneo, e as três fases simultâneas --- tomando a leitura de cada
+sensor com apenas sua própria fase energizada como referência ``sem
+interferência''. O desvio máximo observado foi de
+\SI{0,0026}{\percent}, na menor distância testada
+(\SI{28}{\milli\meter}), decaindo monotonicamente com o afastamento entre
+núcleos (Figura~\ref{fig:resultado_crosstalk}). Mesmo no pior caso, o
+\textit{crosstalk} está três ordens de grandeza abaixo do limiar de
+\SI{1}{\percent} adotado como desprezível: a proximidade entre os sensores
+das três fases não compromete a medição individual em nenhum espaçamento
+fisicamente viável de PCB.
+
+\begin{figure}[H]
+\centering
+\caption{Maior desvio por \textit{crosstalk} em função da distância entre
+núcleos, \SI{12}{\kilo\hertz}}
+\label{fig:resultado_crosstalk}
+\includegraphics[width=0.85\textwidth]{Textuais/Imgs/Resultados/sensor_fig_crosstalk.pdf}
+
+Fonte: Autor (2026)
+\end{figure}
+
+Sensores de corrente de núcleo único e elemento Hall discreto, como o
+adotado aqui, não possuem o mecanismo de rejeição de campo de modo comum
+presente em circuitos integrados de sensoriamento diferencial
+\cite{allegro_an296128_2023}; a proximidade entre os três núcleos na PCB
+torna, portanto, a caracterização do acoplamento entre fases
+(\textit{crosstalk}) apresentada acima especialmente relevante para essa
+topologia.
+
+A banda passante do conjunto sensor mais núcleo é limitada pelo tempo de
+resposta do SS49E ($t_{ack} = \SI{3}{\micro\second}$ em pior caso,
+Tabela~\ref{tab:datasheet_ss49e}): tratando esse tempo como constante de
+uma resposta de primeira ordem, $f_{-3\text{dB}} \approx 0{,}35/t_{ack}
+\approx \SI{117}{\kilo\hertz}$, valor abaixo da frequência de Nyquist da
+taxa de amostragem por canal do SAME ($\approx$~333~kSps$/2 \approx
+\SI{166,5}{\kilo\hertz}$, \autoref{sec:same_tensao}); a resposta do
+núcleo de ferrite em si, sem enrolamento, é ordens de grandeza mais rápida
+e não limita a cadeia. É, portanto, o sensor Hall, e não o ADC, o elemento
+que limita a resposta em frequência do canal de corrente.
+
+Quanto ao acoplamento indutivo parasita introduzido pelos três núcleos e
+pelo plano de GND: cada fase foi modelada como um indutor com indutância
+própria ($L_{AA}$, $L_{BB}$, $L_{CC}$) e indutância mútua com as demais
+($M_{AB}$, $M_{AC}$, $M_{BC}$), extraídas do enlace de fluxo calculado pelo
+FEMM durante a resolução do campo. A indutância própria, $\approx
+\SI{59,3}{\nano\henry}$ por fase e praticamente constante com a distância
+entre núcleos (Tabela~\ref{tab:resultado_inducao_resumo}), é desprezível
+frente à indutância de fase medida do motor
+($L_Y \approx \SI{6,95}{\micro\henry}$, \autoref{tab:indutancia_motor}). A
+indutância mútua entre fases (Figura~\ref{fig:resultado_inductancia_mutua})
+é ainda menor --- na faixa de \si{\pico\henry}, seis ordens de grandeza
+abaixo da própria --- mesmo no pior caso, com os núcleos no limite físico
+de proximidade ($d=\SI{28}{\milli\meter}$): o arranjo de sensores não
+introduz perturbação elétrica mensurável na dinâmica do acionamento.
+
+\begin{figure}[H]
+\centering
+\caption{Indutância mútua entre pares de fases em função da distância
+entre centros (escala logarítmica)}
+\label{fig:resultado_inductancia_mutua}
+\includegraphics[width=0.75\textwidth]{Textuais/Imgs/Resultados/sensor_fig_inductancia_mutua.pdf}
+
+Fonte: Autor (2026)
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Indutância própria, mútua e coeficiente de acoplamento nos
+extremos da varredura de distância (CA, \SI{12}{\kilo\hertz})}
+\label{tab:resultado_inducao_resumo}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Grandeza} & \textbf{$d=\SI{28}{\milli\meter}$} & \textbf{$d=\SI{80}{\milli\meter}$} \\
+\midrule
+$L_{AA}$, $L_{BB}$, $L_{CC}$ & $\approx\SI{59,3}{\nano\henry}$ & $\approx\SI{59,3}{\nano\henry}$ \\
+$M_{AB}$, $M_{BC}$ (adjacentes) & \SI{0,723}{\pico\henry} & \SI{0,102}{\pico\henry} \\
+$M_{AC}$ (extremos) & \SI{0,292}{\pico\henry} & \SI{0,041}{\pico\henry} \\
+$k_{AB}$, $k_{BC}$ & \num{1.22e-5} & \num{1.72e-6} \\
+$k_{AC}$ & \num{4.92e-6} & \num{6.98e-7} \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+{\small Fonte: Autor (2026), simulação FEMM.}
+\end{table}
+
+O ganho previsto por simulação ($G \approx \SI{13,39}{\milli\volt\per\ampere}$,
+Equação~\eqref{eq:ganho_offset_valores}) ainda carece de confronto com a
+calibração física de cada unidade do SS49E
+(\autoref{sec:same_sensor_corrente}); a
+\autoref{fig:resultado_sensor_medido_vs_simulado} reserva o espaço para essa
+curva medida uma vez concluído o ensaio de bancada.
+
+\begin{figure}[H]
+\centering
+\caption{Curva de transferência medida do sensor de corrente frente à
+prevista por simulação (espaço reservado)}
+\label{fig:resultado_sensor_medido_vs_simulado}
+\begin{tikzpicture}
+    \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+          minimum height=5cm, text width=0.7\textwidth, font=\small]
+          {Curva $V_{sense}(I)$ medida em bancada, por unidade de sensor,\\
+           sobreposta à reta prevista por simulação\\
+           ($G \approx \SI{13,39}{\milli\volt\per\ampere}$,
+           $V_{offset} \approx \SI{2,50}{\volt}$)};
+\end{tikzpicture}
+
+Fonte: Autor (2026)
+\end{figure}
+
+
 \chapter{Conclusão e Trabalhos Futuros}
 \label{cap:conclusao}
-\section{Sugestões para trabalhos futuros}
+
+\section{Conclusão}
+
+Este trabalho desenvolveu uma bancada de aquisição para conjuntos
+motopropulsores com motor BLDC, estruturada em torno de dois nós de
+\textit{hardware} dedicados (SIBA e SAME), de um observador por modos
+deslizantes para estimação \textit{sensorless} de velocidade e torque, e
+de um \textit{software} de supervisão que integra os dois lados do
+sistema. Retomando os cinco objetivos específicos estabelecidos na
+Introdução:
+
+\begin{enumerate}
+    \item \textbf{Sistema de medição elétrica do motor BLDC:} a PCB da SAME
+    foi projetada e fabricada, com sensores de corrente por núcleo toroidal
+    e SS49E caracterizados por simulação eletromagnética
+    (\autoref{sec:same_sensor_corrente}), e o condicionamento de sinal de
+    tensão e corrente descrito e dimensionado
+    (\autoref{sec:same_condicionamento}). A validação elétrica completa em
+    bancada --- calibração de canal, piso de ruído e confronto do sensor de
+    corrente medido com o previsto por simulação --- permanece pendente
+    (\autoref{sec:resultado_calibracao_canal_same},
+    \autoref{sec:resultado_sensor_corrente}). Objetivo \textbf{parcialmente
+    atingido}: o \textit{hardware} está pronto, a validação experimental
+    não.
+
+    \item \textbf{Modelagem do motor e projeto do observador:} a resistência
+    e a indutância de fase foram medidas experimentalmente
+    (\autoref{tab:resistencia_motor}, \autoref{tab:indutancia_motor}); as
+    equações de estado no referencial $\alpha\beta$ foram formuladas
+    (\autoref{sec:params_eletricos}); e o observador por modos deslizantes,
+    associado ao PLL para reconstrução de posição e torque, foi projetado,
+    ajustado por \textit{autotuning} e validado em simulação, incluindo a
+    análise de sensibilidade dos ganhos e o efeito do condicionamento
+    analógico sobre a reconstrução
+    (\autoref{sec:condicionamento}--\autoref{sec:autotuning}). Os
+    coeficientes mecânicos ($B$, $\tau_c$, $J$) permanecem pendentes de
+    ensaio físico (\autoref{sec:atrito_viscoso},
+    \autoref{sec:momento_inercia}). Objetivo \textbf{majoritariamente
+    atingido}: a parte elétrica e o projeto do observador estão fechados e
+    validados computacionalmente; a caracterização mecânica experimental
+    ainda falta.
+
+    \item \textbf{Sistema de medição aerodinâmica da hélice:} o
+    condicionamento das células de carga e do tubo de Pitot foi integrado
+    ao \textit{firmware} da SIBA, com transmissão em tempo real pelo
+    servidor UDP embarcado, e o procedimento de identificação de $C_T$ e
+    $C_Q$ em bancada foi definido (\autoref{sec:coef_aero_bancada}). A
+    identificação em simulação do coeficiente aerodinâmico global $k_Q$ a
+    partir da estimativa de torque do observador atingiu erro relativo de
+    \num{3,46}\% frente ao modelo da planta
+    (\autoref{sec:coef_aero}). A execução física do ensaio e a calibração
+    do tubo de Pitot permanecem pendentes
+    (\autoref{sec:resultado_coef_aero_bancada},
+    \autoref{sec:calibracao_pitot}). Objetivo \textbf{parcialmente
+    atingido}.
+
+    \item \textbf{Rede de comunicação entre os nós e o supervisório:} o
+    protocolo UDP estruturado, a estrutura de comando (\texttt{CMD}) e o
+    pacote de telemetria foram implementados e padronizados por geração de
+    código a partir de arquivos YAML comuns ao \textit{firmware} e à
+    aplicação \textit{desktop} (\autoref{fig:yaml_example_config}), e
+    validados de ponta a ponta via \textit{native\_sim}
+    (\autoref{sec:ferramentas_software}). Objetivo \textbf{atingido}.
+
+    \item \textbf{\textit{Software} de supervisão em \textit{Python}:} a
+    aplicação desenvolvida cobre monitoramento em tempo real,
+    parametrização interativa, calibração de sensores, registro em CSV e
+    diagnóstico via \textit{TinyTerminal}
+    (\autoref{sec:ferramentas_software},
+    \autoref{fig:seq_calibracao}). Objetivo \textbf{atingido}.
+\end{enumerate}
+
+Em síntese, a infraestrutura de \textit{hardware}, \textit{firmware},
+comunicação e \textit{software} de supervisão está integralmente
+implementada, e a parte do trabalho resolvida por simulação --- projeto e
+ajuste do observador, caracterização eletromagnética do sensor de corrente
+--- está validada com resultados quantitativos consistentes. O que
+distingue os objetivos "atingidos" dos "parcialmente atingidos" é
+exclusivamente a etapa final de validação física em bancada, ainda não
+executada no momento do fechamento deste texto. A ferramenta de
+caracterização proposta na Introdução está, portanto, construída e pronta
+para uso; falta percorrê-la com o motor real para fechar o ciclo de
+validação experimental que é o objetivo maior do trabalho.
+
+\section{Limitações e Itens Pendentes}
+
+Ficam explicitamente registrados como pendentes, por dependerem de ensaio
+físico ainda não realizado e não por limitação de escopo:
+
+\begin{itemize}
+    \item Identificação experimental de $B$, $\tau_c$ e $J$
+    (\autoref{sec:atrito_viscoso}, \autoref{sec:momento_inercia});
+    \item Identificação de $C_T$ e $C_Q$ da hélice em bancada, e sua
+    comparação com as referências APC e UIUC
+    (\autoref{sec:resultado_coef_aero_bancada});
+    \item Calibração do tubo de Pitot (\autoref{sec:calibracao_pitot});
+    \item Validação completa da cadeia de medição da SIBA --- bateria,
+    células de carga (\autoref{sec:resultado_validacao_siba});
+    \item Calibração de canal, piso de ruído e formas de onda reais da SAME
+    (\autoref{sec:resultado_calibracao_canal_same});
+    \item Confronto entre o ganho do sensor de corrente medido em bancada e
+    o previsto por simulação eletromagnética
+    (\autoref{fig:resultado_sensor_medido_vs_simulado}).
+\end{itemize}
+
+Cada um desses itens tem seção e figura ou tabela já reservadas no texto
+(ver \texttt{human.md} na raiz do repositório para o levantamento completo
+do que falta), de modo que o fechamento do trabalho consiste em executar os
+ensaios e preencher esses espaços, sem alteração estrutural do texto.
+
+\section{Sugestões para Trabalhos Futuros}
 \begin{itemize}
     \item Implementação de uma bancada física com 6 graus de liberdade;
-    \item Caracterização da bateria (curva SOC $\times$ OCV).
+    \item Caracterização da bateria (curva SOC $\times$ OCV);
+    \item Extensão do observador para a região de enfraquecimento de campo
+    (\autoref{sec:motor_curvas}), fora do envelope de operação ensaiado
+    neste trabalho.
 \end{itemize}

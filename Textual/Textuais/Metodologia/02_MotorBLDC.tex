@@ -133,6 +133,15 @@ equações de espaço de estados no referencial estacionário $\alpha\beta$.
 
 A dinâmica mecânica do motor é governada pela equação de balanço de torques no eixo rotativo, como visto na \autoref{eq:bldc_mecanica}.
 
+Os ensaios de atrito e de inércia descritos nesta subseção foram conduzidos
+sem a hélice acoplada ao eixo, de modo que $B$, $\tau_c$ e $J$ correspondem
+exclusivamente ao conjunto girante do próprio motor (rotor, eixo e
+rolamentos). Com a hélice montada para os ensaios aerodinâmicos
+(\autoref{sec:coef_aero_bancada}), o diâmetro e o passo do modelo utilizado
+propagam-se para $D_{prop}$ nas Equações~\eqref{eq:Prop_coeff1} e
+\eqref{eq:Prop_coeff2}, conforme a nomenclatura $D \times P$ da
+\autoref{sec:helice_aerodinamica}.
+
 Para a caracterização experimental, o motor BLDC é acionado utilizando um Controlador Eletrônico de Velocidade (ESC) comercial. Como o torque eletromagnético ($T_e$) em motores de ímã permanente é proporcional à corrente de eixo em quadratura ($I_q$), a bancada de testes irá ser instrumentada para adquirir as correntes instantâneas de fase do motor. O esquema de \textit{hardware} e as formas de onda esperadas estão ilustrados na Figura \ref{fig:circuito_esc_correntes}.
 
 \begin{figure}[H]
@@ -248,11 +257,11 @@ Para a caracterização experimental, o motor BLDC é acionado utilizando um Con
 
 Através do Sistema de Aquisição do Motor Elétrico (SAME), lê-se as correntes de pelo menos duas fases (ex: $I_a$ e $I_b$). Considerando que não há conexão de neutro, a terceira corrente é obtida por $I_c = -(I_a + I_b)$. Sincronizando essas leituras com a posição angular elétrica do rotor ($\theta_e$) --- obtida indiretamente pela medição do sensor óptico --- aplica-se as transformadas de Clarke e Park (\textit{offline} ou \textit{online}) para mapear as grandezas do referencial trifásico estacionário ($abc$) para o referencial síncrono girante ($dq$) \footnote{Devido à natureza da comutação trapezoidal (6-step) do ESC utilizado, as correntes de fase apresentam harmônicos que resultam em oscilações (\textit{ripple}) nas componentes $I_d$ e $I_q$ após a transformada de Park. Para os cálculos de caracterização, utiliza-se o valor médio filtrado de $I_q$, que representa a componente fundamental do torque eletromagnético médio em regime permanente.}.
 
-Os ensaios de atrito e de inércia descritos a seguir foram conduzidos em uma
-bancada simplificada, montada especificamente para viabilizar essas medidas
-mecânicas antes da fabricação e validação das placas definitivas (SIBA e
-SAME): o motor é acionado por um ESC comercial, com a rotação do eixo e as
-grandezas elétricas de fase medidas de forma independente do acionamento.
+Os ensaios de atrito e de inércia descritos a seguir foram conduzidos numa
+montagem provisória, antes da fabricação e validação das placas definitivas
+(SIBA e SAME): o motor é acionado por um ESC comercial, com a rotação do
+eixo e as grandezas elétricas de fase medidas de forma independente do
+acionamento.
 
 \subsubsection{Coeficiente de Atrito Viscoso}
 \label{sec:atrito_viscoso}
@@ -278,6 +287,92 @@ Com o atrito estabelecido, o momento de inércia ($J$) é estimado pelo ensaio d
 
 O sensor óptico registra a curva de desaceleração $\omega_m(t)$. Isolando $J$ e calculando a derivada $\frac{d\omega_m}{dt}$ a partir dos dados adquiridos na região de decaimento, extrai-se o momento de inércia do conjunto rotativo.
 
+\subsection{Identificação dos Coeficientes Aerodinâmicos da Hélice em Bancada}
+\label{sec:coef_aero_bancada}
+
+Com a hélice já montada no eixo, o motor é levado por patamares de
+aceleração crescente, do menor ponto em que ele ainda gira de forma estável
+até a rotação máxima permitida. A \autoref{fig:fluxo_ensaio_helice} resume
+o ensaio: em cada patamar, o motor permanece tempo suficiente para
+estabilizar a rotação, seguindo o critério de regime permanente
+formalizado no \autoref{alg:kq_identificacao}; só então são registrados a rotação, a
+tração medida pela célula de carga, o torque estimado pelo observador e a
+densidade do ar, calculada pela \autoref{eq:densidade_calculo} a partir da
+pressão e da temperatura do ambiente.
+
+\begin{figure}[H]
+    \centering
+    \caption{Fluxo do ensaio de identificação dos coeficientes da hélice}
+    \label{fig:fluxo_ensaio_helice}
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=1cm, minimum width=3.1cm, text width=2.9cm},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[box] (duty)  at (0,0)   {Novo patamar\\de aceleração};
+        \node[box] (estab) at (3.6,0) {Aguarda\\estabilizar};
+        \node[box] (reg)   at (7.2,0) {Registra rotação,\\tração e torque};
+        \node[box] (calc)  at (10.8,0){Calcula $C_T$ e\\$C_Q$ do patamar};
+
+        \draw[arrow] (duty) -- (estab);
+        \draw[arrow] (estab) -- (reg);
+        \draw[arrow] (reg) -- (calc);
+        \draw[arrow] (calc.north) to[out=60, in=120, looseness=0.5] node[above, font=\scriptsize]{próximo patamar} (duty.north);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O \autoref{alg:kq_identificacao} formaliza o critério de patamar usado
+nesse ensaio: a detecção automática dos intervalos de regime permanente a
+partir do perfil de referência e o cálculo do coeficiente por patamar.
+
+\begin{algorithm}[H]
+\caption{Identificação do coeficiente aerodinâmico global $k_Q$ por patamar}
+\label{alg:kq_identificacao}
+\begin{algorithmic}[1]
+\Require $\omega_m,\hat{\omega}_e,T_e,\hat{T}_e$ (vetores), $R$ (perfil de RPM), $T_s$, $\tau_{\mathrm{PI}}$, $\mathrm{RPM}_{\min}$
+\Function{DetectaPatamares}{$R$}
+    \State $M \gets (\Delta R = 0) \wedge (R > \mathrm{RPM}_{\min})$
+    \State $P \gets$ pares $(s,e)$ dos blocos contínuos de $M$
+    \State \Return $P$
+\EndFunction
+\Statex
+\Function{CalculaKQ}{$\omega_m,\hat{\omega}_e,T_e,\hat{T}_e,P$}
+    \State $n \gets \tau_{\mathrm{PI}}/T_s$
+    \ForAll{$(s,e) \in P$}
+        \If{$e-s \le n$}
+        \State \textbf{continue}
+        \EndIf
+        \State $i,j \gets s+n,\ e-1$
+        \State $k_1 \gets \overline{T_e[i:j]} \,/\, \overline{\omega_m[i:j]}^{\,2}$
+        \State $k_2 \gets \overline{\hat{T}_e[i:j]} \,/\, \overline{\hat{\omega}_e[i:j]}^{\,2}$
+        \State guarda $(k_1,k_2)$ em $K$
+    \EndFor
+    \State $\bar{k}_1,\bar{k}_2 \gets$ médias de $K$
+    \State $\epsilon \gets 100\,|\bar{k}_2-k_{Q,\mathrm{nom}}|/k_{Q,\mathrm{nom}}$
+    \State \Return $K,\ \bar{k}_1,\ \bar{k}_2,\ \epsilon$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+Como o ensaio é feito parado, sem vento incidente sobre a hélice
+($V_\infty \approx 0$), os coeficientes de tração ($C_T$) e de torque
+($C_Q$) de cada patamar são calculados diretamente pelas
+Equações~\eqref{eq:Prop_coeff2} e \eqref{eq:Prop_coeff1}.
+
+A referência de comparação são as tabelas de desempenho publicadas pelo
+próprio fabricante da hélice (APC) \cite{apc_performance_data}, que
+fornecem $C_T$ e $C_P$ em função da razão de avanço $J$ e já incluem a
+condição parada, convertendo-se $C_P$ para $C_Q$ pela
+\autoref{eq:cq_from_cp}. O banco de dados de hélices da
+\textit{University of Illinois Urbana-Champaign} (UIUC) entra como segunda
+referência, para hélices da categoria \textit{Thin Electric} equivalentes
+\cite{SeligPropDB}.
+
+Como o comportamento aerodinâmico da hélice muda com a rotação (efeito do
+número de Reynolds), os coeficientes são reportados por patamar de rotação,
+e não como um valor único para toda a faixa de operação.
 
 \subsection{Parametrização do SMO}
 \label{sec:param_smo}

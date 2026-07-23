@@ -35,6 +35,39 @@ PE2--PE13 & GPIO saída/entrada & Clock e dado das 6 células de carga (HX711) \
 \small Fonte: Autor (2026)
 \end{table}
 
+O esquemático e o roteamento da placa, resultantes dessa distribuição de
+periféricos, estão na \autoref{fig:pcb_siba}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Esquemático e roteamento da placa SIBA (espaço reservado)}
+    \label{fig:pcb_siba}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=\textwidth,
+              minimum height=7cm, text width=0.85\textwidth, font=\small]
+              {Exportação do KiCad: esquemático elétrico e vista de
+               roteamento da placa SIBA};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\subsection{Calibração do Tubo de Pitot (placeholder)}
+\label{sec:calibracao_pitot}
+
+\textit{Pendente: parágrafo com o túnel de vento utilizado, a faixa de
+velocidade coberta, o número de pontos ensaiados e o ajuste obtido ---
+depende de ensaio de bancada ainda não realizado.}
+
+A Tabela~\ref{tab:pinagem_siba} não inclui sensor barométrico, de modo que
+a SIBA não mede pressão nem temperatura do ambiente para calcular a
+densidade do ar sozinha. A densidade $\rho$ usada nos cálculos aerodinâmicos
+(\autoref{eq:densidade_calculo}) é informada manualmente pelo operador na
+interface, com um valor padrão de atmosfera ao nível do mar
+($\SI{1,225}{\kilo\gram\per\meter\cubed}$); cabe ao operador calcular esse
+valor a partir de leituras locais de pressão e temperatura antes de
+inseri-lo, caso o ensaio exija maior precisão do que o padrão.
+
 \subsection{\textit{Firmware}}
 
 A \autoref{fig:blocos_siba} situa as camadas da \autoref{sec:padronizacao_placas}

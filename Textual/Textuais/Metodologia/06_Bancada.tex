@@ -179,6 +179,24 @@ resistor diminui. A dissipação instantânea de pico é
     \label{eq:ppico}
 \end{equation}
 
+A \autoref{fig:precarga_osc} traz a captura de osciloscópio da tensão de
+barramento do ESC durante a sequência de pré-carga, usada para validar em
+bancada o tempo de carregamento previsto pela Equação~\eqref{eq:tau_valor}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Tensão no barramento do ESC durante a sequência de pré-carga (espaço reservado)}
+    \label{fig:precarga_osc}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+              minimum height=5cm, text width=0.7\textwidth, font=\small]
+              {Captura de osciloscópio: subida da tensão de barramento do
+               ESC durante a pré-carga, a confrontar com $\tau \approx
+               \SI{0,2}{\second}$};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \subsection{Caixa de Instrumentação}
 
@@ -189,7 +207,21 @@ módulo físico. A escolha da impressão 3D permitiu a prototipagem rápida de u
 geometria customizada às necessidades do projeto, com fixação interna dedicada
 para cada subsistema. Por se tratar de ensaios de curta duração, a limitação
 térmica do PLA não compromete a operação; ainda assim, previram-se aberturas
-para dissipação do calor gerado pelos componentes de potência.
+para dissipação do calor gerado pelos componentes de potência. O modelo
+tridimensional da caixa está na \autoref{fig:cad_caixa}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Modelo em CAD da caixa de instrumentação (espaço reservado)}
+    \label{fig:cad_caixa}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+              minimum height=6cm, text width=0.7\textwidth, font=\small]
+              {Render do modelo CAD da caixa de instrumentação};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \subsection{Organização Interna}
 
@@ -208,7 +240,23 @@ sem danificar o encapsulamento do componente.
 
 O \textit{switch} Ethernet foi instalado internamente, com as portas RJ45
 acessíveis pelo painel externo da caixa, permitindo a conexão com a rede de
-aquisição sem necessidade de abertura do gabinete.
+aquisição sem necessidade de abertura do gabinete. A
+\autoref{fig:montagem_interna} mostra essa organização.
+
+\begin{figure}[H]
+    \centering
+    \caption{Organização interna da caixa de instrumentação (espaço reservado)}
+    \label{fig:montagem_interna}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.85\textwidth,
+              minimum height=6cm, text width=0.75\textwidth, font=\small]
+              {Fotografia da caixa aberta: placas SAME e SIBA, placa de
+               condicionamento, ESC e \textit{switch} Ethernet fixados
+               internamente};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \subsection{Conexões Externas}
 
@@ -219,4 +267,19 @@ interior da caixa através de conectores \textit{bullet} de \SI{6}{\milli\meter}
 permitindo a interposição dos núcleos de ferrite para a medição de corrente sem
 interrupção do cabo de potência. Uma entrada dedicada no painel permite a
 conexão dos fios da célula de carga utilizada para a medição de força de tração
-na bancada aerodinâmica.
+na bancada aerodinâmica. A \autoref{fig:painel_externo} mostra o painel
+montado.
+
+\begin{figure}[H]
+    \centering
+    \caption{Painel externo com as conexões de potência, de sinal e de rede (espaço reservado)}
+    \label{fig:painel_externo}
+    \begin{tikzpicture}
+        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
+              minimum height=5cm, text width=0.7\textwidth, font=\small]
+              {Fotografia do painel externo: conectores XT90, saídas de
+               fase, entrada da célula de carga e portas RJ45};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}

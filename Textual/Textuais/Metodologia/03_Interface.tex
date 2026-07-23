@@ -251,7 +251,7 @@ janela da aplicação, a serem inseridas a partir dos ensaios em bancada.
 
 Para que essa parametrização interativa e o monitoramento operem com alta confiabilidade, mitigando erros de interpretação de dados entre diferentes plataformas, o sistema adota uma estratégia de padronização baseada na linguagem de serialização YAML (\textit{YAML Ain't Markup Language}). A implementação utiliza arquivos de descrição que definem as estruturas fundamentais de telemetria (\textit{logs}), comandos (\textit{CMD}) e configurações da interface.
 
-Como ilustrado na \autoref{fig:yaml_example_config}, essa abordagem estabelece os arquivos YAML (\textit{commands.yaml}, \textit{user\_prefs.yaml}, \textit{SAME.yaml} e \textit{SIBA.yaml}) como a fonte única da verdade do projeto. Enquanto a aplicação de alto nível em \textit{Python} consome esses arquivos para moldar a GUI e gerar os comandos padronizados, um \textit{script} auxiliar (\textit{generate.py}) processa as configurações exclusivas das placas (SAME e SIBA) para compilar automaticamente os arquivos de cabeçalho (\textit{headers} em C). Dessa forma, o \textit{firmware} dos microcontroladores e a aplicação \textit{desktop} compartilham a mesma lógica estrutural. Garante-se, assim, que qualquer alteração nos dados trafegados seja refletida instantaneamente em todas as instâncias do sistema, assegurando a integridade da comunicação.
+Como ilustrado na \autoref{fig:yaml_example_config}, essa abordagem padroniza e centraliza a configuração do projeto em cinco arquivos YAML: \textit{commands.yaml} (comandos de texto do \textit{TinyTerminal}), \textit{user\_prefs.yaml} (preferências da janela principal), \textit{plots.yaml} (mapeamento das variáveis de telemetria para os gráficos) e os arquivos de cada placa, \textit{SIBA.yaml} e \textit{SAME.yaml}. Os arquivos de placa alimentam dois caminhos independentes: em tempo de compilação, o \textit{script} auxiliar \textit{generate.py} os processa para gerar os cabeçalhos C compartilhados pelo \textit{firmware}; em tempo de execução, o \textit{TinyTerminal} os lê para resolver comandos de texto no mesmo formato binário. Um terceiro caminho é particular à SAME: os diálogos de calibração e estimação (motor, hélice, ganhos do observador) não só leem o \textit{SAME.yaml} como também escrevem de volta nele os resultados obtidos --- diferente da calibração de sensor via comando de rede (\autoref{fig:seq_calibracao}), que fica só na memória volátil da placa, esses parâmetros do motor persistem em disco entre sessões. Garante-se, assim, que \textit{firmware} e aplicação \textit{desktop} compartilhem a mesma fonte de dados, e que o ajuste feito numa sessão da interface esteja disponível na próxima.
 
 O comando (\texttt{CMD}) resultante dessa geração, comum às placas SIBA e SAME,
 é uma estrutura compacta de 8 \textit{bytes}, reproduzida a seguir:
@@ -276,10 +276,101 @@ segue a mesma lógica de geração, com campos específicos por placa.
 \begin{figure}[H]
     \centering
     \caption{Fluxo de uso dos arquivos YAML para configuração integrada da GUI e do \textit{firmware}.}
-    \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Metodologia/YAML_uso.drawio.png}
     \label{fig:yaml_example_config}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\small,
+        caller/.style={draw, rounded corners, align=center, minimum width=3.4cm, minimum height=1cm},
+        yamlitem/.style={align=left, font=\small\itshape},
+        outbox/.style={align=left, text width=4.2cm, font=\small},
+        arrow/.style={-{Latex}, thick},
+        barrow/.style={{Latex}-{Latex}, thick},
+        elabel/.style={font=\scriptsize, align=center, text width=2.6cm}
+    ]
+        % Caixa única "Config" (centro), com os 5 YAMLs listados dentro
+        \node[draw, thick, rounded corners, minimum width=4.2cm, minimum height=10.4cm] (cfgbox) at (5.5,3) {};
+        \node[font=\bfseries] at (5.5,7.6) {Config};
+        \node[yamlitem] at (5.5,6.4) {commands.yaml};
+        \node[yamlitem] at (5.5,5.2) {user\_prefs.yaml};
+        \node[yamlitem] at (5.5,4) {plots.yaml};
+        \node[yamlitem] at (5.5,2.8) {SIBA.yaml};
+        \node[yamlitem] at (5.5,1.6) {SAME.yaml};
 
+        % Chamadores (coluna esquerda)
+        \node[caller] (tiny) at (0,7.5) {\textit{TinyTerminal}\\(execução)};
+        \node[caller] (main) at (0,4.5) {Janela principal};
+        \node[caller] (gen)  at (0,1.5) {\textit{generate.py}\\(compilação)};
+        \node[caller] (dial) at (0,-1.5) {Diálogos de\\calibração/estimação};
+
+        % Resultados (coluna direita)
+        \node[outbox] (out_tiny) at (10.3,7.5) {Resolução de comando de texto para \texttt{CMD} binário};
+        \node[outbox] (out_main) at (10.3,4.5) {Preferências e gráficos configurados};
+        \node[outbox] (out_gen)  at (10.3,1.5) {Cabeçalhos C por placa: \texttt{Common\_Types.h}, \texttt{CMD.h}, \texttt{Log\_Manager.h}, \texttt{CMD\_Core\_prm.h}};
+        \node[outbox] (out_dial) at (10.3,-1.5) {Motor, hélice e ganhos do SMO gravados de volta};
+
+        % Chamador -> Config, com rótulo de quais YAMLs cada um usa
+        \draw[arrow] (tiny) -- (cfgbox.west |- tiny) node[elabel, midway, above]{lê \textit{commands}, \textit{SIBA}, \textit{SAME}};
+        \draw[barrow] (main) -- (cfgbox.west |- main) node[elabel, midway, above]{lê/escreve \textit{user\_prefs}; lê \textit{plots}};
+        \draw[arrow] (gen) -- (cfgbox.west |- gen) node[elabel, midway, above]{lê \textit{SIBA}, \textit{SAME}};
+        \draw[barrow] (dial) -- (cfgbox.west |- dial) node[elabel, midway, above]{lê/escreve \textit{SAME}};
+
+        % Config -> Resultado
+        \draw[arrow] (cfgbox.east |- tiny) -- (out_tiny);
+        \draw[arrow] (cfgbox.east |- main) -- (out_main);
+        \draw[arrow] (cfgbox.east |- gen)  -- (out_gen);
+        \draw[arrow] (cfgbox.east |- dial) -- (out_dial);
+    \end{tikzpicture}%
+    }
 
     Fonte: Autor (2026).
+\end{figure}
+
+A calibração de um sensor usa o mesmo caminho de tradução do
+\textit{TinyTerminal} (\autoref{fig:tinyterminal_fluxo}): o operador edita
+um valor (ganho, deslocamento de zero ou limite de segurança) na tela de
+configuração de sensores, e esse valor é traduzido no mesmo formato de
+comando usado em todo o resto do sistema, enviado pela rede até a placa
+correspondente, que aplica o ajuste ao canal do sensor indicado. A
+\autoref{fig:seq_calibracao} resume essa sequência completa, da edição na
+tela até a confirmação. Não existe uma mensagem de confirmação separada: a
+mudança só é percebida no próximo pacote de telemetria, quando a leitura
+daquele canal passa a refletir o novo valor (por exemplo, uma célula de
+carga recém-tarada passa a ler próximo de zero). Esses ajustes não são
+salvos de forma permanente --- ficam apenas na memória da placa enquanto
+ela estiver ligada --- de modo que, ao desligar e religar, os valores
+voltam ao padrão gravado no arquivo de configuração da placa
+(\autoref{fig:yaml_example_config}), e a calibração feita pela interface
+precisa ser refeita a cada nova conexão.
+
+\begin{figure}[H]
+    \centering
+    \caption{Sequência de calibração de um sensor, da interface à confirmação por telemetria}
+    \label{fig:seq_calibracao}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        font=\scriptsize,
+        actor/.style={draw, rounded corners, align=center, minimum width=2.3cm, minimum height=0.7cm},
+        lifeline/.style={dashed, gray},
+        msg/.style={-{Latex}, thick}
+    ]
+        \node[actor] (dlg) at (0,0)   {Tela de\\configuração};
+        \node[actor] (term) at (2.8,0) {Tradução para\\comando padrão};
+        \node[actor] (nci) at (5.6,0) {Rede\\(placa recebe)};
+        \node[actor] (core) at (8.4,0) {Firmware aplica\\no sensor};
+        \node[actor] (tel) at (11.2,0) {Telemetria};
+        \node[actor] (gui) at (14.0,0) {Interface\\(operador)};
+
+        \foreach \n in {dlg,term,nci,core,tel,gui}
+            \draw[lifeline] (\n.south) -- ++(0,-4.6);
+
+        \draw[msg] (0,-1.0)  -- (2.8,-1.0) node[midway, above, font=\tiny]{placa, sensor, campo, valor};
+        \draw[msg] (2.8,-1.9) -- (5.6,-1.9) node[midway, above, font=\tiny]{comando binário};
+        \draw[msg] (5.6,-2.8) -- (8.4,-2.8) node[midway, above, font=\tiny]{identifica o sensor e o ajuste};
+        \draw[msg] (8.4,-3.7) -- (11.2,-3.7) node[midway, above, font=\tiny]{canal atualizado};
+        \draw[msg] (11.2,-4.4) -- (14.0,-4.4) node[midway, above, font=\tiny]{leitura refletindo o novo ganho};
+    \end{tikzpicture}%
+    }
+
+    Fonte: Autor (2026)
 \end{figure}
 
