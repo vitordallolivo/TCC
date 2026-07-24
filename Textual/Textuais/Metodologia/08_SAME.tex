@@ -74,7 +74,7 @@ Tempo total de conversão & $t_{CONV}$ & 14 & -- & 252 & $1/f_{ADC}$ \\
 \end{tabular}
 \end{table}
 
-Com clock de 14~MHz, o tempo total de conversão varia entre 1~$\mu$s (14 ciclos) e 18~$\mu$s (252 ciclos). Como o período de PWM em 16~kHz é de 62,5~$\mu$s e cada ADC realiza apenas 3 conversões por período, há folga suficiente para adotar tempo de amostragem $t_s$ elevado, priorizando o assentamento do sinal em detrimento da velocidade bruta.
+Com clock de 14~MHz, o tempo total de conversão varia entre 1~$\mu$s (14 ciclos) e 18~$\mu$s (252 ciclos). Como o período de PWM em 12~kHz é de 83,33~$\mu$s e cada ADC realiza apenas 3 conversões por período, há folga suficiente para adotar tempo de amostragem $t_s$ elevado, priorizando o assentamento do sinal em detrimento da velocidade bruta.
 
 A impedância de entrada externa $R_{AIN}$ deve ser limitada para garantir que o erro de amostragem permaneça abaixo de 1/4 LSB, conforme a \autoref{eq:rain_max} \cite{ch32v307_datasheet}.
 
@@ -139,7 +139,7 @@ f_c = \frac{1}{2\pi RC}
 \label{eq:fc_antialiasing}
 \end{equation}
 
-escolhida em torno de 40--50~kHz. O objetivo é atenuar componentes de frequência acima da frequência de Nyquist ($f_{\text{Ny}} = f_s / 2 \approx 56~\text{kHz}$) que não contêm informação útil sobre o motor mas carregam ruído de chaveamento (16~kHz e seus harmônicos). A atenuação de ~40 dB/década do filtro de primeira ordem elimina efetivamente o ruído PWM mantendo a banda passante dinâmica do motor intacta, um compromisso clássico em acionamentos de potência \cite{franco_opamps}.
+escolhida em torno de 40--50~kHz. O objetivo é atenuar componentes de frequência acima da frequência de Nyquist ($f_{\text{Ny}} = f_s / 2 \approx 56~\text{kHz}$) que não contêm informação útil sobre o motor mas carregam ruído de chaveamento (12~kHz e seus harmônicos). A atenuação de ~40 dB/década do filtro de primeira ordem elimina efetivamente o ruído PWM mantendo a banda passante dinâmica do motor intacta, um compromisso clássico em acionamentos de potência \cite{franco_opamps}.
 
 A corrente de fase é medida por sensor Hall, que fornece uma tensão proporcional à corrente \cite{allegro_hall_sensors}:
 

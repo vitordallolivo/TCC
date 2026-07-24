@@ -7,6 +7,141 @@ Legenda de status: ✅ escrito · ⏳ não iniciado
 
 ---
 
+## ✅ Ajustes pontuais pedidos ao vivo (revisão desta rodada)
+
+Cinco pedidos pequenos e independentes, todos aplicados e compilados juntos
+no final. Ordem cronológica do pedido, não de importância.
+
+### 1. Algoritmo 7 movido de Cap. 4 para Cap. 3 (inversão deliberada)
+
+O algoritmo de identificação de patamar/coeficiente $k_Q$
+(`alg:kq_identificacao`) vivia definido por inteiro dentro de
+`Conclusao.tex` (Resultados), e a Metodologia (`02_MotorBLDC.tex`, seção
+"Identificação dos Coeficientes Aerodinâmicos da Hélice em Bancada",
+Ação 3) só tinha um `\autoref` apontando pra lá — ordem errada, já que o
+algoritmo é método ("como se faz"), não resultado. **Invertido**: o bloco
+`\begin{algorithm}...\end{algorithm}` completo agora está em
+`02_MotorBLDC.tex`, logo após a `fig:fluxo_ensaio_helice`; em
+`Conclusao.tex` restou só a frase de citação (\autoref ao algoritmo, sem
+redefini-lo). Numeração do algoritmo mudou automaticamente (LaTeX recalcula
+sozinho) já que agora `alg:kq_identificacao` aparece antes de
+`alg:autotuning` no fluxo do documento — não precisa de ajuste manual.
+
+Também diminuída a seta de retorno ("próximo patamar") da
+`fig:fluxo_ensaio_helice` (`looseness=0.5` em vez do arco cheio) — a pedido
+do autor, que achou o arco grande demais.
+
+### 2. Frequência do ESC: 16 kHz → 12 kHz
+
+O autor confirmou que a frequência real de chaveamento do ESC é
+\SI{12}{kHz}, não \SI{16}{kHz} como o texto assumia em vários pontos de
+`08_SAME.tex`. **Todas as 4 ocorrências** de 16~kHz como frequência do ESC
+foram trocadas para 12~kHz, conferidas por `grep` até zerar:
+- Justificativa da taxa de amostragem do ADC (parágrafo de abertura da
+  seção "Medição de Tensão e Corrente de Fase").
+- Período de PWM usado no cálculo de folga de $t_s$: era \SI{62,5}{\micro\second}
+  a 16~kHz, **recalculado para \SI{83,33}{\micro\second} a 12~kHz** (esse
+  segundo era um número derivado que passou despercebido na primeira
+  varredura e só foi pego numa segunda checagem — confirmado que não sobrou
+  nenhum "62,5" órfão no arquivo).
+- Frequência de corte do filtro \textit{antialiasing} (ruído de
+  chaveamento e harmônicos).
+- A frase que comparava a simulação CA do sensor de corrente (12~kHz) com
+  o chaveamento do ESC (antes 16~kHz): como os dois valores agora
+  coincidem, a frase foi reescrita para só declarar que a simulação usa a
+  mesma frequência do ESC, sem precisar mais distinguir os dois números.
+
+**Revisão do orientador:** nenhuma pendência restante — as 4 ocorrências
+foram confirmadas por `grep` (zero resultado para `16.*kHz` em todo
+`Textuais/` após o ajuste).
+
+### 3. Conteúdo de resultado movido da Metodologia (3.8.1) pros Resultados
+
+O autor apontou que um bloco inteiro em `08_SAME.tex` (seção do sensor de
+corrente) era resultado, não método, e "tava no lugar errado". Movido para
+`Conclusao.tex` (`sec:resultado_sensor_corrente`):
+- As duas figuras de densidade de fluxo (núcleo isolado e três núcleos),
+  antes em `Textuais/Imgs/Metodologia/`, agora fisicamente movidas
+  (`mv`, não copiadas) para `Textuais/Imgs/Resultados/`, com labels novos
+  (`fig:resultado_single_gap`, `fig:resultado_trifase_geral` — os antigos
+  `fig:sensor_single_gap`/`fig:sensor_trifase_geral` não existem mais em
+  lugar nenhum).
+- Parágrafo do critério de \textit{crosstalk} desprezível (1\%, ancorado no
+  erro do ADC) — movido pra logo antes do resultado de crosstalk que já
+  existia em Resultados (Ação 15), removendo a referência cruzada que
+  antes apontava de volta pra Metodologia.
+- Parágrafo da banda passante do sensor (SS49E, $f_{-3dB}\approx117$~kHz).
+- Parágrafo da margem de saturação do núcleo (lei de Ampère,
+  $B_{gap}\approx54,6$~mT).
+- Parágrafo sobre ausência de rejeição de campo de modo comum (núcleo
+  único vs. sensoriamento diferencial).
+
+O que **ficou** na Metodologia (3.8.1): justificativa de custo, topologia,
+tabela do SS49E, escolha do método de elementos finitos, descrição das
+duas condições de simulação (CC isolado / CA três núcleos) — isso
+continua sendo "como se faz", não resultado.
+
+### 4. Marcadores Q1/Q2/Q3 e ajustes finos nas 5 figuras de planejamento
+
+- Adicionados losangos pretos Q1/Q2/Q3 com seta na borda esquerda de cada
+  uma das 5 figuras de planejamento (CAD, SIBA, Interface, SAME + o
+  portão), na altura exata da transição de cor das faixas de fundo — não
+  existia nenhum marcador antes desse pedido.
+- SIBA: as 5 considerações soltas do topo (Safety, Alimentação, ETH,
+  Escolha de micro, Esquemáticos) — que geravam setas cruzando —
+  **fundidas num bloco único**. O par "Arquivos BOM"/"Pedir" **substituído
+  por "Esquemático" e "Protótipo" em blocos próprios**, com seta tracejada
+  de retrabalho ("se reprovado, refatora") saindo de "Validação PCB" —
+  mesmo padrão replicado na SAME (removido também o nó "Pedir" de lá,
+  Q3 da SAME ficou só com "Validações").
+- Interface: bloco Q3 novo ("Interface Funcional") reunindo funcionalidades
+  reais já descritas no texto (configuração de sensores, calibração de
+  células de carga, \textit{scripts} de estimação SMO/hélice, registro em
+  CSV) — também fundido num bloco único pelo mesmo motivo de cruzamento de
+  setas; corrigido um bug visual em que uma seta cruzava por cima do texto
+  de "TinyTerminal" (linha reta entre dois nós que ficavam nos dois lados
+  do TinyTerminal).
+- SAME: BLDC/Parâmetros/Simulações/Observador/Teste movidos mais pra
+  direita pra parar de sobrepor "Observador" e "Simulações".
+- Figura do fluxo YAML (`fig:yaml_example_config`): caixa central "Config"
+  aumentada de 6,6~cm pra 10,4~cm de altura — as setas de cima
+  (\textit{TinyTerminal}) e de baixo (Diálogos) apontavam pra fora da
+  caixa antes desse ajuste.
+
+### 5. Listas de siglas e símbolos (`PreTextuais/Listas.tex`) auditadas
+
+Processo: `grep` de cada sigla/símbolo contra todo `Textuais/*.tex` e
+`Textuais/**/*.tex`, excluindo a própria `Listas.tex`, pra achar o que
+nunca aparece no corpo do texto e o que aparece mas não tá listado. Nenhum
+item removido ou adicionado sem confirmar com `grep` primeiro.
+
+**Siglas removidas (zero ocorrência no corpo do texto):** BMS, CCT, CPU,
+DAC, DLL, ECM, ISO, LAN, LLC, PCI, SEI, TCKEC, TLS. `ECM` em particular é
+sintoma de uma seção sobre modelo de circuito equivalente de bateria que
+nunca foi escrita — os símbolos `$R_0$`/`$R_1$` (resistência ôhmica/de
+polarização da bateria) tinham o mesmo problema, ver abaixo.
+
+**Siglas adicionadas (usadas no texto, faltavam na lista):** BOM, CA, CC,
+FEMM, GND, LSB, PC, RMS, SPMM.
+
+**Símbolos removidos:** `$R_0$` (zero ocorrência em todo o documento) e
+`$R_1$` (a definição na lista era "resistência de polarização da bateria",
+mas o único uso real de `$R_1$` no texto é como resistor genérico da ponte
+de Wheatstone em `Revisao.tex` — contexto completamente diferente do
+descrito; removido em vez de redefinido porque é uma variável local,
+autoexplicada no próprio parágrafo onde aparece).
+
+**Não adicionados de propósito (nomes próprios, não siglas técnicas):**
+APC (fabricante de hélice), UIUC (universidade), WCH (fabricante do
+microcontrolador) — apareceram na varredura de padrão `(XXXX)` mas são
+marcas/instituições, não abreviações de termo técnico; convenção ABNT não
+lista isso na lista de siglas.
+
+**Revisão do orientador:** nenhuma pendência de conteúdo — é só
+higienização de lista, não afeta o corpo do texto.
+
+---
+
 ## ✅ Reconstrução das figuras "quadro geral" (metodologia principal + YAML)
 
 A pedido do autor, duas figuras grandes e ilegíveis (importadas como imagem
