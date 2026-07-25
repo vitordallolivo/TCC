@@ -51,4 +51,16 @@ float Observer_Get_Rpm(void);            /* rpm mecânico (→ rpm_same) */
 float Observer_Get_Te(void);             /* torque eletromagnético [N·m] */
 float Observer_Get_Torque_Helice(void);  /* torque na hélice [N·m] */
 
+/* ---- Saúde do observador (consumida pelo Security_Manager) ------------- */
+/* @brief Amplitude da BEMF estimada |ê| do último passo (lock da PLL). */
+float Observer_Get_Bemf_Amplitude(void);
+/* @brief Erro de fase da PLL do último passo (rad; 0 se BEMF abaixo do limiar). */
+float Observer_Get_Phase_Error(void);
+/* @brief true se o estado dinâmico (î,ê,PLL,θ̂,torque) é finito (não divergiu). */
+bool  Observer_State_Is_Finite(void);
+/* @brief true se os parâmetros físicos são válidos (Rs,Ls,p,Kv,Ts > 0). */
+bool  Observer_Params_Physical_Valid(void);
+/* @brief true se os sinais dos ganhos Γ estão corretos (Γ1>0, Γ2<0, Γt>0). */
+bool  Observer_Gamma_Signs_Valid(void);
+
 #endif /* OBSERVER_MANAGER_H */

@@ -1,7 +1,7 @@
 """Camada 4 · Apresentação — coeficientes da hélice (CT, CQ, J) via CSV.
 
-Consome o CSV COMPLETO exportado pela GUI (on_save_csv — Timestamp do PC +
-telemetria SIBA/SAME). O usuário escolhe:
+Consome o CSV exportado pela GUI (botão "Iniciar/Encerrar Registro" — Timestamp
+do PC + telemetria SIBA/SAME). O usuário escolhe:
 - qual FORÇA usar como TRAÇÃO (obrigatório — pergunta explícita);
 - a coluna de TORQUE (padrão: o estimado pela SAME, `torque_eletrico`);
 - a coluna de RPM (padrão: `rpm_same`) e de velocidade do ar (`air_speed`);

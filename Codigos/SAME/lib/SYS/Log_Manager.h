@@ -74,6 +74,8 @@ typedef struct __attribute__((packed)) {
 
     log_status status;
 
+    uint32_t error_code;
+
 } TELEMETRY_LOG;
 
 /* ===========================================================

@@ -287,7 +287,14 @@ diagnóstico de hardware bruto (I2C, DAC) e ajustes de bancada
 
 `Security_Manager_Error_Detect(bit)`/`_Erase(bit)` setam/limpam **por
 transição** (só logam na borda). O agregado vai inteiro a cada 100 ms no
-campo `TELEMETRY_LOG.error_code` (`siba error` decodifica o mesmo valor):
+campo `TELEMETRY_LOG.error_code` (`siba error` decodifica o mesmo valor).
+
+> **Fonte única:** o enum `siba_error_bit_t` é **GERADO** da seção `error_bits`
+> do `SIBA.yaml` (→ `lib/SYS/Error_Codes.h`, via `generate.py`), a MESMA seção
+> que alimenta a decodificação pt-BR da GUI (`Communication_Data/errors.py`).
+> Edite o YAML e regenere; não edite o enum à mão. (Mesmo esquema na SAME.)
+
+A tabela abaixo espelha esse `error_bits`:
 
 | Bit | Nome | Origem |
 |---|---|---|

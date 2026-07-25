@@ -1,11 +1,13 @@
-"""ErrorPanelDialog — painel completo de erros/alarmes da SIBA com "lâmpadas".
+"""ErrorPanelDialog — painel completo de erros/alarmes com "lâmpadas".
 
-Mostra TODAS as condições possíveis (de Communication_Data/errors.py), uma por
-linha com uma lâmpada: acesa (vermelha) quando a condição está ativa na
-telemetria, apagada (cinza) quando não. Agrupado por área e em português claro.
+Mostra TODAS as condições possíveis de CADA placa (SIBA, SAME, …), lidas da
+seção `error_bits` do yaml de cada uma (via Communication_Data/errors.py), uma
+por linha com uma lâmpada: acesa (vermelha) quando a condição está ativa na
+telemetria, apagada (cinza) quando não. Agrupado por placa → área, em pt-BR.
 
-A lâmpada é lida do `error_code` agregado que a GUI mantém
-(`AlbatrozGUI.current_error_code()`), atualizado a cada ~300 ms.
+Cada placa é decodificada com a SUA tabela (bits iguais significam coisas
+diferentes entre placas). O código por placa vem de
+`AlbatrozGUI.current_error_codes()`, atualizado a cada ~300 ms.
 """
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -13,7 +15,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from Communication_Data.errors import SIBA_ERROR_BITS
+from Communication_Data import errors
 
 
 _LAMP_ON = "#ff4136"     # vermelho — condição ATIVA
@@ -40,13 +42,15 @@ class _Lamp(QLabel):
 
 
 class _ErrorRow:
-    def __init__(self, mask, message):
+    def __init__(self, board, mask, message):
+        self.board = board
         self.mask = mask
         self.lamp = _Lamp()
         self.label = QLabel(message)
         self.label.setWordWrap(True)
 
-    def update(self, code):
+    def update(self, codes):
+        code = int(codes.get(self.board, 0) or 0)
         on = bool(code & self.mask)
         self.lamp.set_on(on)
         self.label.setStyleSheet(
@@ -58,7 +62,7 @@ class ErrorPanelDialog(QDialog):
     def __init__(self, gui, parent=None):
         super().__init__(parent)
         self.gui = gui
-        self.setWindowTitle("Painel de Erros e Alarmes — SIBA")
+        self.setWindowTitle("Painel de Erros e Alarmes")
         self.setWindowFlags(Qt.Window)
         self.resize(520, 560)
         self._rows = []
@@ -82,22 +86,34 @@ class ErrorPanelDialog(QDialog):
         inner = QWidget()
         vbox = QVBoxLayout(inner)
 
-        # Agrupa por área, preservando a ordem dos bits.
-        por_grupo = {}
-        for mask, (msg, grp) in SIBA_ERROR_BITS.items():
-            por_grupo.setdefault(grp, []).append((mask, msg))
+        # Uma seção por placa (SIBA, SAME, …), subdividida por área. A tabela de
+        # cada placa vem da sua seção error_bits do yaml (errors.py).
+        configs = getattr(self.gui, "configs", {}) or {}
+        for board, cfg in configs.items():
+            table = errors.ensure_registered(board, cfg or {})
+            if not table:
+                continue  # placa sem error_bits (ex.: SPMM)
 
-        for grp, items in por_grupo.items():
-            box = QGroupBox(grp)
-            gl = QVBoxLayout(box)
-            for mask, msg in items:
-                row = _ErrorRow(mask, msg)
-                self._rows.append(row)
-                h = QHBoxLayout()
-                h.addWidget(row.lamp, 0, Qt.AlignTop)
-                h.addWidget(row.label, 1)
-                gl.addLayout(h)
-            vbox.addWidget(box)
+            # Agrupa por área, preservando a ordem dos bits.
+            por_grupo = {}
+            for mask, (msg, grp) in table.items():
+                por_grupo.setdefault(grp, []).append((mask, msg))
+
+            board_box = QGroupBox(f"● {board}")
+            board_box.setStyleSheet("QGroupBox { font-weight: bold; }")
+            bl = QVBoxLayout(board_box)
+            for grp, items in por_grupo.items():
+                box = QGroupBox(grp)
+                gl = QVBoxLayout(box)
+                for mask, msg in items:
+                    row = _ErrorRow(board, mask, msg)
+                    self._rows.append(row)
+                    h = QHBoxLayout()
+                    h.addWidget(row.lamp, 0, Qt.AlignTop)
+                    h.addWidget(row.label, 1)
+                    gl.addLayout(h)
+                bl.addWidget(box)
+            vbox.addWidget(board_box)
         vbox.addStretch()
 
         scroll = QScrollArea()
@@ -114,14 +130,17 @@ class ErrorPanelDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def _refresh(self):
-        code = 0
-        getter = getattr(self.gui, "current_error_code", None)
+        codes = {}
+        getter = getattr(self.gui, "current_error_codes", None)
         if callable(getter):
-            code = getter()
+            codes = getter() or {}
         for row in self._rows:
-            row.update(code)
+            row.update(codes)
 
-        n = bin(code).count("1") if code else 0
+        n = sum(bin(int(c) & 0xFFFFFFFF).count("1") for c in codes.values())
+        code = 0
+        for c in codes.values():
+            code |= int(c) & 0xFFFFFFFF
         if n == 0:
             self.lbl_header.setText("✓ Nenhum erro ativo — tudo OK")
             self.lbl_header.setStyleSheet(

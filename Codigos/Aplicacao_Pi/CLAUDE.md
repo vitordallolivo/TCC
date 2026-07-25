@@ -42,7 +42,7 @@ Aplicacao_Pi/
 │   ├── motor_config.py              # [domínio] perfis de motor (Config/motors/*.yaml) + build_motor_cmds
 │   ├── motor_math.py                # [domínio] Clarke/Park (numpy) para recalcular Iq/Id offline
 │   ├── spmm_analysis.py             # [domínio] regressão B/τc, derivada/J do coast-down (numpy puro)
-│   ├── errors.py                    # [domínio] decodifica error_code (bitfield) da SIBA em português
+│   ├── errors.py                    # [domínio] decodifica error_code (bitfield) POR PLACA em pt-BR (tabela vinda da seção error_bits do yaml de cada placa)
 │   ├── links/                       # [transporte] BoardLink (ABC)
 │   │   ├── base.py                  #   contrato: send()* abstrato, is_alive_link(), stop()
 │   │   ├── udp_struct_link.py       #   UdpStructLink — SIBA/SAME (CMD 8B / TELEMETRY_LOG)
@@ -67,7 +67,7 @@ Aplicacao_Pi/
 │   ├── LoadCellDialog.py            # Popout (Células de Carga): tara/ganho por peso conhecido
 │   ├── SAMEConfigDialog.py          # Popout (Motor → Criar): perfil de motor + aplica no hardware
 │   ├── SensorConfigDialog.py        # Popout (Opções): ganho/offset/limites de todos os sensores em lote
-│   ├── ErrorPanelDialog.py          # Popout (Opções): lâmpadas com todos os erros/alarmes da SIBA
+│   ├── ErrorPanelDialog.py          # Popout (Opções): lâmpadas com os erros/alarmes de CADA placa (SIBA, SAME, …)
 │   └── InfoDialog.py                # Popout (Ajuda): guia do usuário em HTML
 ├── Scripts/                         # Scripts de estimação (trazidos de ../Equations)
 │   ├── autotune_cost.py             #   ganhos SMO — recebe --R/--L/--Ts; emite PROGRESS/GEN/RESULT
@@ -283,8 +283,11 @@ probe(id)` / `.probe_all()`.
   calculado à mão — o firmware resolve `scale=(raw-tare)/peso`).
 - **`SensorConfigDialog`** — ganho/offset/limites de todos os sensores da
   SIBA numa tabela só, aplicando apenas as células editadas.
-- **`ErrorPanelDialog`** — lâmpadas para cada bit de erro/alarme da SIBA
-  (`Communication_Data/errors.py` traduz o bitmask para português).
+- **`ErrorPanelDialog`** — lâmpadas para cada bit de erro/alarme, **uma seção por
+  placa** (SIBA, SAME, …). `Communication_Data/errors.py` traduz o bitmask para
+  português usando a tabela de CADA placa (bits iguais têm significado diferente
+  entre placas), montada da seção `error_bits` do yaml — a mesma que gera o enum
+  C `<placa>_error_bit_t` no firmware.
 - **`BoardManagerDialog`** — procurar placas (ping/pong via
   `DiscoveryService`), editar IP/porta em runtime, LED verde/vermelho/
   cinza, e o botão "Simulação Nativa" (native_sim, só Linux).

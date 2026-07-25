@@ -44,14 +44,17 @@ SAME/
 ├── lib/OS/
 │   ├── OSSI.{h,c}                   # same_wq (despacho por eventos: telemetria + CMD)
 │   ├── NCI.{h,c}                    # UDP: TX telemetria (4445), RX CMD (4444)
-│   ├── HAL.{h,c} + HAL_prm.h        # 2 ADCs → Clarke → Observer_Step (thread de aquisição)
+│   ├── HAL.{h,c} + HAL_prm.h        # 2 ADCs → Clarke (3 termos) → Observer_Step + checagens (thread de aquisição)
 │   ├── CMD_Core.{h,c}               # despacho de CMD (calibração / params / ganhos)
 │   ├── CMD_Core_prm.h               # TABELA de sensores (currents/voltages) — como na SIBA
 │   ├── Common_Types.h / CMD.h       # GERADOS do SAME.yaml
 │   └── TCKEC.h                      # stub (sem thread de polling — só eventos)
 └── lib/SYS/
     ├── Log_Manager.{h,c}            # TELEMETRY_LOG + timer de TX (Ts_udp); .h GERADO
-    └── Observer_Manager.{h,c}       # SMO + PLL + torque (núcleo — ver abaixo)
+    ├── Observer_Manager.{h,c}       # SMO + PLL + torque (núcleo — ver abaixo)
+    ├── Security_Manager.{h,c}       # error_code agregado (diagnóstico, sem emergência)
+    ├── Error_Codes.h                # enum same_error_bit_t — GERADO (error_bits do yaml)
+    └── Security_prm.h               # limiares SM_* dos checadores — GERADO (security_limits)
 ```
 
 **Modelo de eventos (pedido do projeto — poucas threads):** só **duas** threads
@@ -120,7 +123,23 @@ Mesmo protocolo compacto da SIBA (`CMD` 8 bytes + `TELEMETRY_LOG` packed LE):
 `timestamp`; **medidas ADC/shunts**: `V_a,V_b,V_c`, `i_a,i_b,i_c`; **referencial
 estacionário αβ** (entrada do SMO): `V_alpha,V_beta`, `i_alpha,i_beta`;
 **estimados pelo SMO**: `rpm_same`, `torque_eletrico` (Te), `torque_helice`;
-`status`.
+`status`; **`error_code`** (uint32, bitfield de diagnóstico — ver abaixo).
+
+> **Clarke:** `HAL.c` usa a forma **completa de 3 termos** (amplitude-invariante)
+> — `α=⅔(a−½b−½c)`, `β=(b−c)/√3` — pra V e i, aproveitando as três fases medidas
+> (rejeita modo comum/sequência-zero em vez de assumir `a+b+c=0`).
+
+### Diagnóstico / erros (`error_code` — sistema espelhado da SIBA)
+O **`Security_Manager`** agrega 1 bit por condição (`same_error_bit_t`) e expõe o
+`uint32_t error_code` na telemetria. Como a SAME **só observa** (não aciona o
+ESC), é **puro diagnóstico — sem parada de emergência**. Checagens (rodam no
+ritmo da telemetria, na thread do HAL): desequilíbrio de corrente/tensão
+(`i_a+i_b+i_c≈0`), sobrecorrente, faixa de sensor, saúde do observador (BEMF
+baixa/PLL sem lock/divergência NaN/RPM implausível), params inválidos e sinais
+de Γ. **Fonte única no YAML:** a seção `error_bits` do `SAME.yaml` **gera** o enum
+C (`lib/SYS/Error_Codes.h`) **e** alimenta a decodificação pt-BR da GUI
+(`Communication_Data/errors.py`, por placa); os limiares `SM_*` vêm de
+`security_limits` → `lib/SYS/Security_prm.h`. Edite o YAML e regenere.
 
 ### CMD — targets (o que a SAME recebe)
 - **Correntes/tensões** (calibração dos sensores, uma por fase): `TARGET_CURRENT_A/B/C`,

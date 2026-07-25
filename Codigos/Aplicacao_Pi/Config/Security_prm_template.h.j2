@@ -1,0 +1,11 @@
+#ifndef SECURITY_PRM_H
+#define SECURITY_PRM_H
+
+/* Auto-generated — edite {{ board_yaml }} (seção `security_limits`), não este
+ * arquivo. Limiares dos checadores do Security_Manager (desequilíbrio,
+ * sobrecorrente, faixa de sensor, saúde do observador). */
+
+{% for e in security_limits -%}
+#define {{ "%-18s"|format(e.name) }} {{ e.value_c }}{% if e.comment %}  /* {{ e.comment }} */{% endif %}
+{% endfor %}
+#endif /* SECURITY_PRM_H */

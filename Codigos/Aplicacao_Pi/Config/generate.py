@@ -74,6 +74,23 @@ def generate_board(yaml_name, board_dir):
     render('CMD_template.h.j2',    cfg, os.path.join(lib_os,  'CMD.h'))
     render('LOG_template.h.j2',    cfg, os.path.join(lib_sys, 'Log_Manager.h'))
 
+    # Enum de códigos de erro (<board>_error_bit_t) — fonte única compartilhada
+    # com a GUI (errors.py). Só gera se o yaml trouxer a seção `error_bits`.
+    if cfg.get('error_bits'):
+        cfg['error_bit_type'] = f"{board_dir.lower()}_error_bit_t"
+        render('Error_Codes_template.h.j2', cfg, os.path.join(lib_sys, 'Error_Codes.h'))
+    else:
+        print(f"[{board_dir}] sem `error_bits` no yaml — Error_Codes.h não gerado.")
+
+    # Limiares do Security_Manager (SM_*) — gerados só se o yaml trouxer a seção.
+    security_limits = cfg.get('security_limits')
+    if security_limits:
+        for e in security_limits:
+            e['value_c'] = _c_float(e['value'])
+        render('Security_prm_template.h.j2', cfg, os.path.join(lib_sys, 'Security_prm.h'))
+    else:
+        print(f"[{board_dir}] sem `security_limits` no yaml — Security_prm.h não gerado.")
+
     sensor_defaults = cfg.get('sensor_defaults')
     if sensor_defaults:
         for e in sensor_defaults:

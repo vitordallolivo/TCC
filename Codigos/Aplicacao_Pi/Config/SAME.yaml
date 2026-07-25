@@ -81,6 +81,42 @@ enums:
     - STATUS_ERROR
     - STATUS_NONE # Don't care
 
+# Códigos de erro agregados — 1 bit por condição. FONTE ÚNICA: gera o enum C
+# `same_error_bit_t` (lib/SYS/Error_Codes.h, via generate.py) E alimenta a
+# decodificação em pt-BR da GUI (Communication_Data/errors.py). O Security_Manager
+# da SAME agrega os bits e envia o uint32_t em TELEMETRY_LOG.error_code. Como a
+# SAME só OBSERVA (não aciona o motor), estes são diagnósticos — não há parada de
+# emergência. `bit` = posição (0..31); `msg` = mensagem clara; `group` = área.
+error_bits:
+  # --- Medição (sanidade dos sensores de fase deste tipo de motor) ---
+  - { name: ERROR_MEAS_CURRENT_IMBALANCE, bit: 0, group: "Medição", msg: "As correntes das 3 fases não somam zero — sensor de corrente com falha, fase aberta ou calibração fora" }
+  - { name: ERROR_MEAS_VOLTAGE_IMBALANCE, bit: 1, group: "Medição", msg: "As tensões das 3 fases não somam zero — divisor/fase com problema ou calibração fora" }
+  - { name: ERROR_MEAS_OVERCURRENT,       bit: 2, group: "Medição", msg: "Corrente de fase acima do limite seguro" }
+  - { name: ERROR_MEAS_SENSOR_RANGE,      bit: 3, group: "Medição", msg: "Leitura de tensão/corrente fora da faixa válida do sensor (saturado ou desconectado)" }
+  # --- Observador (saúde do SMO+PLL sensorless) ---
+  - { name: ERROR_OBS_BEMF_TOO_LOW,   bit: 8,  group: "Observador", msg: "Força contraeletromotriz baixa demais para o observador travar — motor parado/muito lento; rotação e torque estimados não são confiáveis" }
+  - { name: ERROR_OBS_PLL_UNLOCKED,   bit: 9,  group: "Observador", msg: "PLL sem sincronismo (erro de fase alto) — ângulo/rotação estimados não confiáveis" }
+  - { name: ERROR_OBS_DIVERGED,       bit: 10, group: "Observador", msg: "Observador divergiu (valores não finitos) — reduza os ganhos Γ ou o passo Ts" }
+  - { name: ERROR_OBS_RPM_IMPLAUSIBLE, bit: 11, group: "Observador", msg: "Rotação estimada acima do limite plausível para este motor" }
+  # --- Configuração (parâmetros do observador) ---
+  - { name: ERROR_CFG_MOTOR_PARAM_INVALID, bit: 16, group: "Configuração", msg: "Parâmetro do motor inválido (R, L, pares de polos, Kv ou Ts ≤ 0) — configure antes de estimar" }
+  - { name: ERROR_CFG_GAMMA_SIGN,          bit: 17, group: "Configuração", msg: "Sinais dos ganhos Γ incorretos (regra fixa: Γ1 > 0, Γ2 < 0, Γt > 0)" }
+  # --- Sistema ---
+  - { name: ERROR_SYS_ADC_READ_FAILED, bit: 24, group: "Sistema", msg: "Falha na leitura do ADC (aquisição elétrica interrompida)" }
+
+# Limiares dos checadores do Security_Manager (SAME). FONTE ÚNICA: gera os
+# #defines em lib/SYS/Security_prm.h (via generate.py). Ajuste em bancada aqui —
+# não edite o header gerado. `value` vira literal float C (sufixo f).
+security_limits:
+  - { name: SM_IMBAL_FRAC,     value: 0.15,    comment: "fração tolerável do desequilíbrio (15% da soma dos módulos das 3 fases)" }
+  - { name: SM_IMBAL_ABS_I,    value: 0.5,     comment: "desequilíbrio absoluto de corrente tolerável [A] (cobre o skew do sampling sequencial)" }
+  - { name: SM_IMBAL_ABS_V,    value: 1.0,     comment: "desequilíbrio absoluto de tensão tolerável [V]" }
+  - { name: SM_OVERCURRENT_A,  value: 60.0,    comment: "limite de sobrecorrente de fase [A]" }
+  - { name: SM_SENSOR_ABS_MAX, value: 500.0,   comment: "leitura de V/A acima disso = sensor saturado ou desconectado" }
+  - { name: SM_BEMF_MIN,       value: 1.0,     comment: "|ê| mínimo p/ PLL travar (deve casar com o limiar em Observer_Step)" }
+  - { name: SM_PLL_ERR_MAX,    value: 0.35,    comment: "erro de fase da PLL tolerável [rad]" }
+  - { name: SM_RPM_MAX,        value: 60000.0, comment: "rpm mecânico plausível máximo" }
+
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida por
 # sensor calibrável — fonte única, alimenta CMD_Core_prm.h (gerado, ver
 # generate.py). `target` tem que ser um nome de enums.target_type existente.
@@ -127,4 +163,5 @@ structs:
     - { name: rpm_same, type: float }
     - { name: torque_eletrico, type: float }
     - { name: torque_helice, type: float }
-    - { name: status, type: log_status }
+    - { name: status, type: log_status }         # Integridade do frame de telemetria
+    - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver same_error_bit_t

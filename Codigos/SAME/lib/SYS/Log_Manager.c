@@ -8,6 +8,7 @@
 #include "Log_Manager.h"
 #include "NCI.h"
 #include "OSSI.h"
+#include "Security_Manager.h"   /* error_code agregado */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
@@ -117,15 +118,16 @@ TELEMETRY_LOG Log_Manager_Get_Snapshot(void)
 }
 
 /**
- * @brief Marca timestamp/status e transmite o log corrente por UDP (NCI).
+ * @brief Marca timestamp/status/error_code e transmite o log corrente (NCI).
  */
 void Log_Manager_Transmit(void)
 {
     TELEMETRY_LOG snap;
 
     k_mutex_lock(&log_mutex, K_FOREVER);
-    current_log.timestamp = k_uptime_get_32();
-    current_log.status    = LOG_VALID;
+    current_log.timestamp  = k_uptime_get_32();
+    current_log.status     = LOG_VALID;
+    current_log.error_code = Security_Manager_Get_Error_Code();
     memcpy(&snap, &current_log, sizeof(snap));
     k_mutex_unlock(&log_mutex);
 

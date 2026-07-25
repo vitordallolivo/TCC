@@ -89,6 +89,32 @@ enums:
     - LOG_CRITICAL_ALARM
     - LOG_DENIED_ACTION
 
+# Códigos de erro agregados — 1 bit por condição de erro/alarme. FONTE ÚNICA:
+# gera o enum C `siba_error_bit_t` (lib/SYS/Error_Codes.h, via generate.py) E
+# alimenta a decodificação em pt-BR da GUI (Communication_Data/errors.py, que lê
+# esta MESMA seção). O firmware agrega os bits no Security_Manager e envia o
+# uint32_t em TELEMETRY_LOG.error_code. `bit` = posição (0..31); `msg` = mensagem
+# clara pro usuário (o que houve + o que fazer); `group` = área na interface.
+# `error_bit:` em sensor_defaults referencia estes nomes.
+error_bits:
+  # --- Bateria ---
+  - { name: ERROR_BATT_LOW_SOC,               bit: 0,  group: "Bateria",      msg: "Bateria com carga baixa (nível abaixo do limite de alerta)" }
+  - { name: ERROR_BATT_POLY_MISCONFIGURED,    bit: 1,  group: "Bateria",      msg: "Cálculo de carga da bateria mal configurado (revise o polinômio de SOC)" }
+  - { name: ERROR_BATT_LOW_VOLTAGE,           bit: 2,  group: "Bateria",      msg: "Tensão da bateria baixa — alguma célula perto do limite mínimo" }
+  - { name: ERROR_BATT_RELAY_MISMATCH,        bit: 3,  group: "Bateria",      msg: "Passando corrente com o relé desligado — possível falha no relé" }
+  - { name: ERROR_BATT_OVER_TEMPERATURE,      bit: 4,  group: "Bateria",      msg: "Bateria superaquecendo (temperatura acima do limite de alarme)" }
+  # --- Motor / Hélice ---
+  - { name: ERROR_PROP_LOAD_CELL_NOT_CONFIGURED, bit: 8,  group: "Motor/Hélice", msg: "Célula de carga sem calibração — tare e calibre antes de medir" }
+  - { name: ERROR_PROP_LOAD_CELL_NOT_CONNECTED,  bit: 9,  group: "Motor/Hélice", msg: "Célula de carga desconectada (HX711 não responde)" }
+  - { name: ERROR_PROP_OVERCURRENT,           bit: 10, group: "Motor/Hélice", msg: "Corrente do motor acima do limite permitido" }
+  # --- Segurança ---
+  - { name: ERROR_SEC_VOLTAGE_OUT_OF_RANGE,   bit: 16, group: "Segurança",    msg: "Tensão da bateria fora da faixa segura de operação" }
+  - { name: ERROR_SEC_CURRENT_EXCESSIVE,      bit: 17, group: "Segurança",    msg: "Corrente da bateria excessiva (acima do limite de segurança)" }
+  - { name: ERROR_SEC_RPM_EXCESSIVE,          bit: 18, group: "Segurança",    msg: "Rotação do motor (RPM) acima do limite de segurança" }
+  - { name: ERROR_SEC_EMERGENCY_ACTIVE,       bit: 19, group: "Segurança",    msg: "PARADA DE EMERGÊNCIA ativa — motor desarmado" }
+  # --- Sistema ---
+  - { name: ERROR_OS_GPIO_INIT_FAILED,        bit: 24, group: "Sistema",      msg: "Falha ao inicializar um módulo de hardware (GPIO)" }
+
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida/segurança
 # por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).
 # `target` é SENSOR_ID_<NOME_DO_CAMPO_TELEMETRY_LOG> (gerado em Log_Manager.h)

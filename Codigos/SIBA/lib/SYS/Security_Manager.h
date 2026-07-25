@@ -3,32 +3,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "Error_Codes.h"   /* siba_error_bit_t — GERADO do SIBA.yaml (error_bits) */
 
-/* Código de erro agregado (1 bit por condição). Cada manager reporta via
- * Security_Manager_Error_Detect/_Erase (só loga na transição). Agregado
- * vai pra TELEMETRY_LOG.error_code. */
-typedef enum {
-    /* --- Battery_Manager --- */
-    ERROR_BATT_LOW_SOC              = (1U << 0),  /* SOC abaixo do limite de alerta        */
-    ERROR_BATT_POLY_MISCONFIGURED   = (1U << 1),  /* polinômio SOC produz valores absurdos */
-    ERROR_BATT_LOW_VOLTAGE          = (1U << 2),  /* tensão por célula próxima do limite   */
-    ERROR_BATT_RELAY_MISMATCH       = (1U << 3),  /* corrente flui com o relé desligado    */
-    ERROR_BATT_OVER_TEMPERATURE     = (1U << 4),  /* temperatura acima do limite (alarme)  */
-
-    /* --- Propeller_Manager --- */
-    ERROR_PROP_LOAD_CELL_NOT_CONFIGURED = (1U << 8),  /* célula sem calibração válida      */
-    ERROR_PROP_LOAD_CELL_NOT_CONNECTED  = (1U << 9),  /* HX711 não responde (leitura ~0xFF)*/
-    ERROR_PROP_OVERCURRENT              = (1U << 10), /* corrente do motor > limite        */
-
-    /* --- Security_Manager --- */
-    ERROR_SEC_VOLTAGE_OUT_OF_RANGE  = (1U << 16), /* v_batt fora dos limites operacionais  */
-    ERROR_SEC_CURRENT_EXCESSIVE     = (1U << 17), /* i_batt acima do limite de segurança   */
-    ERROR_SEC_RPM_EXCESSIVE         = (1U << 18), /* rpm acima do limite de segurança      */
-    ERROR_SEC_EMERGENCY_ACTIVE      = (1U << 19), /* emergency stop disparado              */
-
-    /* --- OS / genéricos --- */
-    ERROR_OS_GPIO_INIT_FAILED       = (1U << 24), /* algum módulo GPIO não inicializou     */
-} siba_error_bit_t;
+/* O enum de códigos de erro (siba_error_bit_t) agora é GERADO de
+ * SIBA.yaml (seção `error_bits`) em lib/SYS/Error_Codes.h — fonte única
+ * compartilhada com a GUI (Communication_Data/errors.py). Não edite à mão. */
 
 void Security_Manager_Init(void);
 void Security_Manager_Check(uint32_t sensor_id, float value);

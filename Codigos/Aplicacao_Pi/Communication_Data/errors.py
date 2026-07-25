@@ -1,66 +1,87 @@
-"""errors.py — decodificação do `error_code` (bitfield) da telemetria SIBA.
+"""errors.py — decodificação do `error_code` (bitfield) da telemetria.
 
-Espelha `siba_error_bit_t` (../SIBA/lib/SYS/Security_Manager.h): o firmware
-agrega 1 bit por condição de erro/alarme e envia o `uint32_t error_code` no
-TELEMETRY_LOG. A GUI usa `decode_error_code()` para mostrar, EM PORTUGUÊS e de
-forma clara, o que está errado — mantenha esta tabela em sincronia com o enum C.
+FONTE ÚNICA: a seção `error_bits` do `<placa>.yaml` — a MESMA que gera o enum C
+`<placa>_error_bit_t` (lib/SYS/Error_Codes.h, via Config/generate.py). O firmware
+agrega 1 bit por condição e envia o `uint32_t error_code` no TELEMETRY_LOG; aqui
+montamos, POR PLACA, a tabela bit→(mensagem pt-BR, grupo) a partir do mesmo yaml.
 
-Cada entrada é uma MENSAGEM que o usuário entende (o que houve + o que fazer),
-não um código técnico. Nada de siglas em inglês na interface.
+Cada placa registra sua tabela uma vez (register_error_bits/ensure_registered) e
+as funções de decode recebem o `protocol` para escolher a tabela certa — bits com
+o MESMO valor significam coisas diferentes entre placas (ex.: bit 0 é "bateria
+com carga baixa" na SIBA e "correntes das 3 fases não somam zero" na SAME).
+
+As mensagens são texto claro pro usuário (o que houve + o que fazer), em pt-BR —
+mantenha-as no yaml, não aqui.
 """
 
-# bit (valor) -> (mensagem clara em pt-BR, grupo)
-SIBA_ERROR_BITS = {
-    # --- Bateria ---
-    1 << 0:  ("Bateria com carga baixa (nível abaixo do limite de alerta)", "Bateria"),
-    1 << 1:  ("Cálculo de carga da bateria mal configurado (revise o polinômio de SOC)", "Bateria"),
-    1 << 2:  ("Tensão da bateria baixa — alguma célula perto do limite mínimo", "Bateria"),
-    1 << 3:  ("Passando corrente com o relé desligado — possível falha no relé", "Bateria"),
-    1 << 4:  ("Bateria superaquecendo (temperatura acima do limite de alarme)", "Bateria"),
-
-    # --- Motor / Hélice ---
-    1 << 8:  ("Célula de carga sem calibração — tare e calibre antes de medir", "Motor/Hélice"),
-    1 << 9:  ("Célula de carga desconectada (HX711 não responde)", "Motor/Hélice"),
-    1 << 10: ("Corrente do motor acima do limite permitido", "Motor/Hélice"),
-
-    # --- Segurança ---
-    1 << 16: ("Tensão da bateria fora da faixa segura de operação", "Segurança"),
-    1 << 17: ("Corrente da bateria excessiva (acima do limite de segurança)", "Segurança"),
-    1 << 18: ("Rotação do motor (RPM) acima do limite de segurança", "Segurança"),
-    1 << 19: ("PARADA DE EMERGÊNCIA ativa — motor desarmado", "Segurança"),
-
-    # --- Sistema ---
-    1 << 24: ("Falha ao inicializar um módulo de hardware (GPIO)", "Sistema"),
-}
+# protocol (str) -> { bitmask(int) : (mensagem_pt, grupo) }
+_TABLES = {}
 
 
-def decode_error_code(code):
-    """`code` (int) -> lista de (bit, mensagem_pt, grupo) das condições ATIVAS.
+def _extract_error_bits(cfg):
+    """Extrai a lista `error_bits` de um cfg de placa (yaml já carregado),
+    lidando com a raiz aninhada sob a chave da placa (ex.: {'same': {...}})."""
+    if not isinstance(cfg, dict):
+        return []
+    if "error_bits" in cfg:
+        return cfg.get("error_bits") or []
+    for v in cfg.values():
+        if isinstance(v, dict) and "error_bits" in v:
+            return v.get("error_bits") or []
+    return []
+
+
+def register_error_bits(protocol, cfg):
+    """Monta e memoiza a tabela de erros da placa `protocol` a partir do seu
+    yaml (`cfg`). Sobrescreve qualquer tabela anterior. Retorna a tabela."""
+    table = {}
+    for e in _extract_error_bits(cfg):
+        try:
+            mask = 1 << int(e["bit"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        msg = e.get("msg") or e.get("name") or f"bit {e.get('bit')}"
+        group = e.get("group") or "Sistema"
+        table[mask] = (msg, group)
+    _TABLES[protocol] = table
+    return table
+
+
+def ensure_registered(protocol, cfg):
+    """Registra a tabela da placa se ainda não houver uma. Retorna a tabela."""
+    if protocol not in _TABLES:
+        register_error_bits(protocol, cfg)
+    return _TABLES.get(protocol, {})
+
+
+def decode_error_code(code, protocol=None):
+    """`code` (int) -> lista de (bitmask, mensagem_pt, grupo) das condições
+    ATIVAS, usando a tabela da placa `protocol`.
 
     Bits não mapeados aparecem com uma mensagem genérica em português para não
-    passarem despercebidos se o firmware ganhar um erro novo antes desta tabela.
-    """
+    passarem despercebidos se o firmware ganhar um erro novo antes do yaml."""
     if not code:
         return []
+    table = _TABLES.get(protocol, {})
     active = []
     for bit in range(32):
         mask = 1 << bit
         if not (code & mask):
             continue
-        if mask in SIBA_ERROR_BITS:
-            msg, group = SIBA_ERROR_BITS[mask]
+        if mask in table:
+            msg, group = table[mask]
         else:
-            msg, group = (f"Erro desconhecido (bit {bit}) — atualize a tabela de erros", "Sistema")
+            msg, group = (f"Erro desconhecido (bit {bit}) — atualize error_bits no yaml", "Sistema")
         active.append((mask, msg, group))
     return active
 
 
-def format_error_code(code):
+def format_error_code(code, protocol=None):
     """Uma linha resumida para a barra de status, em português.
 
     'Tudo OK' quando não há erro; senão a contagem + as mensagens dos erros
     ativos separadas por ' • '."""
-    active = decode_error_code(code)
+    active = decode_error_code(code, protocol)
     if not active:
         return "Tudo OK"
     n = len(active)
@@ -68,9 +89,9 @@ def format_error_code(code):
     return f"{n} problema(s): {msgs}"
 
 
-def format_error_detail(code):
+def format_error_detail(code, protocol=None):
     """Texto multi-linha agrupado por área — bom para tooltip / caixa de detalhes."""
-    active = decode_error_code(code)
+    active = decode_error_code(code, protocol)
     if not active:
         return "Nenhum erro ativo."
     por_grupo = {}

@@ -102,6 +102,10 @@ static float out_rpm;
 static float out_te;
 static float out_torque_helice;
 
+/* Saúde do observador (lida pelo Security_Manager, mesma thread do ADC). */
+static float out_amp_e;      /* amplitude da BEMF estimada (|ê|) — lock da PLL */
+static float out_phase_err;  /* erro de fase da PLL no último passo */
+
 /* Reconfiguração pendente: escrita pela same_wq, aplicada pela thread do ADC. */
 static obs_params    pending_params;
 static atomic_t      reconfig_pending;
@@ -451,6 +455,8 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
     register float omega_mech = omega_est_elec * inv_p;   /* rad/s mecânico */
     out_rpm = omega_mech * (30.0f / (float)M_PI);          /* rad/s → rpm */
     out_te  = tq_lpf;
+    out_amp_e     = amp_E;      /* saúde: amplitude da BEMF (lock da PLL) */
+    out_phase_err = erro_fase;  /* saúde: erro de fase da PLL */
     /* torque_helice: em regime a carga da hélice = torque eletromagnético
      * estimado. Quando B/τc (atrito, compartilhados com a SPMM) forem
      * embarcados, subtrair (B·ω+τc). Por ora, espelha Te. */
@@ -463,3 +469,41 @@ float Observer_Get_Rpm(void)            { return out_rpm; }
 float Observer_Get_Te(void)             { return out_te; }
 /** @brief Torque na hélice (hoje espelha Te). @return N·m. */
 float Observer_Get_Torque_Helice(void)  { return out_torque_helice; }
+
+/** @brief Amplitude da BEMF estimada do último passo. @return |ê|. */
+float Observer_Get_Bemf_Amplitude(void) { return out_amp_e; }
+/** @brief Erro de fase da PLL do último passo. @return rad (0 se BEMF baixa). */
+float Observer_Get_Phase_Error(void)    { return out_phase_err; }
+
+/**
+ * @brief Verifica se o estado dinâmico do observador é todo finito.
+ * @return true se î,ê,PLL,θ̂,torque são finitos (false = divergiu → NaN/Inf).
+ */
+bool Observer_State_Is_Finite(void)
+{
+    return isfinite(live_state.i_hat_al) && isfinite(live_state.i_hat_be)
+        && isfinite(live_state.e_hat_al) && isfinite(live_state.e_hat_be)
+        && isfinite(live_state.integral_pll) && isfinite(live_state.th_est)
+        && isfinite(live_state.tq_lpf);
+}
+
+/**
+ * @brief Sanidade física dos parâmetros do motor/observador.
+ * @return true se Rs,Ls,pares_de_polos,Kv,Ts são todos > 0.
+ */
+bool Observer_Params_Physical_Valid(void)
+{
+    return live_params.Rs > 0.0f && live_params.Ls > 0.0f
+        && live_params.pole_pairs > 0.0f && live_params.Kv > 0.0f
+        && live_params.ts > 0.0f;
+}
+
+/**
+ * @brief Checa a regra fixa de sinais dos ganhos Γ (ver CLAUDE.md).
+ * @return true se Γ1 > 0, Γ2 < 0 e Γt > 0.
+ */
+bool Observer_Gamma_Signs_Valid(void)
+{
+    return live_params.gamma1 > 0.0f && live_params.gamma2 < 0.0f
+        && live_params.gammat > 0.0f;
+}

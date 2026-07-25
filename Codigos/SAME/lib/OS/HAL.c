@@ -12,6 +12,7 @@
 #include "Log_Manager.h"           /* SENSOR_ID_* */
 #include "CMD_Core_prm.h"          /* defaults de calibração (tabela) */
 #include "Observer_Manager.h"
+#include "Security_Manager.h"      /* diagnóstico: error_code agregado */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <math.h>
@@ -26,7 +27,8 @@ LOG_MODULE_REGISTER(hal, LOG_LEVEL_INF);
 #define M_PI 3.14159265358979323846
 #endif
 
-#define INV_SQRT3   0.5773502691896258f
+#define INV_SQRT3   0.5773502691896258f    /* 1/√3 */
+#define TWO_THIRDS  0.6666666666666666f     /* 2/3  */
 
 /* Telemetria publicada ~50 Hz (independe da taxa do laço de aquisição). */
 #define HAL_TELEM_PUBLISH_MS   20U
@@ -336,24 +338,35 @@ static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 
         /* HAL_ACQ_BURST: 1 conversão = 1 passo no hardware; no native_sim
          * comprime várias iterações pra PLL convergir em tempo de parede. */
+        bool acq_ok = true;
         for (int b = 0; b < HAL_ACQ_BURST; b++) {
             if (hal_acquire(&Va, &Vb, &Vc, &ia, &ib, &ic) != 0) {
+                acq_ok = false;
                 k_sleep(K_MSEC(1));
                 break;
             }
-            /* Clarke amplitude-invariante (i_a+i_b+i_c=0). */
-            i_alpha = ia;
-            i_beta  = (ia + 2.0f * ib) * INV_SQRT3;
-            V_alpha = Va;
-            V_beta  = (Va + 2.0f * Vb) * INV_SQRT3;
+            /* Clarke amplitude-invariante, forma completa de 3 termos: usa as
+             * três fases medidas (não assume i_a+i_b+i_c=0). O termo −½b−½c
+             * subtrai a componente de modo comum/sequência-zero, rejeitando
+             * offset/desbalanço que a forma reduzida (α=a) deixaria vazar. */
+            i_alpha = TWO_THIRDS * (ia - 0.5f * ib - 0.5f * ic);
+            i_beta  = INV_SQRT3  * (ib - ic);
+            V_alpha = TWO_THIRDS * (Va - 0.5f * Vb - 0.5f * Vc);
+            V_beta  = INV_SQRT3  * (Vb - Vc);
 
             Observer_Step(V_alpha, V_beta, i_alpha, i_beta);
         }
+        /* Falha de leitura do ADC → bit de diagnóstico (limpa quando volta). */
+        Security_Manager_Error_Set(ERROR_SYS_ADC_READ_FAILED, !acq_ok);
 
         /* Telemetria decimada no tempo, não por amostra. */
         uint32_t now = k_uptime_get_32();
         if ((now - last_pub) >= HAL_TELEM_PUBLISH_MS) {
             last_pub = now;
+            /* Diagnóstico no ritmo da telemetria (não por amostra): sanidade
+             * elétrica das fases + saúde do observador → error_code. */
+            Security_Manager_Check_Electrical(Va, Vb, Vc, ia, ib, ic);
+            Security_Manager_Check_Observer();
             hal_publish_telemetry(Va, Vb, Vc, ia, ib, ic,
                                   V_alpha, V_beta, i_alpha, i_beta);
         }

@@ -1,0 +1,19 @@
+#ifndef ERROR_CODES_H
+#define ERROR_CODES_H
+
+/* Auto-generated — edite {{ board_yaml }} (seção `error_bits`), não este arquivo.
+ *
+ * Código de erro agregado: 1 bit por condição de erro/alarme. Cada manager
+ * reporta via Security_Manager_Error_Detect/_Erase (só loga na transição). O
+ * agregado (uint32_t) vai pro TELEMETRY_LOG.error_code e a GUI decodifica em
+ * pt-BR (Communication_Data/errors.py, que lê a MESMA seção `error_bits`). */
+
+#include <stdint.h>
+
+typedef enum {
+{%- for e in error_bits %}
+    {{ e.name }} = (1U << {{ e.bit }}),{% if e.group or e.msg %}  /* {{ e.group }}{% if e.group and e.msg %}: {% endif %}{{ e.msg }} */{% endif %}
+{%- endfor %}
+} {{ error_bit_type }};
+
+#endif /* ERROR_CODES_H */

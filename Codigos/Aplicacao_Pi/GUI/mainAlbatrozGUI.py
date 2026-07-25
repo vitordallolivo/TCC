@@ -14,6 +14,7 @@ import tempfile
 import csv
 import struct
 import sys
+import shutil
 
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QInputDialog,
                                QMenu, QComboBox, QLabel, QWidget, QHBoxLayout,
@@ -95,6 +96,17 @@ class AlbatrozGUI(QMainWindow):
         self.points_in_swap = 0
         print(f"Arquivo de Swap ativo: {self.swap_path}")
 
+        # --- Registro sob demanda (botão Iniciar/Encerrar Registro) ---------
+        # A telemetria é gravada num CSV temporário AO VIVO (mesma ideia do swap
+        # dos gráficos); ao encerrar, o usuário escolhe onde salvar o arquivo
+        # final. Estado protegido por self._buf_lock (thread de rede escreve as
+        # linhas; a thread de UI abre/fecha no start/stop).
+        self.recording = False
+        self._record_fp = None       # handle do CSV temporário aberto
+        self._record_path = None     # caminho do CSV temporário
+        self._record_cols = None     # colunas fixadas na 1ª amostra gravada
+        self._record_count = 0       # nº de amostras já gravadas na sessão
+
         # 4. Inicializa Gerenciador de Rede (Agora com o callback central process_network_data)
         self.eth = EthernetManager(
             self.siba_yaml_path,
@@ -144,8 +156,8 @@ class AlbatrozGUI(QMainWindow):
         self._error_status_lbl.setToolTip("Clique para ver o painel de erros")
         self._error_status_lbl.mousePressEvent = lambda _ev: self.open_error_panel()
         self.statusBar().addPermanentWidget(self._error_status_lbl)
-        # 8. Inicializa o terminal  
-        self.terminal.show()
+        # 8. Terminal fica DISPONÍVEL mas NÃO abre no startup — o usuário abre
+        #    pelo botão "Tiny_Terminal" quando quiser (menos poluição inicial).
     # --- Lógica de Inicialização ---
     def _load_config_file(self, path):
         if os.path.exists(path):
@@ -193,7 +205,10 @@ class AlbatrozGUI(QMainWindow):
                 self.curves[widget_id].append((var_name, curve))
 
     def _setup_connections(self):
-        self.ui.Save_CSV.clicked.connect(self.on_save_csv)
+        # Botão de registro (antigo "Salvar CSV") vira um toggle:
+        # verde "Iniciar Registro" → vermelho "Encerrar Registro".
+        self.ui.Save_CSV.clicked.connect(self.on_toggle_recording)
+        self._update_record_button()
         self.ui.pushButton.clicked.connect(self.on_clear_all)
         self.ui.pushButton_2.clicked.connect(self.on_toggle_network)
         self.ui.Tiny_Terminal.clicked.connect(self.terminal.show)
@@ -537,11 +552,17 @@ class AlbatrozGUI(QMainWindow):
 
     def current_error_code(self):
         """error_code agregado (união dos bits) de todas as placas — usado pelo
-        Painel de Erros e pelo rótulo da barra de status."""
+        rótulo da barra de status. NB: bits iguais têm significado diferente
+        entre placas; para o painel detalhado use current_error_codes()."""
         merged = 0
         for c in getattr(self, "_last_error_code", {}).values():
             merged |= int(c)
         return merged
+
+    def current_error_codes(self):
+        """Dict {protocolo: error_code} por placa — cada um decodificado com a
+        SUA tabela (error_bits do yaml). Usado pelo Painel de Erros."""
+        return dict(getattr(self, "_last_error_code", {}))
 
     def open_error_panel(self):
         """Abre (ou traz à frente) o painel completo de erros com lâmpadas."""
@@ -584,21 +605,31 @@ class AlbatrozGUI(QMainWindow):
             return
         self._last_error_code[protocol] = code
 
-        from Communication_Data.errors import (decode_error_code, format_error_code,
-                                                format_error_detail)
+        from Communication_Data import errors
+        # Cada placa decodifica com a SUA tabela (bits iguais significam coisas
+        # diferentes entre placas) — montada da seção error_bits do yaml da placa.
+        errors.ensure_registered(protocol, self.configs.get(protocol, {}))
         if hasattr(self, 'terminal'):
-            for _m, msg, grp in decode_error_code(code & ~prev):   # novos
+            for _m, msg, grp in errors.decode_error_code(code & ~prev, protocol):   # novos
                 self.terminal.append_log(protocol, f"⚠ PROBLEMA ({grp}): {msg}", "#ff4136")
-            for _m, msg, grp in decode_error_code(prev & ~code):   # resolvidos
+            for _m, msg, grp in errors.decode_error_code(prev & ~code, protocol):   # resolvidos
                 self.terminal.append_log(protocol, f"✓ Resolvido ({grp}): {msg}", "#2ecc40")
 
-        # Texto do rótulo = união dos erros ativos de todas as placas (em pt-BR).
-        merged = 0
-        for c in self._last_error_code.values():
-            merged |= c
-        self._error_status_text = ("✓ Tudo OK" if merged == 0
-                                   else "⚠ " + format_error_code(merged))
-        self._error_status_detail = format_error_detail(merged)
+        # Rótulo persistente = erros ativos de TODAS as placas, cada uma
+        # decodificada com a sua tabela (em pt-BR).
+        texts, details = [], []
+        for proto, c in self._last_error_code.items():
+            if not c:
+                continue
+            errors.ensure_registered(proto, self.configs.get(proto, {}))
+            texts.append(f"{proto}: {errors.format_error_code(c, proto)}")
+            details.append(f"=== {proto} ===\n{errors.format_error_detail(c, proto)}")
+        if not texts:
+            self._error_status_text = "✓ Tudo OK"
+            self._error_status_detail = "Nenhum erro ativo."
+        else:
+            self._error_status_text = "⚠ " + " | ".join(texts)
+            self._error_status_detail = "\n\n".join(details)
 
     @Slot(str, dict)
     def on_decoded_sample(self, protocol, decoded):
@@ -690,6 +721,12 @@ class AlbatrozGUI(QMainWindow):
             for var_name, val in decoded_data.items():
                 if var_name in self.value_buffers:
                     self.value_buffers[var_name][idx] = val
+
+            # Registro ao vivo: grava esta amostra (já com forward-fill) no CSV
+            # temporário da sessão. Linha curta a ~10-20 Hz → custo desprezível
+            # mesmo sob o lock.
+            if self.recording and self._record_fp is not None:
+                self._record_write_row_locked(idx)
 
             self.ptr += 1
             snapshot = None
@@ -815,34 +852,115 @@ class AlbatrozGUI(QMainWindow):
                 curve.setData([], [])
 
     @Slot()
-    def on_save_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar", "", "CSV (*.csv)")
-        if not path: return
-        print(f"Exportando CSV para {path}...")
+    # ============================ REGISTRO ================================ #
+    # O botão "Save_CSV" agora é um toggle Iniciar/Encerrar Registro. Durante o
+    # registro, cada amostra é gravada AO VIVO num CSV temporário (mesma técnica
+    # do swap dos gráficos); ao encerrar, o usuário escolhe onde salvar o final.
+
+    def _update_record_button(self):
+        """Reflete o estado (verde 'Iniciar' / vermelho 'Encerrar') no botão."""
+        btn = getattr(self.ui, "Save_CSV", None)
+        if btn is None:
+            return
+        if self.recording:
+            btn.setText("⏹ Encerrar Registro")
+            btn.setStyleSheet("background-color: #e74c3c; color: white; font-weight: bold;")
+        else:
+            btn.setText("⏺ Iniciar Registro")
+            btn.setStyleSheet("background-color: #2ecc40; color: white; font-weight: bold;")
+
+    def on_toggle_recording(self):
+        """Clique do botão: alterna entre iniciar e encerrar o registro."""
+        if not self.recording:
+            self._start_recording()
+        else:
+            self._stop_recording()
+
+    def _start_recording(self):
+        """Abre um CSV temporário e passa a gravar cada amostra ao vivo."""
         try:
-            with open(path, 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["Timestamp"] + self.variable_order)
-                # Lê o que está no swap
-                num_cols = len(self.variable_order) + 1
-                if os.path.exists(self.swap_path) and self.points_in_swap > 0:
-                    disk_data = np.fromfile(self.swap_path, dtype=np.float32).reshape(-1, num_cols)
-                    writer.writerows(disk_data)
-                # Adiciona o resto da RAM (snapshot sob o lock — a thread de
-                # rede pode estar escrevendo os buffers ao mesmo tempo).
-                with self._buf_lock:
-                    ram_idx = self.ptr % self.max_ram
-                    if ram_idx > 0:
-                        current_ram = np.column_stack(
-                            [self.time_buffer[:ram_idx].copy()] +
-                            [self.value_buffers[v][:ram_idx].copy() for v in self.variable_order])
-                    else:
-                        current_ram = None
-                if current_ram is not None:
-                    writer.writerows(current_ram)
-            print("Exportação CSV concluída com sucesso.")
+            with self._buf_lock:
+                tmp = tempfile.NamedTemporaryFile(
+                    mode="w", delete=False, suffix=".csv", newline="",
+                    prefix="registro_", encoding="utf-8")
+                self._record_fp = tmp
+                self._record_path = tmp.name
+                self._record_cols = None    # fixadas na 1ª amostra gravada
+                self._record_count = 0
+                self.recording = True
+            print(f"[Registro] iniciado → temporário: {self._record_path}")
         except Exception as e:
-            print(f"Erro ao salvar CSV: {e}")
+            self.recording = False
+            QMessageBox.warning(self, "Registro", f"Não foi possível iniciar: {e}")
+        self._update_record_button()
+
+    def _record_write_row_locked(self, idx):
+        """Grava a amostra do índice `idx` no CSV temporário. Chamado com o
+        self._buf_lock TRAVADO (thread de rede). Fixa as colunas + cabeçalho na
+        primeira amostra em que já há variáveis conhecidas."""
+        fp = self._record_fp
+        if fp is None:
+            return
+        if self._record_cols is None:
+            cols = list(self.variable_order)
+            if not cols:
+                return   # ainda sem variáveis; espera a próxima amostra
+            self._record_cols = cols
+            fp.write("Timestamp," + ",".join(cols) + "\n")
+        row = ["%.6f" % float(self.time_buffer[idx])]
+        for c in self._record_cols:
+            b = self.value_buffers.get(c)
+            v = b[idx] if b is not None else np.nan
+            row.append("" if (v is None or np.isnan(v)) else "%.6f" % float(v))
+        fp.write(",".join(row) + "\n")
+        self._record_count += 1
+
+    def _stop_recording(self):
+        """Encerra a gravação e pergunta onde salvar o arquivo final."""
+        with self._buf_lock:
+            self.recording = False
+            fp, path, count = self._record_fp, self._record_path, self._record_count
+            self._record_fp = None
+        self._update_record_button()
+
+        if fp is not None:
+            try:
+                fp.flush(); fp.close()
+            except Exception:
+                pass
+
+        if not path or count == 0:
+            QMessageBox.information(self, "Registro",
+                                    "Nenhuma amostra foi gravada — registro descartado.")
+            self._discard_temp(path)
+            return
+
+        print(f"[Registro] encerrado: {count} amostras em {path}")
+        dest, sel = QFileDialog.getSaveFileName(
+            self, "Salvar Registro", "registro.csv",
+            "CSV (*.csv);;Texto (*.txt)")
+        if not dest:
+            # Usuário cancelou: mantém não salvo → descarta o temporário.
+            self._discard_temp(path)
+            print("[Registro] salvamento cancelado — temporário descartado.")
+            return
+        try:
+            shutil.copyfile(path, dest)
+            self._discard_temp(path)
+            QMessageBox.information(self, "Registro salvo",
+                                    f"{count} amostras salvas em:\n{dest}")
+            print(f"[Registro] salvo em {dest}")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro ao salvar",
+                                f"{e}\n\nO registro segue no temporário:\n{path}")
+
+    def _discard_temp(self, path):
+        """Remove um CSV temporário de registro (se existir)."""
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
     def change_theme(self, theme):
         self.prefs["tema"] = theme
@@ -874,6 +992,15 @@ class AlbatrozGUI(QMainWindow):
         print("Finalizando recursos e removendo swap...")
         if hasattr(self, 'eth'):
             self.eth.stop()
+        # Encerra um registro em andamento (fecha o handle) e descarta o temp.
+        if getattr(self, "recording", False) or getattr(self, "_record_fp", None):
+            fp = self._record_fp
+            self._record_fp = None
+            self.recording = False
+            if fp is not None:
+                try: fp.flush(); fp.close()
+                except Exception: pass
+            self._discard_temp(getattr(self, "_record_path", None))
         if os.path.exists(self.swap_path):
             try: os.remove(self.swap_path)
             except: pass

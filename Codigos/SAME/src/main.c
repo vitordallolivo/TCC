@@ -15,6 +15,7 @@
 /* SYS */
 #include "Log_Manager.h"
 #include "Observer_Manager.h"
+#include "Security_Manager.h"
 
 LOG_MODULE_REGISTER(same_main, LOG_LEVEL_INF);
 
@@ -32,6 +33,9 @@ int main(void)
 
     /* 2. Observer — defaults do SMO/PLL antes de qualquer amostra */
     Observer_Init();
+
+    /* 2b. Security_Manager — zera o código de erro agregado (diagnóstico) */
+    Security_Manager_Init();
 
     /* 3. Log_Manager — zera o log e arranca o timer de TX (10 Hz) */
     Log_Manager_Init();

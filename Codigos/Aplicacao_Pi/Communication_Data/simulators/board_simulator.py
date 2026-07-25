@@ -128,6 +128,8 @@ class BoardSimulator(threading.Thread):
                 values.append(int(elapsed * 1000) & 0xFFFFFFFF)
             elif name == 'status':
                 values.append(1)  # OK
+            elif name == 'error_code':
+                values.append(0)  # mock: sem erros (não gerar bits aleatórios)
             else:
                 base = self.sensors.get(name, 0.0)
                 gain = self.gains.get(name, 1.0)
