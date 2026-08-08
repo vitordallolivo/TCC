@@ -628,6 +628,274 @@ passada).
 
 ---
 
+## ✅ Sensor de corrente reescrito com dados de bancada (`ensaio_hall_SS49E.csv`)
+
+Substituição da caracterização por simulação FEMM por **caracterização
+experimental**, a partir de `~/Downloads/ensaio_hall_SS49E.csv` (30 pontos:
+$N = 1$, 4 e 8 espiras) fornecido pelo autor, mais os agregados do ensaio de
+resposta em frequência (64 capturas em 1 kHz + 64 em 3 kHz). O autor pediu
+três coisas nesta rodada, todas aplicadas: (a) os dados brutos vão para
+`PosTextuais/` — pedidos primeiro como **anexo**, corrigido depois pelo próprio
+autor para **apêndice**, porque o ensaio é dele (é a distinção da ABNT: anexo é
+material de terceiro, apêndice é do autor); (b) o material entra como **uma
+coisa só**, sem fragmentar em subseções; (c) **toda a análise em frequência foi
+retirada** — o autor a rejeitou por completo. No lugar dela ficou uma única
+frase, na metodologia e no resultado, dizendo que a dinâmica é modelada como
+primeira ordem (RC) com polo em torno de **56 kHz**, inferido do tempo de
+resposta de 3 µs de catálogo, e que esse polo é levado em conta na coerência de
+fase.
+
+**Onde foi escrito:**
+- `Textuais/Metodologia/08_SAME.tex` — a `\subsubsection{Sensor de Corrente com
+  Núcleo Toroidal}` (`sec:same_sensor_corrente`) ganhou, em texto corrido sem
+  novas subdivisões: modelo do campo no entreferro via fator de indutância
+  $A_l$ de catálogo (Eqs. `eq:mur`, `eq:B_hopkinson`, `eq:dBdI`, `eq:S_teo`),
+  faixa de medição, procedimento do ensaio estático (artifício de $N$
+  espiras), a frase do polo de 56 kHz e, depois dela, o **estágio de
+  condicionamento dimensionado** (ver bloco próprio abaixo).
+- `Textuais/Conclusao.tex` — `\subsection{Sensor de Corrente}`
+  (`sec:resultado_sensor_corrente`), antes vazia, agora com 3 figuras e 1
+  tabela (ver abaixo). Também em texto corrido, uma subseção única.
+- `PosTextuais/Apendices.tex` — `\chapter{Dados brutos da caracterização do
+  sensor de corrente}` (`apendice:ensaio_hall`), Apêndice A, com a coleta
+  completa das 30 linhas (Tabela `tab:hall_dados_brutos`: $N$, $I$, $V_{out}$,
+  $\Delta V$, $B$, resíduo). Texto de abertura curto, a pedido do autor —
+  apêndice não leva parágrafo explicativo longo. `Anexos.tex` voltou ao estado
+  original (`\chapter{TÍTULO}` vazio).
+
+**Figuras e tabelas novas (todas com caption, label, fonte e citação no
+corpo — nenhuma é placeholder, todas têm dado real):**
+
+| Label | O que é |
+|---|---|
+| `fig:hall_vout_i` | $V_{out}(I)$ das três configurações + retas ajustadas (pgfplots) |
+| `fig:hall_dv_b` | Curva de transferência $\Delta V \times B$ vs. típico de catálogo |
+| `fig:hall_res` | Resíduos do ajuste linear por configuração |
+| `tab:hall_result` | $S$, $S_H$, desvio do típico e $R^2$ por configuração |
+| `tab:hall_dados_brutos` | Apêndice A — coleta completa |
+
+**Números extraídos (regressão por mínimos quadrados, ponto de $I = 0$
+incluído no ajuste):**
+
+| $N$ | $B$ varrido | $S$ (mV/A) | $S_H$ (mV/G) | $R^2$ |
+|---|---|---|---|---|
+| 1 | 0–78 G | 18,75 ± 0,16 | 1,209 | 0,99939 |
+| 4 | 0–330 G | 90,87 ± 0,09 | 1,465 | 0,99999 |
+| 8 | 0–516 G | 165,42 ± 0,20 | 1,334 | 0,99999 |
+
+**O achado que o orientador precisa avaliar:** $S_H$ é propriedade de uma única
+unidade física de sensor e não pode variar entre ensaios, mas os três valores
+divergem ±9,6 % em torno da média (1,336 mV/G), **sem tendência monotônica com
+$N$**. O texto atribui a dispersão à hipótese $B \propto N\,I\,(A_l/A_e)$, e
+não ao elemento Hall — as duas fontes citadas são a tolerância de ±15 % do
+próprio $A_l$ de catálogo e a diferença de acoplamento entre espira única pelo
+furo e enrolamento distribuído externamente. O $R^2 \geq 0{,}9994$ dentro de
+cada configuração sustenta que é erro sistemático entre montagens, não ruído.
+**Consequência assumida no texto:** o ganho usado no firmware é o de $N = 1$
+(18,75 mV/A → 42,97 mA/LSB), e o artifício de $N$ espiras vale para verificar
+linearidade e faixa, não para calibrar. Se o orientador discordar dessa
+leitura, é o parágrafo a rediscutir.
+
+**Análise em frequência retirada a pedido do autor.** Havia sido escrita uma
+seção completa (formas de onda médias em 3 kHz, tabela de ganho/defasagem em 1 e
+3 kHz, limites inferiores de $f_c$ por critério de fase e de ganho, e tabela
+comparando a fase do caminho de corrente com a do caminho de tensão). **Tudo
+removido** — o autor considerou o resultado malfeito. Sobrou apenas, em
+metodologia e em resultado, a frase de que a dinâmica é modelada como primeira
+ordem com polo em torno de **56 kHz** (de catálogo, não medido — declarado como
+tal), e que por estar acima do polo de 45,2 kHz do estágio de tensão
+(`sec:condicionamento`) o caminho de corrente não é o que limita a coerência de
+fase do observador. Nenhuma equação e nenhum dado do ensaio CA sobrou no texto.
+
+Os dados desse ensaio (64 capturas em 1 kHz + 64 em 3 kHz, 96158 amostras a
+9,62 MSa/s) **não estão no repositório** — chegaram só como agregados no LaTeX
+de rascunho do autor. Se a análise for retomada, refazer a partir das capturas
+originais do osciloscópio. Dois problemas conhecidos do que havia: só dois
+pontos de frequência, e o *shunt* de 1 Ω tomado pelo valor nominal sem
+calibração, o que jogava a sensibilidade absoluta 7–10 % abaixo do valor
+estático da mesma configuração de 8 espiras.
+
+A referência `ieee_std_1057` (ajuste de senoide de três parâmetros), adicionada
+para essa seção, foi **removida do `.bib`** por ter ficado sem citação.
+
+**Estágio de condicionamento (depois da dinâmica do sensor).** A frase anterior
+— "o ganho é 18,75 mV/A, do que resulta 42,97 mA por LSB" — estava errada de
+premissa: o sinal do sensor **não pode ir direto ao ADC**, porque o repouso
+ratiométrico fica em 2,5 V (alimentação de 5 V) e o microcontrolador converte de
+0 a 3,3 V. No resultado (Cap. 4) sobrou apenas o ganho do sensor, sem resolução;
+o dimensionamento foi para a metodologia, logo após a frase do polo de 56 kHz.
+
+**Histórico da decisão** (três versões, todas exploradas com o autor no mesmo
+dia; vale registrar porque o `.bib` e o texto mudaram junto): (1) amplificador de
+diferença dimensionado pela nota SLOA097 da Texas; (2) variante de exatidão da
+seção 4 da mesma nota, com segundo operacional como seguidor, escolhida pelo
+autor; (3) **versão final, passiva** — divisor resistivo com capacitor, sem
+operacional nenhum, proposta pelo autor. As duas primeiras foram descartadas e a
+referência `ti_sloa097` foi **removida do `.bib`** por ficar sem citação.
+
+**O que decidiu a favor da versão passiva:** o LM358 (peça que o autor queria
+usar, e que já está no caminho de tensão) não serve no estágio de corrente
+alimentado a 5 V. O datasheet dá, em todas as variantes, faixa de modo comum de
+entrada de $(V^-)$ a $(V^+)-1{,}5$ V, e $(V^+)-2{,}0$ V de −40 a +85 °C — 3,5 V
+a 25 °C e 3,0 V sobre temperatura, contra os 3,625 V que a entrada receberia do
+sensor em +60 A. Daria +54 A a 25 °C e só +27 A garantidos sobre temperatura.
+Alternativas seriam alimentar o LM358 com os 12 V da bancada (existem, ver
+`06_Bancada.tex`) ou usar um dual *rail-to-rail* em 5 V — mas a versão passiva
+resolve sem nenhuma das duas.
+
+**Dimensionamento final** (na metodologia, com figura em circuitikz desenhada,
+não é espaço reservado):
+
+| Grandeza | Valor |
+|---|---|
+| Divisor | $R_1 = 2{,}0$ kΩ (série) / $R_2 = 18$ kΩ (para o terra), $k = 0{,}900$ |
+| Faixa ±60 A na saída | 1,225 V a 3,250 V (nula em 2,238 V) |
+| Satura a janela do ADC em | +62,9 A |
+| Capacitor | 2,2 nF em paralelo com $R_2$ |
+| $R_1 \parallel R_2$ | 1,8 kΩ |
+| Frequência de corte | 40,2 kHz |
+| Ganho da cadeia | 16,88 mV/A |
+| Resolução | 47,7 mA/LSB |
+| Equações no texto | `eq:cond_k` ($k = R_2/(R_1+R_2)$) e `eq:cond_fc` ($f_c = 1/[2\pi(R_1\|R_2)C]$) |
+
+**Por que a resolução pior não importa.** Sai de 32,2 mA/LSB (versão com
+operacional, janela cheia) para 47,7 mA/LSB (61 % da janela). Mas o resíduo de
+linearidade medido no próprio sensor, 1,24 mV, equivale a **66 mA** referidos à
+entrada — já maior que o LSB degradado. O ADC não é o elo limitante em nenhum
+dos dois casos, então o operacional não comprava nada mensurável.
+
+**O ponto do RC, e por que ele vai nos dois caminhos.** O capacitor é
+*antialiasing*, não desacoplamento. Se ficasse só no caminho de corrente,
+destruiria a coerência de fase que o observador exige: o descasamento a 12 kHz
+saltaria de 2,8° para cerca de 19°. Com o mesmo polo nos dois caminhos o atraso
+é comum e se cancela na diferença — descasamento fica nos mesmos 2,8° de antes,
+e a atenuação no Nyquist da aquisição sobe de −9,9 dB para −22,5 dB, custando
+apenas −0,37 dB em 12 kHz. Para o caminho de tensão (Thévenin de 7,09 kΩ) o
+capacitor equivalente é **560 pF**.
+
+**Duas correntes verificadas** (o autor cobrou as duas, e a segunda de fato tinha
+ficado de fora da primeira conta):
+- *Saída do sensor:* 181 µA estáticos em fundo de escala **+ até 183 µA de pico**
+  para carregar o capacitor a 12 kHz = 364 µA, contra ≥1 mA garantidos em
+  catálogo (tipo de saída *sourcing*, que é o sentido em que o divisor puxa).
+  O pico do capacitor quase dobra a conta — é o que descartou um divisor de
+  impedância menor (1,0 k/9,1 k daria 724 µA, apertado demais).
+- *Entrada do ADC:* a recarga do capacitor de 8 pF do S&H atravessa
+  $R_1 \parallel R_2$ e aparece como erro de **ganho** de
+  $(R_1\|R_2)f_S C_{ADC} = 0{,}48$ %. Linear, some na calibração. No caminho de
+  tensão o mesmo efeito dá **1,89 %**, porque o Thévenin de lá é 4× maior.
+
+**Consequência para a calibração, já dita no texto:** os 18,75 mV/A foram
+medidos com multímetro, ou seja **sem carga**. Com o divisor montado entram a
+impedância de saída do sensor e os 0,48 % da injeção de carga. A calibração tem
+que ser da cadeia completa — sensor, divisor e ADC juntos —, nunca do sensor
+isolado.
+
+**Escolhas minhas, não do autor** (checar se concorda): o par 2,0 k/18 k (a razão
+podia ser outra desde que $k \leq 0{,}910$); o polo de 40 kHz para o RC; e os
+560 pF do caminho de tensão, que dependem do divisor 130 k/7,5 k que eu sugeri e
+que ainda não está no texto (ver abaixo).
+
+**Caminho de tensão escrito** (`sec:same_divisor_tensao`, subsubseção nova antes
+da do sensor de corrente), mesma topologia: divisor + capacitor direto ao ADC,
+figura `fig:cond_tensao` em circuitikz.
+
+| Grandeza | Valor |
+|---|---|
+| Divisor | $R_1 = 130$ kΩ / $R_2 = 7{,}5$ kΩ, $k = 0{,}0545$ |
+| Fundo de escala | 60,5 V — 2,0× o barramento de 30 V, folga para o sobressinal |
+| Resolução | 14,8 mV/LSB |
+| Thévenin | 7,09 kΩ — abaixo dos 11,4 kΩ do menor $t_s$ da `tab:rain_max` |
+| Capacitor | 560 pF → $f_c = 40{,}1$ kHz (mesmo polo do caminho de corrente) |
+| Consumo | 218 µA a 30 V, 6,2 mW em $R_1$ |
+| Erro de ganho por injeção de carga | 1,89 % |
+
+As equações `eq:cond_k` e `eq:cond_fc` foram **movidas para essa subsubseção**
+(vem antes no documento) e o bloco do sensor de corrente passou a referenciá-las
+em vez de repetir — a topologia é a mesma nos dois caminhos.
+
+**Figuras de rebatimento espectral** (`fig:alias_tensao` e `fig:alias_corrente`),
+uma por caminho. Mostram as raias das harmônicas do PWM (12 kHz, envelope $1/n$)
+já na entrada do ADC, a curva de resposta do filtro, a banda de interesse
+sombreada, $f_S/2$ e $f_S$ marcados no próprio eixo, e a anotação do rebatimento.
+O caso concreto: a **28ª harmônica do PWM, em 336 kHz, dobra exatamente em
+3 kHz** — dentro da faixa da fundamental elétrica. Chega a −47,5 dB no caminho de
+tensão e a −63,1 dB no de corrente, onde o polo do sensor se soma ao do RC.
+
+**Três versões foram descartadas antes desta** (o autor reprovou as duas
+primeiras por ilegibilidade, com razão): (1) legenda por cima das raias e arco de
+anotação atravessando o gráfico; (2) duas séries de raias sobrepostas no mesmo
+$x$, indistinguíveis, com $f_S/2$ e $f_S$ em rótulos rotacionados minúsculos.
+A versão final: **sem legenda** — os três elementos são rotulados no próprio
+gráfico ("banda de interesse", "filtro", e o valor em dB sobre a seta); uma única
+série de raias, a que chega ao ADC; e $f_S/2$ e $f_S$ como marcas extras no eixo
+$x$, em tamanho normal.
+
+**Regra que o autor reforçou nesta rodada** (vale para o resto do documento):
+frase longa encadeada é ilegível, e fórmula com identificador no meio do texto
+corrido também. O parágrafo do casamento de polos foi quebrado em três frases
+curtas, e a expressão do erro de ganho saiu do texto e virou equação numerada,
+uma por caminho (`eq:cond_ganho`, 1,89 %, e `eq:cond_ganho_i`, 0,48 %), **com a
+substituição numérica dentro da própria equação** — mesmo padrão de `eq:mur`,
+`eq:dBdI` e `eq:S_teo`, e também a pedido do autor: o valor tem que sair na
+fórmula, não só no texto que a segue.
+
+**O envelope $1/n$ das harmônicas é ilustrativo**, não medido — serve para
+mostrar o mecanismo do rebatimento, não para prever a amplitude real de cada
+harmônica. Se o orientador cobrar rigor aí, o caminho é medir o espectro real da
+corrente de fase com o ESC chaveando.
+
+**Correções de arraste feitas junto (não pedidas, mas necessárias para o
+documento fechar):**
+1. `tab:datasheet_ss49e` tinha sensibilidade **2,0 / 2,5 / 3,0 mV/G** e
+   linearidade 0,007 % — valores do SS59ET, não do SS49E. Sem a correção o
+   Capítulo 4 compararia o medido contra um típico errado. A tabela foi depois
+   **substituída inteira** pela tabela de *operating characteristics* que o
+   autor colou do datasheet: sensibilidade 1,0 / 1,4 / 1,75 mV/G, alimentação
+   2,7–6,5 V, corrente de alimentação 6/10 mA, corrente de saída 1,0/1,5 mA,
+   faixa magnética ±650/±1000 G, linearidade −0,7 % do span, tempo de resposta
+   3 µs, deriva do repouso ±0,10 %/°C, deriva da sensibilidade separada em
+   ≥25 °C (−0,15/0,05) e <25 °C (−0,04/0,185), temperatura de operação
+   −40 a 100 °C. Citada como `honeywell_ss49e`. **Legenda:** a primeira versão
+   trazia as condições de ensaio ($V_S = 5{,}0$ V, $T_A$ de −40 a 85 °C) na
+   `\caption`; o autor pediu para tirar — legenda tem que ser simples.
+2. `eq:hall_corrente` e `sec:same_condicionamento` eram **referências sem
+   destino** (`\autoref` sem `\label` em lugar nenhum). A equação passou a ser
+   definida em 3.8.1.1; o label de condicionamento foi fixado na
+   `\subsection{Medição de Tensão e Corrente de Fase}`, que é onde o
+   condicionamento dos dois caminhos é de fato descrito.
+3. `fig:resultado_sensor_medido_vs_simulado` também era referência sem destino,
+   citada duas vezes no Capítulo 5. As duas citações foram reescritas: o
+   objetivo específico 1 agora registra o sensor como **caracterizado em
+   bancada** (não "por simulação"), e o item de "Limitações e Itens Pendentes"
+   passou a ser a calibração na topologia de uso com fonte de alta corrente.
+4. `\autoref` em `\chapter` dentro de `apendicesenv`/`anexosenv` não imprime
+   "Apêndice"/"Anexo" corretamente — usar `Apêndice~\ref{...}` na mão.
+
+**Referências novas em `abntex2-ref_UDESC_2020.bib`:** `honeywell_ss49e`
+(datasheet SS39ET/SS49E/SS59ET), `thornton_nucleos` (catálogo de toroidais —
+resolve a nota "datasheet do núcleo não localizado" das Notas gerais, mas é
+catálogo web, não PDF do fornecedor), `dewi2016` (fringing field / sensor Hall
+de alta corrente) e `ieee_std_1057` (ajuste de senoide de três parâmetros).
+
+**Pendências abertas por esta rodada:**
+- Ensaio na topologia de uso ($N = 1$) com fonte capaz de $\pm 60$ A, para
+  calibrar o ganho de fato usado. É o único item que a dispersão de ±9,6 %
+  deixa em aberto.
+- Se o autor quiser resposta em frequência no documento, o ensaio precisa ser
+  **refeito** e melhor instrumentado: mais de dois pontos de frequência e
+  *shunt* de referência medido, não nominal.
+- **Inconsistência não resolvida (decisão do autor):** 3.8.1 diz que o ESC
+  chaveia em **12 kHz**; `sec:condicionamento` (Cap. 4) diz **8 kHz**. As duas
+  afirmações são sobre a mesma grandeza física. Não foi tocado nesta rodada
+  porque não faz parte do sensor de corrente, mas precisa ser unificado.
+
+**Compilação:** `pdflatex` ×2 + `bibtex` + `pdflatex` ×2, sem erro, sem
+referência ou citação indefinida. 112 páginas (era 108). Os 12 *overfull hbox*
+do log são todos pré-existentes, em `PreTextuais/Listas.tex`.
+
+---
+
 ## 📋 Checklist único de pendências reais (todas as ações)
 
 Tudo abaixo é imagem ou dado que só o autor pode fornecer — nenhum foi
@@ -651,7 +919,6 @@ inventado. Local = onde está o `\label` da figura ou da nota `Pendente`.
 | `fig:coastdown` | `Conclusao.tex` | Gráfico $\omega_m(t)$ do ensaio de desaceleração livre |
 | `fig:bancada_fisica` | `Conclusao.tex` | Foto da estrutura mecânica já usada pela equipe |
 | `fig:formas_onda_reais` | `Conclusao.tex` | Captura de V/I de fase reais |
-| `fig:resultado_sensor_medido_vs_simulado` | `Conclusao.tex` | Gráfico do sensor de corrente calibrado vs. simulado |
 | Figura 23 (`fig:telas_gui`) | `03_Interface.tex` | 9 capturas de tela da interface (já existia antes desta sessão) |
 
 **Dados numéricos/textuais a preencher (notas `\textit{Pendente: ...}`):**
@@ -663,7 +930,7 @@ inventado. Local = onde está o `\label` da figura ou da nota `Pendente`.
 | "Coeficientes Mecânicos" (Cap. 4) | Tabela de patamares, $B$, $\tau_c$, $J$ |
 | `sec:resultado_validacao_siba` | Bateria, células de carga, Pitot — validação completa da cadeia SIBA |
 | `sec:resultado_calibracao_canal_same` | Ganho/offset por canal, erro vs. referência, piso de ruído |
-| `fig:resultado_sensor_medido_vs_simulado` (parágrafo) | G medido do sensor de corrente e erro vs. 13,39 mV/A simulado |
+| `sec:resultado_sensor_corrente` | Ganho do sensor calibrado na topologia $N = 1$ com fonte de $\pm 60$ A |
 
 ---
 
@@ -673,7 +940,13 @@ inventado. Local = onde está o `\label` da figura ou da nota `Pendente`.
   10 e 15) — próximas ações que usem `\SI{...}{\gauss}` não precisam
   redeclarar.
 - Datasheet do núcleo NT-27/16/12-100-IP6 não foi localizado como PDF no
-  repositório nem publicamente por busca — a citação de material/permeabilidade
-  usa McLyman (handbook genérico) em vez do datasheet do fabricante. Se o
-  autor tiver o PDF do fornecedor (cotação própria mencionada no texto),
-  adicionar como referência mais específica.
+  repositório nem publicamente por busca. A citação passou a usar
+  `thornton_nucleos` (catálogo web de toroidais do fabricante) para os
+  parâmetros $A_l$, $A_e$ e $L_e$, com McLyman mantido para a teoria de
+  concentração de fluxo. Se o autor tiver o PDF do fornecedor (cotação própria
+  mencionada no texto), substituir por referência mais específica.
+- Os valores de $A_e = 64{,}5$ mm² e $L_e = 64{,}6$ mm usados na Eq. `eq:mur`
+  vieram do catálogo, não de medição do núcleo em mãos. A geometria nominal
+  (27/16/12 mm) daria $A_e = 66$ mm² e $L_e = 67{,}5$ mm — a diferença é o
+  desconto de área efetiva do fabricante, e é a origem admitida da tolerância
+  de ±15 % de $A_l$.

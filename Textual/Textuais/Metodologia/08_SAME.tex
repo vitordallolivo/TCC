@@ -48,6 +48,7 @@ resultantes estão na \autoref{fig:pcb_same}.
 
 \subsection{Medição de Tensão e Corrente de Fase}
 \label{sec:same_tensao}
+\label{sec:same_condicionamento}
 
 O sistema de aquisição utiliza dois conversores ADC operando em paralelo no CH32V307 com frequência de clock ADC de 14~MHz, conforme Tabela~4-40 do datasheet \cite{ch32v307_datasheet}. Cada módulo opera a taxa máxima de 1~MSps, com ADC1 digitalizando as três tensões de fase e ADC2 capturando as três correntes de fase de forma entrelançada, alcançando aproximadamente 333~kSps por canal. Esta taxa é escolhida para amostrar bem acima da frequência de chaveamento do ESC (12~kHz) e capturar a dinâmica do motor em operação, garantindo que o teorema de amostragem de Nyquist seja satisfeito \cite{oppenheim2009}.
 
@@ -122,107 +123,139 @@ Não-linearidade integral & $E_L$ & -- & ±4 LSB \\
 \end{tabular}
 \end{table}
 
-\subsubsection{Condicionamento de Sinal}
-\label{sec:same_condicionamento}
+\subsubsection{Medição de Tensão de Fase}
+\label{sec:same_divisor_tensao}
 
-A tensão de barramento (até 25~V em bateria 6S) é reduzida através de um divisor resistivo para cair na faixa de entrada do ADC (0--3,3 V), conforme a Equação~\eqref{eq:divisor_tensao} \cite{analog_signal_conditioning}:
+Cada tensão de fase é medida em relação ao terra do sistema, que é o mesmo
+terminal negativo do barramento de potência, e chega ao ADC por um divisor
+resistivo com capacitor (\autoref{fig:cond_tensao}), que estabelece também o
+filtro \textit{antialiasing} da aquisição.
 
-\begin{equation}
-V_{ADC} = V_{fase} \cdot \frac{R_2}{R_1 + R_2}
-\label{eq:divisor_tensao}
-\end{equation}
+\begin{figure}[H]
+    \centering
+    \caption{Condicionamento do caminho de tensão de fase}
+    \label{fig:cond_tensao}
+    \begin{circuitikz}[american, scale=1.0, transform shape]
+        \draw (0,0) node[left] {$V_{fase}$} to[short, o-] (0.8,0);
+        \draw (0.8,0) to[R, l=$R_1$, a=\SI{130}{\kilo\ohm}] (3.6,0);
+        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{7,5}{\kilo\ohm}] (3.6,-2.4);
+        \draw (3.6,-2.4) node[ground]{};
+        \draw (3.6,0) -- (5.6,0);
+        \draw (5.6,0) to[C, l_=$C$, a^=\SI{560}{\pico\farad}] (5.6,-2.4);
+        \draw (5.6,-2.4) -- (3.6,-2.4);
+        \draw (5.6,0) to[short, -o] (7.0,0) node[right] {$V_{ADC}$};
+    \end{circuitikz}
 
-Um filtro RC antialiasing de primeira ordem é posicionado na saída do divisor com frequência de corte:
-
-\begin{equation}
-f_c = \frac{1}{2\pi RC}
-\label{eq:fc_antialiasing}
-\end{equation}
-
-escolhida em torno de 40--50~kHz. O objetivo é atenuar componentes de frequência acima da frequência de Nyquist ($f_{\text{Ny}} = f_s / 2 \approx 56~\text{kHz}$) que não contêm informação útil sobre o motor mas carregam ruído de chaveamento (12~kHz e seus harmônicos). A atenuação de ~40 dB/década do filtro de primeira ordem elimina efetivamente o ruído PWM mantendo a banda passante dinâmica do motor intacta, um compromisso clássico em acionamentos de potência \cite{franco_opamps}.
-
-A corrente de fase é medida por sensor Hall, que fornece uma tensão proporcional à corrente \cite{allegro_hall_sensors}:
-
-\begin{equation}
-V_{out} = V_{ref} + S_H \cdot I_{fase}
-\label{eq:hall_corrente}
-\end{equation}
-
-onde $V_{ref}$ é o nível de repouso e $S_H$ é a sensibilidade em mV/A. A saída do sensor é acoplada diferencialmente ao ADC2 para rejeição de ruído de modo comum dos cabos de potência, uma prática padrão em acionamentos trifásicos \cite{bldc_control}.
-
-Na Figura~\ref{fig:sampling_adc}, os pontos vermelhos representam as amostras discretas capturadas pelo ADC, cujo código de saída varia entre 0 e $2^{12}-1 = 4095$. As linhas verticais (\textit{stems}) evidenciam a natureza discreta da amostragem: a cada instante de conversão, o sinal analógico contínuo (linha azul) é quantizado em um valor digital inteiro.
-
-\begin{figure}[h]
-\centering
-\caption{Ilustração da amostragem dos ADCs.}
-\label{fig:sampling_adc}
-\begin{tikzpicture}[scale=1.2, thick]
-
-  % Parametros: sinal centrado em 2048, amplitude 1600, faixa 0..4095
-  % Eixo Y normalizado: 0 -> 0 ; 4095 -> 4 (escala grafica)
-  % valor_grafico = (codigo/4095)*4
-
-  % Eixos
-  \draw[->] (0, 0) -- (12, 0) node[below right, font=\small] {Tempo};
-  \draw[->] (0, 0) -- (0, 4.6) node[left, font=\small] {};
-
-  % Marcas do eixo Y (0, 2048, 4095)
-  \foreach \yval/\label in {0/0, 2/2048, 4/4095} {
-    \draw (-0.1, \yval) -- (0.1, \yval);
-    \node[left, font=\tiny] at (-0.15, \yval) {\label};
-  }
-
-  % Linha tracejada no meio de escala (2048)
-  \draw[gray, dashed, thin] (0, 2) -- (12, 2);
-
-  % Sinal contínuo original (referência, cinza claro)
-  \draw[blue!30, thick, smooth, samples=400, domain=0:11.5]
-    plot (\x, {2 + 1.6*sin((\x) * 60)});
-
-  % Stems (linhas verticais até cada amostra) + pontos vermelhos
-  \foreach \t in {0.25, 0.75, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.25, 8.75, 9.25, 9.75, 10.25, 10.75} {
-    \draw[red, thin] (\t, 0) -- (\t, {2 + 1.6*sin((\t) * 60)});
-    \filldraw[red, mark size=1.5pt] (\t, {2 + 1.6*sin((\t) * 60)}) circle (0.08);
-  }
-
-\end{tikzpicture}
-
-{\small \textit{Fonte: Autor (2026)}}
+    Fonte: Autor (2026)
 \end{figure}
 
-
-
+A atenuação do divisor é dada pela \autoref{eq:cond_k} e a frequência de corte
+do filtro pela \autoref{eq:cond_fc}.
 
 \begin{equation}
-\text{LSB} = \frac{3.3~\text{V}}{2^{12}} \approx 0.805~\text{mV}
-\label{eq:lsb}
+k = \frac{R_2}{R_1 + R_2}
+\label{eq:cond_k}
 \end{equation}
 
-A resolução em unidades físicas (tensão ou corrente) é determinada pela relação de divisão do resistor e pela sensibilidade do sensor Hall, respectivamente. Entretanto, a resolução nominal de 0,805~mV é degradada pelos erros da Tabela~\ref{tab:adc_error}: com não-linearidade integral de até ±4~LSB, a incerteza efetiva de conversão sobe para $\approx 4 \times 0{,}805 = 3{,}2$~mV em pior caso. O erro de offset (±2~LSB) é compensado por calibração via rotina interna do CH32V307 (tempo $t_{CAL} = 40$~ciclos).
+\begin{equation}
+f_c = \frac{1}{2\pi \left(R_1 \parallel R_2\right) C}
+    = \frac{R_1 + R_2}{2\pi\,R_1 R_2\,C}
+\label{eq:cond_fc}
+\end{equation}
+
+\noindent
+Com $R_1 = \SI{130}{\kilo\ohm}$ e $R_2 = \SI{7,5}{\kilo\ohm}$ resulta
+$k = 0{,}0545$, o que coloca o fundo de escala da medição em \SI{60,5}{\volt} ---
+pouco mais do dobro da tensão de barramento, folga adotada para o sobressinal de
+comutação --- e a resolução em \SI{14,8}{\milli\volt} por LSB.
+
+A resistência equivalente do divisor é de \SI{7,09}{\kilo\ohm}, abaixo do limite
+de \SI{11,4}{\kilo\ohm} imposto pela Tabela~\ref{tab:rain_max} para o menor
+tempo de amostragem tabelado, de modo que a escolha de $t_s$ fica livre. Com
+$C = \SI{560}{\pico\farad}$ a frequência de corte resulta em
+\SI{40,1}{\kilo\hertz}.
+
+As harmônicas da comutação do ESC acima de $f_S/2$ são rebatidas para dentro da
+banda de interesse. A de ordem 28, em \SI{336}{\kilo\hertz}, cai a
+\SI{3}{\kilo\hertz}, dentro da faixa da fundamental elétrica. O filtro a atenua
+de $-\SI{28,9}{\decibel}$ para $-\SI{47,5}{\decibel}$, como mostra a
+\autoref{fig:alias_tensao}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Harmônicas do PWM na entrada do ADC e rebatimento da 28\textsuperscript{a} harmônica (\SI{336}{\kilo\hertz}) para \SI{3}{\kilo\hertz}, no caminho de tensão}
+    \label{fig:alias_tensao}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.92\textwidth, height=6.2cm, clip=false,
+            xlabel={$f$ [\si{\kilo\hertz}]}, ylabel={Amplitude [\si{\decibel}]},
+            xmin=0, xmax=400, ymin=-75, ymax=18,
+            xtick={0,100,200,300,400}, ytick={0,-20,-40,-60,-80},
+            extra x ticks={166.5,333},
+            extra x tick labels={$f_S/2$,$f_S$},
+            extra x tick style={grid=major, grid style={dashed,gray!60},
+                                tick label style={font=\small}},
+            grid=both, grid style={dotted,gray!30},
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \draw[fill=green!18, draw=none] (axis cs:0,-75) rectangle (axis cs:12,0);
+            \node[font=\small, green!45!black, anchor=west] at (axis cs:18,-62) {banda de interesse};
+            \addplot[ycomb, black!70, line width=0.9pt] coordinates {(12,-0.37) (24,-7.35) (36,-12.11) (48,-15.90) (60,-19.08) (72,-21.82) (84,-24.22) (96,-26.34) (108,-28.25) (120,-29.98) (132,-31.56) (144,-33.01) (156,-34.36) (168,-35.61) (180,-36.77) (192,-37.87) (204,-38.90) (216,-39.88) (228,-40.80) (240,-41.68) (252,-42.52) (264,-43.32) (276,-44.08) (288,-44.81) (300,-45.52) (312,-46.19) (324,-46.84) (336,-47.47) (348,-48.07) (360,-48.66) (372,-49.23) (384,-49.77) (396,-50.31)};
+            \addplot[green!50!black, dashed, thick, domain=0:400, samples=200] {-10*log10(1+(x/40.1)^2)};
+            \node[font=\small, green!45!black, anchor=south] at (axis cs:300,-17.5) {filtro};
+            \draw[blue!65!black, thick, dashed] (axis cs:336,-47.5) -- (axis cs:336,5);
+            \draw[blue!65!black, thick, -{Latex}] (axis cs:336,5) -- (axis cs:3,5);
+            \draw[blue!65!black, thick, dashed, -{Latex}] (axis cs:3,5) -- (axis cs:3,-47.5);
+            \fill[blue!65!black] (axis cs:336,-47.5) circle (2pt);
+            \fill[blue!65!black] (axis cs:3,-47.5) circle (2pt);
+            \node[font=\small, blue!65!black, above] at (axis cs:170,5) {$-47{,}5$ dB};
+        \end{axis}
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O divisor consome \SI{218}{\micro\ampere} com o
+barramento em \SI{30}{\volt}, dissipando \SI{6,2}{\milli\watt} em $R_1$.
+
+Como não há amplificador isolando o divisor do conversor, a corrente que
+recarrega o capacitor de amostragem do ADC atravessa a resistência equivalente
+do divisor. O efeito é o erro de ganho da \autoref{eq:cond_ganho}. Por ser
+proporcional ao sinal, é absorvido na calibração.
+
+\begin{equation}
+\varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
+= \SI{7,09}{\kilo\ohm} \times \SI{333}{\kilo\hertz} \times \SI{8}{\pico\farad}
+= \SI{1,89}{\percent}
+\label{eq:cond_ganho}
+\end{equation}
+
 
 \subsubsection{Sensor de Corrente com Núcleo Toroidal}
 \label{sec:same_sensor_corrente}
 
-Módulos de sensor de corrente Hall integrados e prontos para uso --- como o
-ACS758, de \SI{100}{\ampere} --- custam da ordem de R\$130 cada, e seriam
-necessárias três unidades, uma por fase. Como alternativa de custo muito
-menor, um sensor Hall linear discreto (SS49E) associado a um núcleo de
-ferrite com entreferro, atuando como concentrador de fluxo, totaliza cerca
-de R\$9,90 por fase --- cerca de treze vezes mais barato. Optou-se por essa
-segunda abordagem, que exige em contrapartida caracterizar o ganho, a
-linearidade e o acoplamento entre sensores adjacentes por simulação
-eletromagnética antes da calibração final em bancada.
-
 O sensor Hall utilizado é o SS49E, linear e ratiométrico
 \cite{ramsden2006}: a tensão de saída varia linearmente com a densidade de
 fluxo magnético aplicada ao elemento sensor, em torno de um nível de
-repouso, conforme já introduzido na Equação~\eqref{eq:hall_corrente}.
+repouso, conforme a \autoref{eq:hall_corrente}.
+
+\begin{equation}
+V_{out} = S_H\,B + V_O
+\label{eq:hall_corrente}
+\end{equation}
+
+\noindent
+onde $S_H$ é a sensibilidade do elemento e $V_O$ a tensão de saída na
+ausência de campo.
+
 Dentre as técnicas de medição de corrente disponíveis --- \textit{shunt}
 resistivo, transformador de corrente, bobina de Rogowski e sensores por
 efeito Hall --- a escolha por um núcleo concentrador com elemento Hall em
 malha aberta é a que melhor concilia isolação galvânica, resposta em
 corrente contínua e custo para esta aplicação \cite{ziegler2009}. O
-elemento fica no entreferro do núcleo toroidal de ferrite, que envolve o
+elemento fica no entreferro do núcleo toroidal NT-27/16/12-100-IP6
+(Thornton, ferrite IP6), de entreferro nominal \SI{2,3}{\milli\meter}
+\cite{thornton_nucleos}, que envolve o
 condutor de potência em uma única espira e intensifica ali a densidade de
 fluxo muito além do que se teria com o sensor exposto diretamente ao
 condutor \cite{mclyman2011}. A Figura~\ref{fig:topologia_sensor_corrente}
@@ -256,71 +289,231 @@ fabricante, está na Tabela~\ref{tab:datasheet_ss49e}. A tolerância de
 fabricação de $V_O$ e $S_H$ e a deriva térmica não são desprezíveis, de
 modo que a calibração individual de cada unidade em bancada é necessária
 antes da medição final; os valores típicos de \textit{datasheet} são
-adotados aqui para caracterizar o sensor e o núcleo, e a curva de ganho é
+adotados aqui para dimensionar o conjunto, e a curva de ganho é
 posteriormente corrigida a partir dessa calibração por unidade.
 
 \begin{table}[H]
 \centering
-\caption{Características elétricas do SS49E ($T_A = \SI{25}{\celsius}$,
-$V_{CC} = \SI{5,0}{\volt}$)}
+\caption{Características de operação do SS49E}
 \label{tab:datasheet_ss49e}
 \begin{tabular}{lccccc}
 \toprule
 \textbf{Parâmetro} & \textbf{Símbolo} & \textbf{Mín.} & \textbf{Típ.} & \textbf{Máx.} & \textbf{Unidade} \\
 \midrule
-Tensão de alimentação (operação) & $V_{CC}$ & 3,0 & -- & 6,5 & V \\
-Corrente de alimentação & $I_{CC}$ & -- & 4,2 & 8,0 & mA \\
-Tempo de resposta & $t_{ack}$ & -- & -- & 3 & \si{\micro\second} \\
-Tensão de repouso ($B=0\,\text{G}$) & $V_O$ & 2,25 & 2,50 & 2,75 & V \\
-Sensibilidade & $S_H$ & 2,0 & 2,5 & 3,0 & mV/G \\
-Linearidade (\% do \textit{span}) & -- & -- & -- & 0,007 & \% \\
-Erro de temperatura (\textit{null drift}) & -- & -0,10 & -- & 0,10 & \%/\si{\celsius} \\
+Tensão de alimentação & $V_S$ & 2,7 & -- & 6,5 & V \\
+Corrente de alimentação (\SI{25}{\celsius}) & $I_S$ & -- & 6 & 10 & mA \\
+Corrente de saída ($V_S > \SI{3,0}{\volt}$) & $I_{out}$ & 1,0 & 1,5 & -- & mA \\
+Tensão de repouso ($B=0\,\text{G}$, \SI{25}{\celsius}) & $V_O$ & 2,25 & 2,50 & 2,75 & V \\
+Sensibilidade (\SI{25}{\celsius}) & $S_H$ & 1,0 & 1,4 & 1,75 & mV/G \\
+Faixa magnética & $B_{max}$ & $\pm650$ & $\pm1000$ & -- & G \\
+Linearidade (\% do \textit{span}) & -- & -- & $-0,7$ & -- & \% \\
+Tempo de resposta & $t_{ack}$ & -- & 3 & -- & \si{\micro\second} \\
+Deriva térmica do repouso & -- & $-0,10$ & -- & 0,10 & \%/\si{\celsius} \\
+Deriva térmica da sensibilidade ($\geq\SI{25}{\celsius}$) & -- & $-0,15$ & -- & 0,05 & \%/\si{\celsius} \\
+Deriva térmica da sensibilidade ($<\SI{25}{\celsius}$) & -- & $-0,04$ & -- & 0,185 & \%/\si{\celsius} \\
+Temperatura de operação & $T_A$ & $-40$ & -- & 100 & \si{\celsius} \\
 \bottomrule
 \end{tabular}
 
-\vspace{2pt}
-{\small Fonte: Autor (2026), a partir do \textit{datasheet} do fabricante.}
+Fonte: Adaptado de \citeonline{honeywell_ss49e}.
 \end{table}
 
 A sensibilidade do SS49E, por si só, converte apenas gauss em milivolts; a
 grandeza de interesse é a corrente no condutor primário, o que exige também
 a relação entre a corrente e a densidade de fluxo efetivamente vista pelo
-elemento Hall dentro do entreferro, obtida por simulação eletromagnética.
+elemento Hall dentro do entreferro. Essa relação é obtida a partir do fator
+de indutância $A_l$ informado pelo fabricante do núcleo, que já contabiliza
+a dispersão de fluxo nas bordas do entreferro --- efeito conhecido como
+\textit{fringing field} \cite{dewi2016} --- e é por isso adotado como
+parâmetro de projeto em detrimento do cálculo puramente geométrico da
+relutância. Para o NT-27/16/12-100-IP6, $A_l = \SI{100}{\nano\henry}$ com
+tolerância de $\pm\SI{15}{\percent}$, área efetiva
+$A_e = \SI{64,5}{\milli\meter\squared}$ e caminho magnético efetivo
+$L_e = \SI{64,6}{\milli\meter}$. O mesmo núcleo sem entreferro apresenta
+$A_{l} = \SI{2700}{\nano\henry}$, do que decorre a permeabilidade relativa
+do ferrite IP6 conforme a \autoref{eq:mur}.
 
-\paragraph{Simulação eletromagnética.}
-A relação entre corrente e densidade de fluxo no entreferro poderia ser
-estimada por um circuito magnético equivalente (lei de Ampère e relutância
-do entreferro), mas essa simplificação não captura efeitos de borda no
-entreferro, a não linearidade do material nem a geometria real do núcleo
-\cite{mclyman2011}. Optou-se, em vez disso, por simulação de elementos
-finitos, que representa esses efeitos com maior fidelidade sem o custo de
-deduzir e validar um modelo analítico simplificado \cite{femm_meeker2018}.
+\begin{equation}
+\mu_r = \frac{A_{l,\text{s/entreferro}}\,L_e}{\mu_0\,A_e}
+      = \frac{\SI{2700e-9}{\henry} \times \SI{64,6e-3}{\meter}}
+             {\SI{1,257e-6}{\henry\per\meter} \times \SI{64,5e-6}{\meter\squared}}
+      \approx 2152
+\label{eq:mur}
+\end{equation}
 
-Consideraram-se duas condições de simulação para caracterizar o núcleo e o
-acoplamento entre sensores vizinhos: um núcleo único e isolado, que
-caracteriza a curva intrínseca do núcleo em corrente contínua (CC); e o
-arranjo físico de montagem, com três núcleos idênticos lado a lado sobre
-uma placa de circuito impresso (PCB), cada um com o entreferro voltado
-para o plano de terra (GND) de cobre da placa e folga de montagem de
-\SI{1}{\milli\meter}, simulado em corrente alternada (CA) --- regime em
-que correntes de Foucault podem se estabelecer no plano de GND
-\cite{lammeraner1966} --- na mesma frequência de chaveamento do ESC
-(\SI{12}{\kilo\hertz}, \autoref{sec:same_tensao}). A distância entre os
-centros dos três núcleos foi variada de
-\SI{28}{\milli\meter} (limite físico de montagem) a
-\SI{80}{\milli\meter}.
+A relutância total do circuito magnético é o inverso do fator de indutância
+e a densidade de fluxo no entreferro decorre da lei de Hopkinson, o que
+leva à \autoref{eq:B_hopkinson}.
 
-O núcleo simulado é o NT-27/16/12-100-IP6 (ferrite MnZn --- manganês-zinco
----, $\mu_r = 2500$, entreferro de \SI{2,3}{\milli\meter}), com condutor
-primário AWG12. A placa de cobre foi modelada como material condutor real,
-sem corrente própria (referência de terra, não caminho de retorno de
-potência), permitindo capturar eventuais correntes parasitas
-\cite{lammeraner1966}. A simulação foi feita no \textit{software} FEMM 4.2
-(\textit{Finite Element Method Magnetics}) \cite{femm_meeker2018};
-construção de geometria, varredura de parâmetros e extração de resultados
-foram automatizadas por \textit{script} Python via interface pyFEMM
-\cite{pyfemm_meeker}, permitindo reproduzir integralmente a varredura a
-partir do código-fonte.
+\begin{equation}
+\mathcal{R}_{tot} = \frac{1}{A_l}
+\qquad\Longrightarrow\qquad
+B = \frac{N\,I}{\mathcal{R}_{tot}\,A_e} = N\,I\,\frac{A_l}{A_e}
+\label{eq:B_hopkinson}
+\end{equation}
+
+\noindent
+onde $N$ é o número de vezes que o condutor atravessa o furo do toróide. Na
+topologia de uso real $N = 1$, e o gradiente de campo por unidade de
+corrente resulta em \SI{15,50}{\gauss\per\ampere}
+(\autoref{eq:dBdI}); combinado com a sensibilidade típica do elemento, o
+conjunto núcleo--sensor apresenta a sensibilidade teórica da
+\autoref{eq:S_teo}.
+
+\begin{equation}
+\frac{\mathrm{d}B}{\mathrm{d}I} = \frac{A_l}{A_e} \times 10^{4}
+= \frac{\SI{100e-9}{\henry}}{\SI{64,5e-6}{\meter\squared}} \times 10^{4}
+= \SI{15,50}{\gauss\per\ampere}
+\label{eq:dBdI}
+\end{equation}
+
+\begin{equation}
+S_{teo} = S_H\,\frac{\mathrm{d}B}{\mathrm{d}I}
+= \SI{1,40}{\milli\volt\per\gauss} \times \SI{15,50}{\gauss\per\ampere}
+= \SI{21,71}{\milli\volt\per\ampere}
+\label{eq:S_teo}
+\end{equation}
+
+A faixa magnética típica de $\pm\SI{1000}{\gauss}$ corresponde, por esse
+gradiente, a $\pm\SI{64,5}{\ampere}$ no condutor primário. Adota-se
+$\pm\SI{60}{\ampere}$ como faixa nominal de medição por fase.
+
+O procedimento de caracterização do conjunto núcleo--sensor tem por
+objetivo levantar a curva $V_{out}(B)$ e verificar sua conformidade com a
+\autoref{eq:hall_corrente}. Como a instrumentação disponível não gera
+correntes da ordem de grandeza da aplicação final, recorre-se à
+\autoref{eq:B_hopkinson}: enrolando $N$ espiras no toróide obtém-se o mesmo
+campo que uma corrente $N$ vezes maior atravessando o furo uma única vez, o
+que permite varrer a faixa de interesse do sensor a partir de correntes
+modestas. Foram ensaiadas três configurações --- $N = 1$, com o condutor
+atravessando o furo central, que é a topologia de uso real, e $N = 4$ e
+$N = 8$, com espiras enroladas externamente ao toróide. A corrente foi
+imposta por fonte de bancada Minipa operando em modo de limitação de
+corrente com a saída em curto-circuito controlado, e medida com multímetro,
+assim como a tensão de saída do sensor. A faixa varrida foi de 0 a
+\SI{5,33}{\ampere}, limite da instrumentação, o que alcança
+\SI{516}{\gauss} na configuração de oito espiras --- pouco mais da metade
+da faixa magnética típica do elemento. Durante a coleta observou-se deriva
+na tensão de alimentação do sensor, que desloca $V_O$ ao longo do ensaio;
+para suprimir essa dependência adota-se a variável
+$\Delta V = V_{out} - V_O$, com $V_O$ estimado como o intercepto da
+regressão linear, o que remove a componente contínua variável sem alterar o
+coeficiente angular, que é a grandeza de interesse. Os dados brutos das três
+configurações estão reproduzidos no Apêndice~\ref{apendice:ensaio_hall}.
+
+A dinâmica do conjunto não é objeto de ensaio próprio: adota-se o modelo de
+primeira ordem, análogo a uma rede RC, com polo único em torno de
+\SI{56}{\kilo\hertz} inferido do tempo de resposta de
+\SI{3}{\micro\second} declarado em catálogo. Esse polo é levado em conta na
+avaliação da coerência de fase entre os caminhos de tensão e de corrente
+exigida pelo observador, por ficar acima do polo do estágio de tensão
+(\autoref{sec:condicionamento}).
+
+A saída do sensor não pode ser levada diretamente ao ADC: o repouso do SS49E é
+ratiométrico e se situa em $V_{CC}/2 = \SI{2,5}{\volt}$, alimentado a
+\SI{5}{\volt}, e a faixa nominal de $\pm\SI{60}{\ampere}$ leva a saída a
+\SI{3,625}{\volt}, acima dos \SI{3,3}{\volt} que o microcontrolador converte. O
+condicionamento do caminho de corrente é o divisor resistivo com capacitor da
+\autoref{fig:cond_corrente}, que traz a excursão para dentro da janela de
+conversão e ao mesmo tempo estabelece o filtro \textit{antialiasing}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Condicionamento do caminho de corrente}
+    \label{fig:cond_corrente}
+    \begin{circuitikz}[american, scale=1.0, transform shape]
+        \draw (0,0) node[left] {$V_{out}$} to[short, o-] (0.8,0);
+        \draw (0.8,0) to[R, l=$R_1$, a=\SI{2,0}{\kilo\ohm}] (3.6,0);
+        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{18}{\kilo\ohm}] (3.6,-2.4);
+        \draw (3.6,-2.4) node[ground]{};
+        \draw (3.6,0) -- (5.6,0);
+        \draw (5.6,0) to[C, l_=$C$, a^=\SI{2,2}{\nano\farad}] (5.6,-2.4);
+        \draw (5.6,-2.4) -- (3.6,-2.4);
+        \draw (5.6,0) to[short, -o] (7.0,0) node[right] {$V_{ADC}$};
+    \end{circuitikz}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A topologia é a mesma do caminho de tensão, e valem as
+\autoref{eq:cond_k} e \autoref{eq:cond_fc}. Com $R_1 = \SI{2,0}{\kilo\ohm}$ e
+$R_2 = \SI{18}{\kilo\ohm}$ resulta $k = 0{,}900$, o que leva a faixa de
+$\pm\SI{60}{\ampere}$ para \SIrange{1,225}{3,250}{\volt}, com corrente nula em
+\SI{2,238}{\volt}; o topo da janela de conversão só é atingido em
+$+\SI{62,9}{\ampere}$. A resistência equivalente é
+$R_1 \parallel R_2 = \SI{1,8}{\kilo\ohm}$ e
+$C = \SI{2,2}{\nano\farad}$ dão $f_c = \SI{40,2}{\kilo\hertz}$, o mesmo polo do
+caminho de tensão. A igualdade entre os dois polos preserva a coerência de fase
+exigida pelo observador: o atraso do filtro é comum aos dois caminhos e se
+cancela na diferença entre eles.
+
+A atenuação na frequência de Nyquist sobe de \SI{-9,9}{\decibel}, que o sensor
+sozinho oferece, para \SI{-22,5}{\decibel}. Em \SI{12}{\kilo\hertz} o custo é de
+\SI{-0,37}{\decibel}. Como o polo do sensor se soma ao do filtro, a harmônica de
+ordem 28 chega a $-\SI{63,1}{\decibel}$ neste caminho
+(\autoref{fig:alias_corrente}), contra $-\SI{47,5}{\decibel}$ no de tensão.
+
+\begin{figure}[H]
+    \centering
+    \caption{Harmônicas do PWM na entrada do ADC e rebatimento da 28\textsuperscript{a} harmônica (\SI{336}{\kilo\hertz}) para \SI{3}{\kilo\hertz}, no caminho de corrente}
+    \label{fig:alias_corrente}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.92\textwidth, height=6.2cm, clip=false,
+            xlabel={$f$ [\si{\kilo\hertz}]}, ylabel={Amplitude [\si{\decibel}]},
+            xmin=0, xmax=400, ymin=-95, ymax=18,
+            xtick={0,100,200,300,400}, ytick={0,-20,-40,-60,-80},
+            extra x ticks={166.5,333},
+            extra x tick labels={$f_S/2$,$f_S$},
+            extra x tick style={grid=major, grid style={dashed,gray!60},
+                                tick label style={font=\small}},
+            grid=both, grid style={dotted,gray!30},
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \draw[fill=green!18, draw=none] (axis cs:0,-95) rectangle (axis cs:12,0);
+            \node[font=\small, green!45!black, anchor=west] at (axis cs:18,-80) {banda de interesse};
+            \addplot[ycomb, black!70, line width=0.9pt] coordinates {(12,-0.57) (24,-8.08) (36,-13.60) (48,-18.28) (60,-22.39) (72,-26.04) (84,-29.32) (96,-32.28) (108,-34.97) (120,-37.44) (132,-39.71) (144,-41.81) (156,-43.76) (168,-45.59) (180,-47.30) (192,-48.91) (204,-50.43) (216,-51.87) (228,-53.23) (240,-54.53) (252,-55.77) (264,-56.96) (276,-58.09) (288,-59.18) (300,-60.22) (312,-61.23) (324,-62.19) (336,-63.13) (348,-64.03) (360,-64.90) (372,-65.75) (384,-66.57) (396,-67.36)};
+            \addplot[green!50!black, dashed, thick, domain=0:400, samples=200] {-10*log10(1+(x/40.2)^2)-10*log10(1+(x/56)^2)};
+            \node[font=\small, green!45!black, anchor=south] at (axis cs:300,-32.2) {filtro};
+            \draw[blue!65!black, thick, dashed] (axis cs:336,-63.1) -- (axis cs:336,5);
+            \draw[blue!65!black, thick, -{Latex}] (axis cs:336,5) -- (axis cs:3,5);
+            \draw[blue!65!black, thick, dashed, -{Latex}] (axis cs:3,5) -- (axis cs:3,-63.1);
+            \fill[blue!65!black] (axis cs:336,-63.1) circle (2pt);
+            \fill[blue!65!black] (axis cs:3,-63.1) circle (2pt);
+            \node[font=\small, blue!65!black, above] at (axis cs:170,5) {$-63{,}1$ dB};
+        \end{axis}
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Duas correntes precisam ser verificadas nessa topologia, já que não há
+amplificador isolando o sensor do ADC. A primeira é a carga que o divisor impõe
+ao sensor: \SI{181}{\micro\ampere} em fundo de escala, aos quais se somam até
+\SI{183}{\micro\ampere} de pico para carregar o capacitor na frequência de
+chaveamento, totalizando \SI{364}{\micro\ampere} --- pouco mais de um terço da
+corrente de saída mínima de catálogo, \SI{1}{\milli\ampere}. A segunda é a
+corrente de amostragem do próprio ADC, cujo erro de ganho neste caminho é o da
+\autoref{eq:cond_ganho_i}. Esse erro é absorvido na calibração, que por isso é
+feita sobre a cadeia completa, com o divisor montado, e não sobre o sensor
+isolado.
+
+\begin{equation}
+\varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
+= \SI{1,8}{\kilo\ohm} \times \SI{333}{\kilo\hertz} \times \SI{8}{\pico\farad}
+= \SI{0,48}{\percent}
+\label{eq:cond_ganho_i}
+\end{equation}
+
+O ganho da cadeia resulta em
+$\SI{18,75}{\milli\volt\per\ampere} \times 0{,}900 =
+\SI{16,88}{\milli\volt\per\ampere}$, o que dá uma resolução de
+\SI{47,7}{\milli\ampere} por LSB no ADC de 12~bits. A corrente é reconstruída
+em \textit{firmware} pela razão entre a tensão convertida menos o
+\textit{offset} e esse ganho, com o \textit{offset} levantado no início de cada
+ensaio a corrente nula --- o que absorve conjuntamente a tolerância de $V_O$, a
+deriva da alimentação do sensor e a fuga estática da entrada do ADC.
+
 
 \subsection{Arquitetura de \textit{Firmware} do Observador}
 \label{sec:same_firmware}

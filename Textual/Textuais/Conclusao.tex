@@ -917,232 +917,225 @@ bancada ainda não realizado.}
 \subsection{Sensor de Corrente}
 \label{sec:resultado_sensor_corrente}
 
-A Figura~\ref{fig:resultado_single_gap} mostra a densidade de fluxo obtida
-por elementos finitos no núcleo único isolado, no fundo de escala do
-projeto (\SI{100}{\ampere}).
+O conjunto núcleo toroidal com sensor Hall foi caracterizado pelo
+procedimento da \autoref{sec:same_sensor_corrente}, nas três configurações de
+enrolamento previstas. A \autoref{fig:hall_vout_i} apresenta a tensão de saída
+em função da corrente imposta, com as retas ajustadas por mínimos quadrados; a
+coleta completa está no Apêndice~\ref{apendice:ensaio_hall}.
 
 \begin{figure}[H]
-\centering
-\caption{Densidade de fluxo no sensor único isolado, a \SI{100}{\ampere}}
-\label{fig:resultado_single_gap}
-\includegraphics[width=0.7\textwidth]{Textuais/Imgs/Resultados/sensor_single_gap.pdf}
+    \centering
+    \caption{Tensão de saída do SS49E em função da corrente imposta}
+    \label{fig:hall_vout_i}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.85\textwidth, height=6.5cm,
+            xlabel={$I$ [\si{\ampere}]}, ylabel={$V_{out}$ [\si{\volt}]},
+            xmin=0, xmax=5.6, ymin=2.47, ymax=3.23,
+            grid=both, grid style={dotted,gray!40},
+            legend pos=north west,
+            legend style={font=\scriptsize, inner sep=2pt},
+            legend columns=2,
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \addplot[dashed, green!55!black, thick, domain=0:5.6] {0.018750*x + 2.486645};
+            \addlegendentry{$N=1$ (ajuste)}
+            \addplot[only marks, mark=triangle*, mark size=2pt, green!55!black]
+                coordinates {
+                    (0.000,2.48570)(0.159,2.48975)(1.040,2.50530)(1.539,2.51590)
+                    (2.012,2.52550)(2.529,2.53520)(2.939,2.54200)
+                    (3.113,2.54490)(4.082,2.56270)(5.041,2.58050)};
+            \addlegendentry{$N=1$}
+            \addplot[dashed, red!65!black, thick, domain=0:5.6] {0.090866*x + 2.487632};
+            \addlegendentry{$N=4$ (ajuste)}
+            \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
+                coordinates {
+                    (0.000,2.48640)(0.101,2.49780)(0.355,2.52050)(0.620,2.54420)
+                    (1.056,2.58320)(1.662,2.63800)(2.094,2.67800)
+                    (2.522,2.71710)(2.766,2.73900)(3.034,2.76340)
+                    (4.038,2.85450)(5.077,2.94880)(5.329,2.97200)};
+            \addlegendentry{$N=4$}
+            \addplot[dashed, blue!65!black, thick, domain=0:4.4] {0.165417*x + 2.490699};
+            \addlegendentry{$N=8$ (ajuste)}
+            \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
+                coordinates {
+                    (0.000,2.49150)(0.580,2.58630)(1.022,2.65960)(1.514,2.74090)
+                    (2.014,2.82410)(2.989,2.98440)(3.319,3.03893)
+                    (4.164,3.18070)};
+            \addlegendentry{$N=8$}
+        \end{axis}
+    \end{tikzpicture}
 
-Fonte: Autor (2026), simulação FEMM
+    Fonte: Autor (2026)
 \end{figure}
 
-Para a condição isolada em corrente contínua, a varredura de corrente de
-\SI{1}{\ampere} a \SI{100}{\ampere} mostra que a densidade de fluxo no
-entreferro cresce proporcionalmente à corrente primária, com sensibilidade
-de núcleo constante --- dentro da resolução numérica --- em toda a faixa
-avaliada (Figura~\ref{fig:resultado_I_vs_B}): $G_{núcleo} =
-\SI{5,355}{\gauss\per\ampere}$.
+Convertendo a corrente em densidade de fluxo pela
+\autoref{eq:B_hopkinson}, as três configurações passam a ocupar um mesmo eixo
+e podem ser confrontadas entre si e contra a sensibilidade típica de catálogo,
+como mostra a \autoref{fig:hall_dv_b}. O ensaio com oito espiras estende a
+varredura até \SI{516}{\gauss}, contra \SI{78}{\gauss} da configuração de uso
+real, o que permite verificar a linearidade em mais da metade da faixa
+magnética do elemento.
 
 \begin{figure}[H]
-\centering
-\caption{Densidade de fluxo no entreferro em função da corrente primária}
-\label{fig:resultado_I_vs_B}
-\includegraphics[width=0.75\textwidth]{Textuais/Imgs/Resultados/sensor_fig_I_vs_B.pdf}
+    \centering
+    \caption{Curva de transferência $\Delta V \times B$ das três configurações}
+    \label{fig:hall_dv_b}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.85\textwidth, height=6.5cm,
+            xlabel={$B$ [G]}, ylabel={$\Delta V$ [\si{\milli\volt}]},
+            xmin=0, xmax=540, ymin=0, ymax=760,
+            grid=both, grid style={dotted,gray!40},
+            legend pos=north west,
+            legend style={font=\scriptsize, inner sep=2pt},
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \addplot[dotted, black, very thick, domain=0:540] {1.4*x};
+            \addlegendentry{Típico de catálogo (\SI[per-mode=symbol]{1,40}{\milli\volt\per\gauss})}
+            \addplot[only marks, mark=triangle*, mark size=2pt, green!55!black]
+                coordinates {
+                    (0.00,-0.945)(2.47,3.105)(16.12,18.655)(23.86,29.255)
+                    (31.19,38.855)(39.21,48.555)(45.57,55.355)
+                    (48.26,58.255)(63.29,76.055)(78.16,93.855)};
+            \addlegendentry{$N=1$ --- \SI[per-mode=symbol]{1,209}{\milli\volt\per\gauss}}
+            \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
+                coordinates {
+                    (0.00,-1.232)(6.26,10.168)(22.02,32.868)(38.45,56.568)
+                    (65.49,95.568)(103.07,150.368)(129.86,190.368)
+                    (156.40,229.468)(171.53,251.368)(188.16,275.768)
+                    (250.42,366.868)(314.85,461.168)(330.48,484.368)};
+            \addlegendentry{$N=4$ --- \SI[per-mode=symbol]{1,465}{\milli\volt\per\gauss}}
+            \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
+                coordinates {
+                    (0.00,0.801)(71.94,95.601)(126.76,168.901)(187.78,250.201)
+                    (249.80,333.401)(370.73,493.701)(411.66,548.231)
+                    (516.47,690.001)};
+            \addlegendentry{$N=8$ --- \SI[per-mode=symbol]{1,334}{\milli\volt\per\gauss}}
+        \end{axis}
+    \end{tikzpicture}
 
-Fonte: Autor (2026)
+    Fonte: Autor (2026)
 \end{figure}
 
-Combinando essa sensibilidade de núcleo com a sensibilidade típica do
-SS49E (Tabela~\ref{tab:datasheet_ss49e}), o modelo de transferência do
-sensor de corrente completo é:
-
-\begin{equation}
-    V_{sense} = G \cdot I + V_{offset}
-    \label{eq:transferencia_sensor}
-\end{equation}
-
-com
-
-\begin{equation}
-    G = G_{núcleo} \cdot S_H
-      = \SI{5,355}{\gauss\per\ampere} \times \SI{2,5}{\milli\volt\per\gauss}
-      \approx \SI{13,39}{\milli\volt\per\ampere},
-    \qquad
-    V_{offset} = V_O \approx \SI{2,50}{\volt}.
-    \label{eq:ganho_offset_valores}
-\end{equation}
-
-No fundo de escala do projeto ($I = \pm\SI{100}{\ampere}$, já que a
-corrente de fase de um acionamento trifásico é sempre alternada), isso
-resulta em $V_{sense} \approx \SI{3,84}{\volt}$ ($+100\,$A) e
-$\approx\SI{1,16}{\volt}$ ($-100\,$A), dentro da faixa de saída do sensor
-(Tabela~\ref{tab:datasheet_ss49e}).
-
-Quanto à margem de saturação do núcleo: pela lei de Ampère, desprezando a
-relutância do ferrite frente à do entreferro (aproximação válida para
-$\mu_r$ elevado), $H_{gap} = I/l_{gap}$, que no fundo de escala do projeto
-($I = \SI{100}{\ampere}$, $l_{gap} = \SI{2,3}{\milli\meter}$) resulta em
-$B_{gap} = \mu_0 H_{gap} \approx \SI{54,6}{\milli\tesla}$ --- valor
-consistente com o $G_{núcleo}$ obtido por elementos finitos. Como o fluxo
-é o mesmo em série pelo núcleo e pelo entreferro, a densidade no ferrite em
-si é da mesma ordem de grandeza, ainda que tipicamente maior por efeito do
-estreitamento de seção pelo espraiamento do fluxo nas bordas do entreferro
-\cite{mclyman2011}. Mesmo nesse caso, o valor permanece uma ordem de
-grandeza abaixo da densidade de saturação típica de ferrites MnZn (entre
-\SI{380}{\milli\tesla} e \SI{500}{\milli\tesla}, segundo o material,
-\cite{mclyman2011}), preservando margem folgada mesmo no fundo de escala de
-corrente do projeto.
-
-A Figura~\ref{fig:resultado_erro_sensor} mostra o efeito da tolerância de
-fabricação e da deriva térmica do SS49E sobre essa curva típica. No pior
-caso --- unidade no extremo da tolerância de fabricação ---, o envelope
-resultante ultrapassa os limites físicos de saída do sensor nos dois
-extremos de corrente; a deriva térmica, isoladamente, tem efeito bem menor,
-reforçando a necessidade de calibração por unidade
-(\autoref{sec:same_sensor_corrente}). O erro de linearidade não é mostrado
-por ser desprezível nessa escala ($\SI{0,007}{\percent}$ do \textit{span},
-Tabela~\ref{tab:datasheet_ss49e}).
+Os resíduos do ajuste linear (\autoref{fig:hall_res}) permanecem abaixo de
+\SI{1,24}{\milli\volt} nas três configurações, sem estrutura de curvatura que
+denuncie saturação do ferrite ou compressão do elemento Hall no extremo da
+faixa varrida. Referido ao \textit{span} completo do elemento --- os
+\SI{2,8}{\volt} correspondentes a $\pm\SI{1000}{\gauss}$ com a sensibilidade
+medida ---, esse desvio equivale a \SI{0,04}{\percent}, muito abaixo da
+linearidade de $-\SI{0,7}{\percent}$ do \textit{span} especificada em
+catálogo.
 
 \begin{figure}[H]
-\centering
-\caption{$V_{sense}(I)$ típico frente ao envelope de tolerância de
-fabricação e à deriva térmica do SS49E}
-\label{fig:resultado_erro_sensor}
-\includegraphics[width=0.85\textwidth]{Textuais/Imgs/Resultados/sensor_fig_erro_sensor.pdf}
+    \centering
+    \caption{Resíduos do ajuste linear por configuração de enrolamento}
+    \label{fig:hall_res}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.85\textwidth, height=5cm,
+            xlabel={$I$ [\si{\ampere}]}, ylabel={Resíduo [\si{\milli\volt}]},
+            xmin=-0.15, xmax=5.6, ymin=-1.8, ymax=1.7,
+            ytick={-1.5,-1,-0.5,0,0.5,1,1.5},
+            grid=both, grid style={dotted,gray!40},
+            legend pos=south east,
+            legend style={font=\scriptsize, inner sep=2pt},
+            legend columns=3,
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \addplot[dotted, black, domain=0:5.6, forget plot] {0};
+            \addplot[only marks, mark=triangle*, mark size=2pt, green!55!black]
+                coordinates {
+                    (0.000,-0.945)(0.159,0.124)(1.040,-0.844)(1.539,0.400)
+                    (2.012,1.131)(2.529,1.138)(2.939,0.250)
+                    (3.113,-0.112)(4.082,-0.481)(5.041,-0.661)};
+            \addlegendentry{$N=1$}
+            \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
+                coordinates {
+                    (0.000,-1.232)(0.101,0.990)(0.355,0.610)(0.620,0.231)
+                    (1.056,-0.387)(1.662,-0.652)(2.094,0.094)
+                    (2.522,0.303)(2.766,0.032)(3.034,0.080)
+                    (4.038,-0.050)(5.077,-0.160)(5.329,0.142)};
+            \addlegendentry{$N=4$}
+            \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
+                coordinates {
+                    (0.000,0.801)(0.580,-0.341)(1.022,-0.155)(1.514,-0.241)
+                    (2.014,0.251)(2.989,-0.731)(3.319,-0.788)
+                    (4.164,1.204)};
+            \addlegendentry{$N=8$}
+        \end{axis}
+    \end{tikzpicture}
 
-Fonte: Autor (2026)
+    Fonte: Autor (2026)
 \end{figure}
 
-A Figura~\ref{fig:resultado_trifase_geral} mostra a densidade de fluxo nos
-três núcleos montados lado a lado sobre a PCB, na menor distância entre
-centros testada.
-
-\begin{figure}[H]
-\centering
-\caption{Densidade de fluxo nos três sensores a \SI{100}{\ampere}, menor
-distância testada (\SI{28}{\milli\meter})}
-\label{fig:resultado_trifase_geral}
-\includegraphics[width=\textwidth]{Textuais/Imgs/Resultados/sensor_trifase_geral_d028mm.pdf}
-
-Fonte: Autor (2026), simulação FEMM
-\end{figure}
-
-Adotou-se como critério de \textit{crosstalk} desprezível um desvio máximo
-de \SI{1}{\percent} entre a leitura de uma fase com e sem as fases vizinhas
-energizadas --- patamar acima do próprio erro de conversão do ADC do
-CH32V307 em pior caso ($\pm 4$~LSB $\approx \SI{3,2}{\milli\volt}$ sobre um
-fundo de escala de \SI{3,3}{\volt}, $\approx \SI{0,1}{\percent}$,
-Tabela~\ref{tab:adc_error}): um \textit{crosstalk} dentro desse limiar não
-acrescenta incerteza superior à que a própria cadeia de aquisição já
-introduz.
-
-Quanto ao acoplamento entre sensores adjacentes (\textit{crosstalk}): sete
-combinações de corrente foram simuladas em cada distância avaliada --- cada
-fase isolada (\SI{100}{\ampere} em uma fase, demais em zero), cada par
-simultâneo, e as três fases simultâneas --- tomando a leitura de cada
-sensor com apenas sua própria fase energizada como referência ``sem
-interferência''. O desvio máximo observado foi de
-\SI{0,0026}{\percent}, na menor distância testada
-(\SI{28}{\milli\meter}), decaindo monotonicamente com o afastamento entre
-núcleos (Figura~\ref{fig:resultado_crosstalk}). Mesmo no pior caso, o
-\textit{crosstalk} está três ordens de grandeza abaixo do limiar de
-\SI{1}{\percent} adotado como desprezível: a proximidade entre os sensores
-das três fases não compromete a medição individual em nenhum espaçamento
-fisicamente viável de PCB.
-
-\begin{figure}[H]
-\centering
-\caption{Maior desvio por \textit{crosstalk} em função da distância entre
-núcleos, \SI{12}{\kilo\hertz}}
-\label{fig:resultado_crosstalk}
-\includegraphics[width=0.85\textwidth]{Textuais/Imgs/Resultados/sensor_fig_crosstalk.pdf}
-
-Fonte: Autor (2026)
-\end{figure}
-
-Sensores de corrente de núcleo único e elemento Hall discreto, como o
-adotado aqui, não possuem o mecanismo de rejeição de campo de modo comum
-presente em circuitos integrados de sensoriamento diferencial
-\cite{allegro_an296128_2023}; a proximidade entre os três núcleos na PCB
-torna, portanto, a caracterização do acoplamento entre fases
-(\textit{crosstalk}) apresentada acima especialmente relevante para essa
-topologia.
-
-A banda passante do conjunto sensor mais núcleo é limitada pelo tempo de
-resposta do SS49E ($t_{ack} = \SI{3}{\micro\second}$ em pior caso,
-Tabela~\ref{tab:datasheet_ss49e}): tratando esse tempo como constante de
-uma resposta de primeira ordem, $f_{-3\text{dB}} \approx 0{,}35/t_{ack}
-\approx \SI{117}{\kilo\hertz}$, valor abaixo da frequência de Nyquist da
-taxa de amostragem por canal do SAME ($\approx$~333~kSps$/2 \approx
-\SI{166,5}{\kilo\hertz}$, \autoref{sec:same_tensao}); a resposta do
-núcleo de ferrite em si, sem enrolamento, é ordens de grandeza mais rápida
-e não limita a cadeia. É, portanto, o sensor Hall, e não o ADC, o elemento
-que limita a resposta em frequência do canal de corrente.
-
-Quanto ao acoplamento indutivo parasita introduzido pelos três núcleos e
-pelo plano de GND: cada fase foi modelada como um indutor com indutância
-própria ($L_{AA}$, $L_{BB}$, $L_{CC}$) e indutância mútua com as demais
-($M_{AB}$, $M_{AC}$, $M_{BC}$), extraídas do enlace de fluxo calculado pelo
-FEMM durante a resolução do campo. A indutância própria, $\approx
-\SI{59,3}{\nano\henry}$ por fase e praticamente constante com a distância
-entre núcleos (Tabela~\ref{tab:resultado_inducao_resumo}), é desprezível
-frente à indutância de fase medida do motor
-($L_Y \approx \SI{6,95}{\micro\henry}$, \autoref{tab:indutancia_motor}). A
-indutância mútua entre fases (Figura~\ref{fig:resultado_inductancia_mutua})
-é ainda menor --- na faixa de \si{\pico\henry}, seis ordens de grandeza
-abaixo da própria --- mesmo no pior caso, com os núcleos no limite físico
-de proximidade ($d=\SI{28}{\milli\meter}$): o arranjo de sensores não
-introduz perturbação elétrica mensurável na dinâmica do acionamento.
-
-\begin{figure}[H]
-\centering
-\caption{Indutância mútua entre pares de fases em função da distância
-entre centros (escala logarítmica)}
-\label{fig:resultado_inductancia_mutua}
-\includegraphics[width=0.75\textwidth]{Textuais/Imgs/Resultados/sensor_fig_inductancia_mutua.pdf}
-
-Fonte: Autor (2026)
-\end{figure}
+A \autoref{tab:hall_result} reúne os parâmetros extraídos de cada
+configuração. A coluna $S$ é o coeficiente angular medido, em milivolts por
+ampere de corrente no primário; a coluna $S_H$ é a sensibilidade do elemento
+Hall obtida dividindo $S$ pelo gradiente $N\,\mathrm{d}B/\mathrm{d}I$ da
+\autoref{eq:dBdI}, e é a grandeza diretamente comparável ao
+\textit{datasheet}.
 
 \begin{table}[H]
-\centering
-\caption{Indutância própria, mútua e coeficiente de acoplamento nos
-extremos da varredura de distância (CA, \SI{12}{\kilo\hertz})}
-\label{tab:resultado_inducao_resumo}
-\begin{tabular}{lcc}
-\toprule
-\textbf{Grandeza} & \textbf{$d=\SI{28}{\milli\meter}$} & \textbf{$d=\SI{80}{\milli\meter}$} \\
-\midrule
-$L_{AA}$, $L_{BB}$, $L_{CC}$ & $\approx\SI{59,3}{\nano\henry}$ & $\approx\SI{59,3}{\nano\henry}$ \\
-$M_{AB}$, $M_{BC}$ (adjacentes) & \SI{0,723}{\pico\henry} & \SI{0,102}{\pico\henry} \\
-$M_{AC}$ (extremos) & \SI{0,292}{\pico\henry} & \SI{0,041}{\pico\henry} \\
-$k_{AB}$, $k_{BC}$ & \num{1.22e-5} & \num{1.72e-6} \\
-$k_{AC}$ & \num{4.92e-6} & \num{6.98e-7} \\
-\bottomrule
-\end{tabular}
+    \centering
+    \caption{Parâmetros do conjunto núcleo--sensor por configuração de enrolamento}
+    \label{tab:hall_result}
+    \begin{tabular}{cccccc}
+        \toprule
+        \textbf{$N$} & \textbf{$B$ varrido [G]} & \textbf{$S$ [\si{\milli\volt\per\ampere}]} &
+        \textbf{$S_H$ [\si{\milli\volt\per\gauss}]} & \textbf{Desvio do típico} & \textbf{$R^2$} \\
+        \midrule
+        1 & 0 -- 78  & 18{,}75 $\pm$ 0{,}16  & 1{,}209 & $-13{,}6\%$ & 0{,}99939 \\
+        4 & 0 -- 330 & 90{,}87 $\pm$ 0{,}09  & 1{,}465 & $+4{,}7\%$  & 0{,}99999 \\
+        8 & 0 -- 516 & 165{,}42 $\pm$ 0{,}20 & 1{,}334 & $-4{,}7\%$  & 0{,}99999 \\
+        \midrule
+        \multicolumn{3}{l}{Média das três configurações} & 1{,}336 & $-4{,}6\%$ & -- \\
+        \multicolumn{3}{l}{Típico de catálogo} & 1{,}400 & -- & -- \\
+        \bottomrule
+    \end{tabular}
 
-\vspace{2pt}
-{\small Fonte: Autor (2026), simulação FEMM.}
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
 \end{table}
 
-O ganho previsto por simulação ($G \approx \SI{13,39}{\milli\volt\per\ampere}$,
-Equação~\eqref{eq:ganho_offset_valores}) ainda carece de confronto com a
-calibração física de cada unidade do SS49E
-(\autoref{sec:same_sensor_corrente}); a
-\autoref{fig:resultado_sensor_medido_vs_simulado} reserva o espaço para essa
-curva medida uma vez concluído o ensaio de bancada.
+As três configurações resultam em sensibilidade dentro da faixa especificada
+pelo fabricante (\SIrange{1,00}{1,75}{\milli\volt\per\gauss}), com média de
+\SI{1,336}{\milli\volt\per\gauss} --- desvio de $-\SI{4,6}{\percent}$ frente
+ao típico. A tensão de repouso medida, entre \SI{2,487}{\volt} e
+\SI{2,491}{\volt} nas três coletas, também se enquadra na faixa de catálogo
+(\SIrange{2,25}{2,75}{\volt}).
 
-\begin{figure}[H]
-\centering
-\caption{Curva de transferência medida do sensor de corrente frente à
-prevista por simulação (espaço reservado)}
-\label{fig:resultado_sensor_medido_vs_simulado}
-\begin{tikzpicture}
-    \node[draw, dashed, align=center, minimum width=0.8\textwidth,
-          minimum height=5cm, text width=0.7\textwidth, font=\small]
-          {Curva $V_{sense}(I)$ medida em bancada, por unidade de sensor,\\
-           sobreposta à reta prevista por simulação\\
-           ($G \approx \SI{13,39}{\milli\volt\per\ampere}$,
-           $V_{offset} \approx \SI{2,50}{\volt}$)};
-\end{tikzpicture}
+O ponto que exige leitura cuidadosa é a dispersão de $S_H$ entre as
+configurações: \SI{1,209}{}, \SI{1,465}{} e
+\SI{1,334}{\milli\volt\per\gauss}, ou seja $\pm\SI{9,6}{\percent}$ em torno da
+média, sem tendência monotônica com $N$. Como se trata de uma única unidade
+física de sensor, $S_H$ é uma propriedade fixa e não pode variar de um ensaio
+para o outro; a dispersão observada não está no elemento Hall, e sim na
+hipótese de que $B$ é estritamente proporcional a $N\,I$ com o fator
+$A_l/A_e$ de catálogo. Isso é coerente com as duas fontes de erro que essa
+hipótese carrega: a tolerância de $\pm\SI{15}{\percent}$ do próprio $A_l$ e a
+diferença de acoplamento entre uma espira única atravessando o furo e um
+enrolamento distribuído externamente ao toróide, que fecha um caminho de fluxo
+de dispersão distinto. A qualidade do ajuste dentro de cada configuração
+($R^2 \geq 0{,}9994$) confirma que a dispersão é sistemática entre montagens,
+não ruído de medição.
 
-Fonte: Autor (2026)
-\end{figure}
+A consequência prática é que o artifício de $N$ espiras é válido para verificar
+a linearidade e situar o sensor na faixa de catálogo --- o que foi feito ---
+mas não substitui a calibração na topologia de uso. O ganho do sensor adotado
+para o projeto é o da configuração $N = 1$,
+\SI{18,75}{\milli\volt\per\ampere} --- valor sobre o qual o estágio de
+condicionamento do caminho de corrente foi dimensionado
+(\autoref{sec:same_sensor_corrente}), já que a saída do sensor, centrada em
+\SI{2,5}{\volt}, não pode ser levada direto ao ADC de \SI{3,3}{\volt}.
 
+A dinâmica do conjunto foi tratada pelo modelo de primeira ordem da
+\autoref{sec:same_sensor_corrente}, com polo em torno de
+\SI{56}{\kilo\hertz}. Como esse polo está acima do polo de
+\SI{45,2}{\kilo\hertz} do estágio de tensão
+(\autoref{sec:condicionamento}), o caminho de corrente é o mais rápido dos
+dois e não é o elemento que limita a coerência de fase exigida pelo
+observador.
 
 \chapter{Conclusão e Trabalhos Futuros}
 \label{cap:conclusao}
@@ -1160,16 +1153,18 @@ Introdução:
 \begin{enumerate}
     \item \textbf{Sistema de medição elétrica do motor BLDC:} a PCB da SAME
     foi projetada e fabricada, com sensores de corrente por núcleo toroidal
-    e SS49E caracterizados por simulação eletromagnética
+    e SS49E dimensionados a partir do fator de indutância de catálogo
     (\autoref{sec:same_sensor_corrente}), e o condicionamento de sinal de
     tensão e corrente descrito e dimensionado
-    (\autoref{sec:same_condicionamento}). A validação elétrica completa em
-    bancada --- calibração de canal, piso de ruído e confronto do sensor de
-    corrente medido com o previsto por simulação --- permanece pendente
-    (\autoref{sec:resultado_calibracao_canal_same},
-    \autoref{sec:resultado_sensor_corrente}). Objetivo \textbf{parcialmente
-    atingido}: o \textit{hardware} está pronto, a validação experimental
-    não.
+    (\autoref{sec:same_condicionamento}). O sensor de corrente foi
+    caracterizado em bancada, confirmando linearidade até \SI{516}{\gauss} e
+    sensibilidade dentro da faixa de catálogo
+    (\autoref{sec:resultado_sensor_corrente}). A
+    validação elétrica restante --- calibração de canal e piso de ruído com o
+    ESC chaveando --- permanece pendente
+    (\autoref{sec:resultado_calibracao_canal_same}). Objetivo
+    \textbf{parcialmente atingido}: o \textit{hardware} está pronto e o
+    sensor de corrente validado, a calibração de canal não.
 
     \item \textbf{Modelagem do motor e projeto do observador:} a resistência
     e a indutância de fase foram medidas experimentalmente
@@ -1246,9 +1241,12 @@ físico ainda não realizado e não por limitação de escopo:
     células de carga (\autoref{sec:resultado_validacao_siba});
     \item Calibração de canal, piso de ruído e formas de onda reais da SAME
     (\autoref{sec:resultado_calibracao_canal_same});
-    \item Confronto entre o ganho do sensor de corrente medido em bancada e
-    o previsto por simulação eletromagnética
-    (\autoref{fig:resultado_sensor_medido_vs_simulado}).
+    \item Calibração do ganho do sensor de corrente na topologia de uso, com
+    fonte capaz de impor correntes da ordem da faixa nominal de
+    $\pm\SI{60}{\ampere}$ --- a caracterização atual cobre a faixa magnética
+    completa por meio de enrolamentos auxiliares, mas a dispersão de
+    $\pm\SI{9,6}{\percent}$ entre configurações mostra que o ganho da espira
+    única não é dedutível das demais (\autoref{tab:hall_result}).
 \end{itemize}
 
 Cada um desses itens tem seção e figura ou tabela já reservadas no texto

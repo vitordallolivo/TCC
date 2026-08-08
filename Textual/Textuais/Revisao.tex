@@ -70,32 +70,6 @@ O perfil trapezoidal da função de forma para a fase $A$ é definido por \eqref
 
 As funções das fases $B$ e $C$ seguem o mesmo perfil, porém defasadas em $\frac{2\pi}{3}$ e $\frac{4\pi}{3}$ radianos elétricos, respectivamente. O alinhamento perfeito entre as rampas e os platôs da FEM com a injeção retangular de corrente pelas fases é o princípio fundamental para a geração de torque constante. A \autoref{fig:bldc_waveforms} ilustra o sincronismo entre a posição elétrica do rotor, o perfil trapezoidal da FEM gerada em cada fase e as correntes comutadas.
 
-Embora técnicas avançadas de estimação baseadas em observadores sejam ideais para o controle de alto desempenho dinâmico, uma das abordagens \textit{sensorless} mais consolidadas e computacionalmente eficientes para o acionamento de motores BLDC é o método de Detecção de Passagem por Zero (ZCP --- \textit{Zero Crossing Point}) da força contraeletromotriz \cite{Krishnan2017}. Na estratégia de comutação em seis etapas (\textit{6-step}), a cada setor de 60 graus elétricos, o inversor trifásico energiza duas fases do motor enquanto a terceira permanece aberta (estado flutuante). O método ZCP tira proveito desta topologia monitorando a tensão elétrica diretamente na fase não energizada. Quando a polaridade do fluxo magnético do rotor que cruza a bobina se inverte, a força contraeletromotriz induzida nesta fase passa exatamente pelo zero \cite{Boldea2010}. A detecção deste evento de cruzamento (seja em uma rampa ascendente ou descendente) é crucial, pois o ZCP ocorre invariavelmente a exatos 30 graus elétricos antes do momento ideal de comutação para o próximo setor. Ao detectar o ZCP, o microcontrolador calcula o atraso necessário com base na velocidade atual do rotor e, decorrido este tempo, aciona as próximas chaves do inversor. A  \autoref{tab:zcp_comutacao} sumariza essa lógica sequencial, correlacionando o setor de operação, o evento de ZCP esperado na fase flutuante e as chaves de potência ativas.
-
-\begin{table}[H]
-    \centering
-    \caption{Lógica de comutação \textit{sensorless} em 6 etapas baseada na detecção do ZCP da força contraeletromotriz.}
-    \label{tab:zcp_comutacao}
-    \vspace{0.2cm}
-    \begin{tabular}{cc ccc cc}
-        \toprule
-        \multirow{2}{*}{\textbf{Setor}} & \multirow{2}{*}{\textbf{Ângulo ($\theta_e$)}} & \multicolumn{2}{c}{\textbf{Fase Flutuante (ZCP)}} & \multicolumn{1}{c}{\textbf{Fases Ativas}} & \multicolumn{2}{c}{\textbf{Chaves Ativas}} \\
-        \cmidrule(lr){3-4} \cmidrule(lr){5-5} \cmidrule(lr){6-7}
-        & & Fase & Transição (FEM) & (+ e -) & \textit{High} & \textit{Low} \\
-        \midrule
-        1 & $0^\circ \text{ a } 60^\circ$     & Fase B & Descendente ($\searrow$) & A e C & $Q_1$ (A) & $Q_2$ (C) \\
-        2 & $60^\circ \text{ a } 120^\circ$   & Fase C & Ascendente ($\nearrow$)  & A e B & $Q_1$ (A) & $Q_6$ (B) \\
-        3 & $120^\circ \text{ a } 180^\circ$  & Fase A & Descendente ($\searrow$) & C e B & $Q_5$ (C) & $Q_6$ (B) \\
-        4 & $180^\circ \text{ a } 240^\circ$  & Fase B & Ascendente ($\nearrow$)  & C e A & $Q_5$ (C) & $Q_4$ (A) \\
-        5 & $240^\circ \text{ a } 300^\circ$  & Fase C & Descendente ($\searrow$) & B e A & $Q_3$ (B) & $Q_4$ (A) \\
-        6 & $300^\circ \text{ a } 360^\circ$  & Fase A & Ascendente ($\nearrow$)  & B e C & $Q_3$ (B) & $Q_2$ (C) \\
-        \bottomrule
-    \end{tabular}
-    
-    \vspace{0.2cm}
-    \small Fonte: Autor (2026).
-\end{table}
-
 
 \begin{figure}[H]
     \centering
