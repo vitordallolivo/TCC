@@ -101,6 +101,269 @@ então a SAME reaproveita a base que a SIBA já resolveu, em vez de refazer:
 
 ---
 
+## Aquisição — cadeia ADC/DMA e dimensionamento de `Ts_adc`
+
+> Referência: **CH32F/V20x_V30x_V31x Reference Manual, cap. 12** (ADC).
+> Esta seção fixa a taxa efetiva da malha, que é o que define
+> `Ts_adc` → `K = Γ/Ts` e o passo do observador.
+
+### Topologia de conversão
+
+6 canais em **modo dual simultâneo de hardware** (`DUALMOD = 0110`, Regular
+Simultaneous), 3 canais por ADC, com as sequências **pareadas por fase**:
+
+```
+ADC1_RSQR3: SQ1=V_a, SQ2=V_b, SQ3=V_c   (L[3:0]=2)
+ADC2_RSQR3: SQ1=i_a, SQ2=i_b, SQ3=i_c   (L[3:0]=2)
+```
+
+Cada transferência de DMA de 32 bits carrega um par `(V_x, i_x)` da **mesma
+fase, amostrado no mesmo instante** — não há defasagem V↔i entrando no Clarke.
+Um frame completo = **3 transferências**.
+
+- `ADC1_RDATAR[31:16]` = ADC2 (corrente), `[15:0]` = ADC1 (tensão).
+  Separar é `w & 0x0FFF` e `(w >> 16) & 0x0FFF` — ~15–20 ciclos por frame,
+  desprezível. **Não existem dois streams para demultiplexar.**
+- `ALIGN = 0` (alinhamento à direita), DMA com *peripheral* e *memory size*
+  em **32 bits**, canal 1 do DMA1.
+- O manual exige **tempo de conversão igual nos dois grupos** em modo
+  simultâneo: mesmo `SMPx` em ADC1 e ADC2, mesmo número de canais em cada.
+
+### Registradores — mapa de bits que o driver toca
+
+Bases: **ADC1 = `0x40012400`**, **ADC2 = `0x40012800`** (mesmos offsets).
+
+| Offset | Registrador | Papel na SAME |
+|---|---|---|
+| `0x00` | `STATR` | flags `EOC`/`STRT` (não usar com DMA) |
+| `0x04` | `CTLR1` | `DUALMOD`, `SCAN`, `PGA`, `BUFEN` |
+| `0x08` | `CTLR2` | `ADON`, `CONT`, `DMA`, `ALIGN`, `CAL`, `RSTCAL`, `EXTSEL` |
+| `0x0C` | `SAMPTR1` | `SMP10`–`SMP17` |
+| `0x10` | `SAMPTR2` | `SMP0`–`SMP9` ← **canais usados estão aqui** |
+| `0x2C` | `RSQR1` | `L[3:0]` = nº de conversões − 1 |
+| `0x34` | `RSQR3` | `SQ1`–`SQ6` (a sequência de 3 canais cabe aqui) |
+| `0x4C` | `RDATAR` | resultado; em dual, ADC2 nos 16 bits altos |
+
+**`CTLR1` (`0x04`)**
+```
+[28:27] PGA[1:0]   00=x1  01=x4  10=x16  11=x64   (exige BUFEN=1)
+[26]    BUFEN      1 = buffer de entrada ligado
+[19:16] DUALMOD    0110 = Regular Simultaneous  ← só no ADC1
+[8]     SCAN       1 = varre a sequência do RSQRx
+[5]     EOCIE      0 (a sinalização vem da ISR do DMA, não do EOC)
+```
+> `DUALMOD` é **reservado no ADC2** — escrever só no `ADC1_CTLR1`. O manual
+> exige que a alteração seja feita com o modo dual **desabilitado**.
+
+**`CTLR2` (`0x08`)**
+```
+[22]    SWSTART    início por software
+[20]    EXTTRIG    1 = habilita disparo por evento externo
+[19:17] EXTSEL     111 = SWSTART | 100 = TRGO do TIM3 | 000..010 = CC1..CC3 do TIM1
+[11]    ALIGN      0 = alinhamento à DIREITA  ← usar 0 (dado em [11:0])
+[8]     DMA        1 — habilitar no ADC1 (o ADC2 não tem linha própria)
+[3]     RSTCAL     1 = inicializa registrador de calibração (limpa por HW)
+[2]     CAL        1 = dispara autocalibração (limpa por HW ao terminar)
+[1]     CONT       1 = conversão contínua (free-running)
+[0]     ADON       0→1 acorda o ADC; 1→1 inicia conversão
+```
+> **`ADON` é sensível a escrita conjunta:** "quando *apenas* `ADON` muda no
+> registrador, uma conversão é iniciada; se outros bits mudarem junto, a
+> conversão **não** inicia". Configure tudo primeiro, depois escreva `ADON`
+> sozinho num acesso separado.
+
+**`SAMPTR2` (`0x10`)** — 3 bits por canal, `SMPn` em `[3n+2 : 3n]`:
+```
+SMP0=[2:0]  SMP1=[5:3]  SMP2=[8:6]  SMP3=[11:9]  SMP4=[14:12]  SMP5=[17:15]
+000=1,5  001=7,5  010=13,5  011=28,5  100=41,5  101=55,5  110=71,5  111=239,5
+```
+Com o mapa atual (PA0–PA2 → CH0–CH2 no ADC1; PA3–PA5 → CH3–CH5 no ADC2), os
+seis campos usados são `SMP0`–`SMP5`, **todos no `SAMPTR2`**, e com o **mesmo
+valor nos dois ADCs**.
+
+**`RSQR1` (`0x2C`) / `RSQR3` (`0x34`)**
+```
+RSQR1[23:20] L[3:0]   = (nº de conversões − 1) → 3 canais ⇒ L = 2
+RSQR3[4:0]   SQ1      RSQR3[9:5] SQ2      RSQR3[14:10] SQ3
+```
+
+**`RDATAR` (`0x4C`)** — no ADC1, em modo dual:
+```
+[31:16] ADC2DATA  → corrente (ADC2)
+[15:0]  DATA      → tensão   (ADC1)
+```
+
+> Se um dia a amostragem for sincronizada ao PWM por timer: em modo dual com
+> disparo externo, o manual exige `EXTTRIG=1` nos **dois** ADCs, com o trigger
+> real no mestre e **software trigger no escravo**, para não disparar conversão
+> espúria no ADC2.
+>
+> `ADCx_AUX` (`0x54`, tempos de 2,5–5,5 ciclos) **só existe em lotes
+> específicos** (`CH32V30x_D8`/`D8C` sem zero no sexto dígito do lote). Não
+> depender dele.
+
+### Inicialização e calibração
+
+São **duas calibrações distintas** e as duas são obrigatórias antes de liberar
+o observador.
+
+**1. Autocalibração de hardware (`RSTCAL` → `CAL`)** — corrige o descasamento do
+banco de capacitores interno do SAR. É **por ADC** e deve rodar em **modo
+independente**, com **`BUFEN = 0`**:
+
+```
+para cada ADC (1 e 2), com DUALMOD = 0000 e BUFEN = 0:
+  1. ADON: 0 → 1            # acorda; aguardar tSTAB
+  2. aguardar ≥ 2 ciclos de ADCCLK com ADON = 1   ← exigência do manual
+  3. RSTCAL = 1  → aguardar o HW limpar
+  4. CAL    = 1  → aguardar o HW limpar
+```
+> O manual é explícito: se `BUFEN`/`TKENABLE`/`TSVREFE` estiverem ligados o
+> buffer não pode ser desligado, então **a calibração tem de vir antes** de
+> habilitar buffer ou PGA. Ordem: `CAL` → `BUFEN`/`PGA` → `DUALMOD` → `DMA`.
+
+**2. Calibração de offset dos sensores** — zera o ponto de operação do
+front-end. Roda **depois** que o modo dual e o DMA já estão ativos, com o **ESC
+parado**.
+
+> ⚠️ **O ADC2 (correntes) usa sensor Hall e precisa de ~2 s de estabilização
+> antes de amostrar o offset.** O Hall parte em `Vcc/2` e deriva durante o
+> aquecimento inicial do ASIC; medir cedo trava um offset errado, que aparece
+> depois como corrente DC fantasma nas três fases — e essa corrente entra
+> direto no Clarke e vira BEMF espúria no SMO.
+
+```
+1. concluir a autocalibração de HW dos dois ADCs
+2. configurar DUALMOD / sequências / DMA e começar a converter
+3. AGUARDAR ≥ 2000 ms  (estabilização do Hall)   ← não pular
+4. acumular N ≥ 4096 frames com o ESC parado
+5. offset[ch] = média(N)  para os 6 canais
+6. gravar via o mesmo caminho de DEFAULT_ACTION_CALIBRATE_OFFSET
+   (TARGET_CURRENT_A/B/C e TARGET_VOLTAGE_A/B/C)
+7. só então: status = pronto → liberar Observer_Step
+```
+
+**Enquanto o passo 7 não concluir:**
+- `Observer_Step` **não roda** (ou roda com estado zerado e saída descartada) —
+  senão o PLL trava em ângulo errado e o `reconfig` não resolve, porque o erro
+  está na entrada, não nos ganhos.
+- Os checadores do `Security_Manager` que dependem de offset ficam
+  **mascarados** — em especial `i_a+i_b+i_c≈0` e o de faixa de sensor, que
+  disparariam falso-positivo com o Hall ainda derivando. Candidato a um bit
+  próprio em `error_bits`: *calibração em andamento* / *calibração falhou*.
+- Se o desvio-padrão dos N frames do passo 4 exceder o limiar, **falhar a
+  calibração** em vez de gravar: ruído alto ali significa ESC energizado,
+  sensor mal alimentado ou terra aberto.
+
+### Taxa por canal
+
+`T_CONV = tempo de amostragem + 11·T_ADCCLK` (§12.2.2), logo com 3 canais/ADC:
+
+```
+f_s = f_ADCCLK / ((SMPx + 11) × 3)
+```
+
+| `SMPx` | Total | @14 MHz | `Ts` | @12 MHz | `Ts` |
+|---|---|---|---|---|---|
+| 1,5 | 12,5 | 373 kSps | 2,68 µs | 320 kSps | 3,13 µs |
+| **7,5** | **18,5** | **252 kSps** | **3,96 µs** | **216 kSps** | **4,63 µs** |
+| 13,5 | 24,5 | 190 kSps | 5,25 µs | 163 kSps | 6,12 µs |
+| 28,5 | 39,5 | 118 kSps | 8,46 µs | 101 kSps | 9,87 µs |
+| 41,5 | 52,5 | 89 kSps | 11,25 µs | 76 kSps | 13,1 µs |
+
+**⚠️ Os ~333 kSps/canal antes assumidos no projeto não são atingíveis.** Só
+`SMPx = 1,5` chega perto (373 kSps @14 MHz), e 1,5 ciclos é o pior caso de
+impedância de fonte e **viola a recomendação de ≥7,5T quando `BUFEN=1`** (que é
+obrigatório se o PGA for usado nos shunts). O valor realista é **252 kSps
+(`SMPx = 7,5`)**, ou menos se o orçamento de CPU não fechar (ver abaixo).
+
+**Verificar o `ADCCLK` antes de fixar `Ts_adc`:** o limite do ADC é 14 MHz, mas
+com PCLK2 = 144 MHz os divisores `ADCPRE[1:0]` (/2 a /8) dão no mínimo 18 MHz —
+**acima do limite**. É preciso usar o prescaler estendido do RCC ou baixar o
+APB2 para cair em 12 MHz. **Todas as taxas escalam linearmente com o `ADCCLK`
+real** — medir/confirmar antes de gravar `Ts_adc`.
+
+### Orçamento de CPU — restrição dominante
+
+Como o observador roda **colado ao evento do ADC, sem decimação**, o período do
+frame é o orçamento inteiro de `Observer_Step` (núcleo a 144 MHz):
+
+| `f_s` | Período | Ciclos disponíveis |
+|---|---|---|
+| 373 kSps | 2,68 µs | 386 |
+| 252 kSps | 3,96 µs | 571 |
+| 190 kSps | 5,25 µs | 756 |
+| 118 kSps | 8,46 µs | 1218 |
+| 101 kSps | 9,87 µs | 1421 |
+
+**O gargalo é a trigonometria do PLL + torque.** O passo atual avalia `f(·)`
+seis vezes por iteração — três em `g_α/g_β` (PLL) e três em `f_a/f_b` (torque).
+Com `sinf` de libm (~100–300 ciclos cada) isso sozinho custa **600–1800
+ciclos**, o que **estoura o orçamento em qualquer taxa acima de ~100 kSps**.
+
+Dois caminhos para destravar 252 kSps, em ordem de custo:
+
+1. **Reaproveitar `g_α/g_β` como `f_a/f_b`** quando a compensação de atraso
+   estiver desligada (`θ_out == θ̂`): elimina 3 das 6 avaliações de graça.
+2. **LUT de seno** (256–1024 pontos + interpolação linear, ~15–25 ciclos por
+   consulta) no lugar de `sinf`. Leva as 6 avaliações a ~150 ciclos e coloca
+   `Observer_Step` na casa dos ~350 ciclos.
+
+Enquanto isso não for feito, **fixar `Ts_adc` na faixa de 100 kSps**
+(`SMPx = 28,5`) — que ainda dá ~125 amostras por período elétrico na rotação
+máxima (ver abaixo), folgado para o observador.
+
+> **Medir, não estimar:** GPIO toggle na entrada/saída da ISR do ADC e
+> comparar com o período do frame no osciloscópio antes de fechar `SMPx`.
+
+### Coerência do buffer circular (ping-pong)
+
+O DMA é **circular**, mas um buffer de exatamente 3 words gera corrida: o DMA
+começa a sobrescrever a word 0 enquanto a ISR ainda lê o frame. O sintoma é
+amostra misturada entre frames, **intermitente e pior em rotação alta**.
+
+Buffer de **6 words (2 frames)** com as duas interrupções:
+
+| Evento | DMA escrevendo | ISR processa |
+|---|---|---|
+| Half-transfer | words 3–5 | words 0–2 |
+| Transfer-complete | words 0–2 | words 3–5 |
+
+24 bytes de RAM e a coerência fica garantida por construção; a ISR recebe só o
+ponteiro da metade estável.
+
+> **Não há flag de overrun nos canais regulares desta geração de ADC.** Se a ISR
+> estourar o orçamento e um transfer for perdido, o dado é sobrescrito **em
+> silêncio** — o observador recebe uma amostra deslocada no tempo sem nenhum
+> sinal de erro. Manter um **contador de sequência** na ISR e expor descartes no
+> `error_code` (candidato a novo bit em `error_bits` do `SAME.yaml`).
+>
+> Não fazer polling de `EOC` junto com DMA: a leitura de `RDATAR` pelo DMA já
+> limpa o flag.
+
+### Filtro antialiasing
+
+O sinal medido é a saída do ESC (PWM chaveado, **~30 kHz**), então o filtro fica
+entre a fundamental elétrica e a portadora:
+
+- **Fundamental máxima**: `f_e = RPM · p / 60`. Com o A-5025-310Kv (`p = 7`) em
+  6S, `RPM ≈ 6900` → **`f_e ≈ 800 Hz`**. A janela até 30 kHz é larga (~1,5
+  década), então dá para filtrar com folga sem distorcer a fundamental.
+- **`f_c ≈ 5–8 kHz, 2ª ordem`** é o ponto de operação: preserva a fundamental
+  com atraso de fase pequeno e atenua a portadora em ~35–45 dB na `f_s/2` das
+  taxas da tabela.
+- O capacitor do RC (dezenas de nF contra os ~8 pF internos do ADC) é quem
+  entrega a carga no instante de amostragem — por isso `SMPx` curto **não**
+  custa exatidão aqui, e a impedância dos divisores/shunts deixa de ser
+  limitante.
+
+Em 252 kSps a fundamental é amostrada ~314 vezes por período elétrico; em
+101 kSps, ~125. **O requisito de sinal está folgado nas duas** — o que muda com
+a taxa é a espessura efetiva da camada de contorno do SMO (chattering), não a
+capacidade de reconstruir a BEMF.
+
+---
+
 ## Protocolo de comunicação (fonte: `../Aplicacao_Pi/Config/SAME.yaml`)
 
 Mesmo protocolo compacto da SIBA (`CMD` 8 bytes + `TELEMETRY_LOG` packed LE):
@@ -246,6 +509,10 @@ tq_lpf ← α_tq·Te + (1 − α_tq)·tq_lpf           # → torque_eletrico
 > `../Aplicacao_Pi/` (menu Estimativas), não no firmware da SAME — o firmware só
 > **recebe** `Γ1/Γ2/Γt` por `CMD` e calcula `K = Γ/Ts` internamente.
 
+> ⏱️ **Custo por iteração:** as seis avaliações de `f(·)` (três no passo 4, três
+> no passo 5) dominam o tempo de `Observer_Step`. Ver
+> "Orçamento de CPU" na seção de aquisição — é o que limita `Ts_adc`.
+
 ---
 
 ## Implementações de referência (em `../Aplicacao_Pi/`)
@@ -256,6 +523,10 @@ tq_lpf ← α_tq·Te + (1 − α_tq)·tq_lpf           # → torque_eletrico
 - **`Scripts/autotune_cost.py`** — otimiza **Γ** (invariante a `Ts`) e emite
   `RESULT ... Gamma_s1=… Gamma_s2=… Gamma_t=…`; rodado pela GUI (menu
   **Estimativas → Estimar Ganhos SMO**).
+
+> O `Ts=10 µs` do script coincide com `SMPx = 28,5 @12 MHz` (9,87 µs) — é o
+> ponto de operação conservador e o mais fácil de correlacionar simulação ×
+> bancada enquanto a LUT de seno não estiver implementada.
 
 ## Relação com o resto do repositório
 
@@ -286,9 +557,32 @@ Codigos/
   ADC1. **Ainda não validado em bancada** (só compila; não dá pra testar
   DMA/registrador combinado no `native_sim`, que emula o ADC por outro
   caminho).
-- **`Ts_adc` real** (define `K = Γ/Ts` e o passo do observador): fixar conforme a
-  taxa efetiva da malha de aquisição (~333 kSps/canal no projeto). Configurável
-  por `TARGET_TS_ADC`.
+- **`ADCCLK` efetivo**: com PCLK2 = 144 MHz os divisores `ADCPRE[1:0]` (/2–/8)
+  não chegam ao limite de 14 MHz do ADC (mínimo 18 MHz). Definir se cai em
+  12 MHz pelo prescaler estendido do RCC ou baixando o APB2 — **todas as taxas
+  da tabela de `Ts_adc` escalam com esse valor.**
+- **`Ts_adc` real** (define `K = Γ/Ts` e o passo do observador): a meta anterior
+  de ~333 kSps/canal **não é atingível** com 3 canais/ADC (máximo prático
+  252 kSps em `SMPx = 7,5`). Enquanto `Observer_Step` usar `sinf` de libm, o
+  teto é ~100 kSps (`SMPx = 28,5`). Fixar após medir a ISR com GPIO toggle.
+  Configurável por `TARGET_TS_ADC`.
+- **LUT de seno em `Observer_Manager.c`**: substituir as 6 avaliações de `f(·)`
+  por tabela + interpolação linear, e reaproveitar `g_α/g_β` como `f_a/f_b`
+  quando a compensação de atraso estiver desligada. É o que destrava
+  `Ts_adc` ≤ 4 µs.
+- **Buffer de DMA em ping-pong**: 6 words (2 frames) com half-transfer +
+  transfer-complete, em vez de 3 words. Sem isso há corrida entre DMA e ISR.
+  Adicionar contador de sequência + bit de descarte em `error_bits`, já que o
+  ADC **não tem flag de overrun** nos canais regulares.
+- **Calibração na inicialização**: implementar as duas etapas (autocalibração de
+  HW `RSTCAL`/`CAL` por ADC em modo independente com `BUFEN=0`, depois offset
+  dos sensores). **O ADC2 exige espera de ≥2 s para o Hall de corrente
+  estabilizar** antes de amostrar o offset. Precisa de: bit de status
+  *calibrando*/*falhou* em `error_bits`, mascaramento dos checadores
+  dependentes de offset, e gate no `Observer_Step` até concluir.
+- **Filtro antialiasing**: `f_c ≈ 5–8 kHz`, 2ª ordem, entre a fundamental
+  (`f_e ≈ 800 Hz` em 6S) e a portadora do ESC (~30 kHz). Confirmar a topologia
+  no esquemático do front-end.
 - **Forma de BEMF** (`f`): senoidal (default) vs. trapezoidal — casar com o motor
   real (`DEF_BEMF_KIND` em `Observer_Manager.c`).
 - **`torque_helice`**: hoje espelha `Te` (em regime, carga da hélice = torque
