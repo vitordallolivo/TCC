@@ -364,7 +364,99 @@ capacidade de reconstruir a BEMF.
 
 ---
 
-## Otimização do `Observer_Step` — custo de recursos e validação
+## `Ts` fixo e auditoria CMD × compile-time
+
+### `Ts` deixa de ser configurável
+
+`Ts` passa a ser **uma constante única, igual ao período de frame do ADC**.
+Menos é mais: sem target, sem GUI, sem conversão em lugar nenhum.
+
+**Remover de cada camada:**
+
+| onde | o que sai |
+|---|---|
+| `Aplicacao_Pi/Config/SAME.yaml` | entrada `TARGET_TS_ADC` do enum de targets |
+| `Config/generate.py` | nada (regenerar após editar o YAML) |
+| GUI | campo/slider de `Ts`, e a leitura dele no menu Estimativas |
+| `autotune_cost.py` | `Ts_sim` vira constante importada, não argumento |
+| `CMD_Core.c` | despacho de `TARGET_TS_ADC` |
+| `Observer_Manager.c` | campo `ts` de `obs_params`; casos em `write_pending()` e `default_for_target()`; `DEF_TS` vira `#define OBS_TS` |
+
+> ⚠️ **Remover uma entrada do meio do enum renumera todas as seguintes.** O
+> `CMD` é `udp_struct` com o target como byte cru — GUI e firmware fora de sincronia
+> passam a escrever no alvo errado **sem erro nenhum**. Duas saídas: reservar o
+> slot (`TARGET_RESERVED_TS_ADC` mantendo o valor) ou regenerar os dois lados no
+> mesmo commit e subir um byte de versão de protocolo. A primeira é mais barata.
+
+**O acoplamento que sobra:** Γ carrega `Ts` embutido (`Γ = K·Ts`, feito no
+Python). Com `Ts` fixo, `OBS_TS` e o `Ts_sim` do autotuning viram **a mesma
+constante** — se divergirem, os Γ otimizados não descrevem o observador
+embarcado. Definir num único lugar e importar dos dois lados.
+
+### O que o CMD alcança — e o que a otimização pode congelar
+
+Auditoria dos campos de `obs_params` contra os targets de `CMD_Core_prm.h`:
+
+| campo | target | constantes derivadas | pode congelar? |
+|---|---|---|---|
+| `Rs` | `RESISTANCE` | `Phi_i` | **não** |
+| `Ls` | `INDUCTANCE` | `Phi_i`, `Gamma_v` | **não** |
+| `Kv` | `KV_RATING` | `ke_mec` → `Ke`, `Kt` | **não** |
+| `pole_pairs` | `POLES_PAIRS` | `inv_p` | **não** |
+| `gamma1/2/t` | `GAMMA1/2/T` | `Gamma_s1/s2`, `Phi_e` | **não** |
+| `torque_lpf` | `TORQUE_LPF_FREQUENCY` | `alpha_tq` | **não** |
+| `bemf_lpf` | `BEMF_LPF_FREQUENCY` | `alpha_bemf` | **não** |
+| `ts` | ~~`TS_ADC`~~ | — | **sim** → `#define OBS_TS` |
+| `bl` | *nenhum* | `inv_bl` | **não — ver abaixo** |
+| `switch_func` | *nenhum* | branch de `switch_fn` | sim |
+| `bemf_kind` | *nenhum* | forma de `f(·)` | **sim, com guarda** |
+| `PLL_WN`/`ZETA` | *nenhum* | `Kp_pll`, `Ki_pll` | sim → `#define` |
+
+Nenhuma das constantes que o CMD alcança está no caminho quente do V5 — todas
+são recalculadas em `Observer_Recompute()`, que roda no `Observer_Apply_Pending`,
+fora do laço. **A otimização não reduz nada que o `CMD_Core` mexe.** Três
+ressalvas, porém:
+
+**1. `bemf_kind` é a armadilha real.** A identidade que sustenta o V5 —
+
+```
+(1/√3)·(sin(θ−2π/3) − sin(θ−4π/3)) ≡ −cos(θ)
+```
+
+— vale **só para BEMF senoidal**. Para a trapezoidal ela é falsa. E "senoidal
+vs. trapezoidal" ainda está nas decisões em aberto deste documento. Se alguém
+virar `DEF_BEMF_KIND` para 0, o V5 passa a produzir ângulo e torque errados
+**sem erro de compilação e sem erro em runtime**. Travar:
+
+```c
+_Static_assert(DEF_BEMF_KIND == 1,
+    "V5: o par (sin, -cos) assume BEMF senoidal. "
+    "Para trapezoidal, usar a LUT com 3 consultas de f_shape.");
+```
+
+Se a bancada indicar trapezoidal, o caminho é LUT com 3 consultas (ainda muito
+mais barato que 3 `sinf`), não reverter para libm.
+
+**2. Não congelar `BL`.** É tentador — não tem target. Mas o limite de
+estabilidade é `BL > Γ₁/(1+Φᵢ)`, e **Γ₁ é settable por CMD**. Com `BL`
+constante, um Γ₁ vindo de um autotuning novo pode cair dentro do chattering
+(com Γ₁=31,62 a folga é de só 1,4×). Como `inv_bl` é calculado em
+`Observer_Recompute`, mantê-lo em runtime **custa zero no caminho quente** —
+o ganho do V5 vem de tirá-lo do laço, não de virar `#define`. Derivar:
+`bl = fmaxf(DEF_BL, gamma1/(1+Phi_i)*MARGEM)`.
+
+**3. `TARGET_POLES_PAIRS` não afeta mais o torque** — e isso está certo. Como
+`Te = 1.5·Ke·p` com `Ke = ke_mec/p`, o `p` cancela; `Kt = 1.5·ke_mec` é
+algebricamente idêntico ao que o V0 calcula. `pole_pairs` continua valendo para
+`rpm_same` via `inv_p`. Documentado aqui para ninguém "consertar" isso depois.
+
+> Efeito colateral do colapso: o V0 zerava `Te` quando `p ≤ 0` (pela guarda
+> `pp = (inv_p>0)?1/inv_p:0`); com `Kt` pré-calculado isso não acontece mais.
+> `Observer_Params_Physical_Valid()` já detecta `p ≤ 0`, mas é diagnóstico — se
+> quiser o mesmo comportamento, a guarda tem de ir para `Observer_Recompute`.
+
+---
+
 
 > Medições feitas em **rv32imafc/ilp32f** (o alvo real), compiladas com
 > `riscv64-unknown-elf-gcc -O2` e executadas em `qemu-system-riscv32
@@ -550,11 +642,17 @@ C (`lib/SYS/Error_Codes.h`) **e** alimenta a decodificação pt-BR da GUI
   RESET/MAX_VALID/MIN_VALID` e, para ganhos/params, `DEFAULT_ACTION_SET_VALUE` /
   `..._VALUE_RESET_DEFAULT`.
 
-> 🔑 **Os ganhos configuráveis são Γ (Gamma), NÃO Ks1/Ks2/Kt.** `Ks*` dependem
-> do passo de amostragem `Ts` (`Γ = K·Ts`); `Γ` é **invariante ao passo** e é o
-> que se otimiza e transporta entre simulação e firmware. O firmware recupera
-> `K = Γ/Ts` com o seu próprio `Ts`. Por isso o target é `Γ1, Γ2, Γt` e o
-> autotuning/menu na `../Aplicacao_Pi/` trabalham em Γ.
+> 🔑 **Os ganhos configuráveis são Γ (Gamma), NÃO Ks1/Ks2/Kt.** A conversão
+> `Γ = K·Ts` é feita **uma única vez, no Python**, e o firmware usa Γ **direto**
+> na atualização discreta (`î += Γ_s1·s`, `Φ_e = 1 − Γ_t`) — o micro nunca
+> divide por `Ts`. Decisão de projeto: tira a conversão do caminho embarcado e
+> com ela o erro de arredondamento em `float`. Por isso o target é `Γ1, Γ2, Γt`
+> e o autotuning/menu na `../Aplicacao_Pi/` trabalham em Γ.
+>
+> **Acoplamento que sobra:** como Γ carrega o `Ts` embutido, o
+> `autotune_cost.py` tem de rodar com **`Ts_sim` igual ao `OBS_TS` do firmware**.
+> Com `Ts` fixo isso é uma constante compartilhada, não um parâmetro — ver a
+> seção de `Ts` fixo.
 
 ---
 
