@@ -364,7 +364,141 @@ capacidade de reconstruir a BEMF.
 
 ---
 
-## Protocolo de comunicação (fonte: `../Aplicacao_Pi/Config/SAME.yaml`)
+## Otimização do `Observer_Step` — custo de recursos e validação
+
+> Medições feitas em **rv32imafc/ilp32f** (o alvo real), compiladas com
+> `riscv64-unknown-elf-gcc -O2` e executadas em `qemu-system-riscv32
+> -machine virt -icount shift=0`. `instret` = instruções retiradas por
+> chamada. **Não é ciclo real** — ver "O que QEMU não mede" abaixo.
+
+### Catálogo de mudanças
+
+| # | mudança | instret | ΔTe | flash | RAM | risco |
+|---|---|---|---|---|---|---|
+| — | **V0 atual** | **1105** | — | base | base | — |
+| 1 | `Kt = 1.5·ke_mec` pré-calculado | −15 | 0 | ≈0 | 0 | nenhum |
+| 2 | `inv_bl` em `obs_const` | −12 | 0 | ≈0 | 0 | nenhum |
+| 3 | identidade `g_β ≡ −cos θ` | −490 | 0 | −1,5 kB | 0 | só senoidal |
+| 4 | `wrap_2pi` sem `floorf` | −8 | 0 | −100 B | 0 | precisa fallback |
+| | **V1 = 1+2+3+4 (ainda libm)** | **590** | 0,54 %¹ | | | |
+| 5 | LUT512 + interpolação | −238 | 0 | ver abaixo | ver abaixo | tabela |
+| | **V2 = V1+5** | **352** | 0,54 %¹ | | | |
+| 6 | sigmoide no lugar de `tanhf` | −188 | +0,34 % | −1,2 kB | 0 | reotimizar Γ |
+| | **V3 = V2+6** | **164** | 0,88 % | | | |
+| 7 | 2º `sincos` pós-update (corrige ¹) | +5 | −0,53 % | ≈0 | 0 | nenhum |
+| | **V5 = V3+7 ← recomendado** | **169** | **0,34 %** | **−3056 B** | **0 B** | |
+
+¹ **A reutilização de `g_α/g_β` como `f_a/f_b` NÃO é exata.** No V0 o torque usa
+o ângulo *depois* do update da PLL e a PLL usa o de *antes*; reusar um único
+`sincos` introduz atraso de uma amostra (0,022 rad a 3000 rpm → 0,53 % no
+torque). A mudança 7 põe um segundo `sincos` na posição correta e recupera isso
+por **5 instruções**. Não economizar aqui.
+
+### Flash e RAM — medido, não estimado
+
+Esta é a parte que preocupa com a pilha Ethernet no mesmo binário. O resultado
+é o oposto do esperado:
+
+| build | text | bss | flash total | Δ flash | Δ RAM |
+|---|---|---|---|---|---|
+| V0 (libm) | 6580 | 1056 | 6596 | base | base |
+| **V5, LUT `const` em flash** | **3524** | **1056** | **3540** | **−3056 B** | **0 B** |
+| V5, LUT gerada em RAM no init | 5720 | 3104 | 5736 | −860 B | **+2048 B** |
+
+**A LUT de 2 kB se paga sozinha.** Ao eliminar `sinf`/`cosf`/`tanhf`/`floorf`
+some junto a bagagem delas — `__kernel_sinf`, `__kernel_cosf`,
+`__kernel_rem_pio2f` (1394 B só esse), `__rem_pio2f` — cerca de 5 kB. Sobram
+**3 kB de flash livres** e **zero** de RAM adicional.
+
+> ⚠️ **A LUT tem de ser `static const`**, para o linker colocá-la em `.rodata`
+> (flash). Se for gerada no init com `sinf`, ela vai para `.bss` (+2048 B de RAM)
+> **e** obriga a manter `sinf` linkada — pior nos dois eixos.
+>
+> Contrapartida a medir: leitura da tabela vem da flash, com wait states a
+> 144 MHz. Se o profiling na placa mostrar stall, copiar a `const` para RAM no
+> boot (aí sim +2 kB de RAM), mantendo a versão em flash como fonte.
+
+Medido com picolibc. **O Zephyr de vocês provavelmente linka newlib**, cuja
+`sinf`/`tanhf` costumam ser maiores — o que só aumenta a economia do V5. Os
+números de V2–V5 não dependem da libc.
+
+### O que o QEMU não mede
+
+`instret` conta instruções, não ciclos. Não modela latência de `FDIV.S`/
+`FSQRT.S`, wait states da flash, nem misprediction. O que dá para afirmar é
+**quanto CPI médio cada variante aguenta** antes de estourar o frame:
+
+| taxa | orçamento | CPI máx V0 | CPI máx V5 |
+|---|---|---|---|
+| 101 kSps | 1425 | 1,29 | 8,4 |
+| 190 kSps | 757 | **0,68** | 4,5 |
+| 252 kSps | 571 | 0,52 | 3,4 |
+| 373 kSps | 386 | 0,35 | 2,3 |
+
+O V0 exigiria CPI < 0,68 para rodar a 190 kSps — impossível, o piso é 1,0.
+**O código atual está limitado a ~100 kSps por construção.**
+
+### FPU: `mstatus.FS` não vem ligado
+
+No reset `mstatus.FS = Off` e **todo** `flw`/`fsw`/`fadd.s` trapeia como
+instrução ilegal. O `CONFIG_FPU=y` do Zephyr cuida disso no boot, mas se
+`Observer_Step` for chamado de um contexto sem FP context save configurado, o
+sintoma é trap de instrução ilegal — não erro numérico. Sequência mínima:
+
+```asm
+li   t0, 0x6000      /* mstatus.FS = Dirty */
+csrs mstatus, t0
+fscsr zero
+```
+
+### Plano de validação — o que vai em cada alvo
+
+As duas metades são complementares e **nenhuma sozinha fecha a questão**:
+
+**1. `make build` (hardware) — orçamento de flash/RAM**
+
+```bash
+make build
+west build -t rom_report   # quebra por símbolo
+west build -t ram_report
+```
+
+Critérios de aceite:
+- Comparar `FLASH`/`RAM` do relatório **antes e depois** do V5. O esperado é
+  flash cair ~3 kB e RAM ficar igual. Se a RAM subir, a LUT não ficou `const`.
+- Conferir no `rom_report` que `__kernel_rem_pio2f`, `__rem_pio2f`, `sinf`,
+  `cosf` e `tanhf` **sumiram**. Se ainda aparecerem, algo mais no firmware
+  ainda chama libm e a economia não se realiza.
+- Somar o buffer ping-pong do ADC (24 B) e conferir que a folga de RAM continua
+  cobrindo os pools de `net_buf` da pilha Ethernet — é o consumidor dominante,
+  e é ele que decide se sobra espaço, não o observador.
+
+**2. `make native_sim` — equivalência numérica**
+
+`native_sim` roda em x86_64: **não** valida ciclos, footprint, DMA nem
+registradores do ADC. O que ele valida bem é a matemática.
+
+Teste de regressão a implementar: alimentar V0 e V5 com a **mesma** sequência
+fixa de `(v_αβ, i_αβ)` — gerada por `../Aplicacao_Pi/Scripts/test_coeff_auto.py`
+e gravada como vetor golden — e comparar as saídas:
+
+| grandeza | tolerância |
+|---|---|
+| `rpm_same` | < 0,01 % |
+| `torque_eletrico` | < 1,0 % |
+| `Observer_State_Is_Finite()` | true em todos os passos |
+
+Rodar em pelo menos 3 patamares de rotação (os mesmos do `autotune_cost.py`:
+~1000, ~3000, ~1000 rpm) para pegar transitório, não só regime.
+
+**3. Placa, com osciloscópio — o número que decide `Ts_adc`**
+
+GPIO toggle na entrada/saída da ISR do ADC. É a única medida de ciclo real:
+compara o tempo de `Observer_Step` contra o período do frame e fecha o `SMPx`.
+Fazer isso **antes** de gravar `TARGET_TS_ADC`, porque `K = Γ/Ts` depende dele.
+
+---
+
 
 Mesmo protocolo compacto da SIBA (`CMD` 8 bytes + `TELEMETRY_LOG` packed LE):
 
@@ -566,10 +700,20 @@ Codigos/
   252 kSps em `SMPx = 7,5`). Enquanto `Observer_Step` usar `sinf` de libm, o
   teto é ~100 kSps (`SMPx = 28,5`). Fixar após medir a ISR com GPIO toggle.
   Configurável por `TARGET_TS_ADC`.
-- **LUT de seno em `Observer_Manager.c`**: substituir as 6 avaliações de `f(·)`
-  por tabela + interpolação linear, e reaproveitar `g_α/g_β` como `f_a/f_b`
-  quando a compensação de atraso estiver desligada. É o que destrava
-  `Ts_adc` ≤ 4 µs.
+- **LUT de seno em `Observer_Manager.c`**: adotar o **V5** (LUT512 `static const`
+  + sigmoide + 2 `sincos`) — medido em 169 instret contra 1105 do atual (6,5×),
+  desvio de 0,34 % no torque, **−3 kB de flash e 0 B de RAM**. Ver a seção de
+  otimização para o catálogo por mudança e o plano de validação
+  (`rom_report`/`ram_report` na placa + vetor golden no `native_sim`).
+- **`DEF_GAMMA*` divergem do autotuning**: os defaults no `.c` (Γ₁=5, Γ₂=−1,
+  Γₜ=0,05) dão teto de BEMF de 20 V contra os 17,3 V físicos e **42,6 % de erro
+  no torque a 3000 rpm**; os ganhos do `autotune_cost.py` (Γ₁=31,62, Γ₂=−10,
+  Γₜ=0,0667) levam isso a 5,9 %. Alinhar os defaults.
+- **Limites a checar em `Observer_Set_Param`**: `Ts < 2·Ls/Rs`;
+  `0 < Γₜ < 1`; `BL > Γ₁/(1+Φᵢ)`; `|Γ₂|/Γₜ ≥ BEMF_max`. O terceiro é o mais
+  frágil — `DEF_BL` é constante fixa enquanto Γ₁ vem do autotuning, e com
+  Γ₁=31,62 a folga até o início do chattering é de só 1,4×. **BL deveria ser
+  derivado de Γ₁.**
 - **Buffer de DMA em ping-pong**: 6 words (2 frames) com half-transfer +
   transfer-complete, em vez de 3 words. Sem isso há corrida entre DMA e ISR.
   Adicionar contador de sequência + bit de descarte em `error_bits`, já que o
