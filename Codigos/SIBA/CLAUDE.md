@@ -240,7 +240,7 @@ Modelo de calibração: célula de carga é canônico
 `grams = (raw - tare) / scale`; sensores ADC (`v_batt`/`i_batt`/
 `temperature_battery`/`air_speed`) são todos afins,
 `y = Linear_Coeff · (mV no pino) + Offset_Coeff` — **sem** fórmula física
-embutida (divisor resistivo, ACS758, NTC, MPXV7002DP foram removidos): o
+embutida (divisor resistivo, ACS758, NTC, MPX5002DP foram removidos): o
 usuário calibra com os valores reais medidos na bancada (via `CMD` ou shell).
 
 > Telemetria (`TELEMETRY_LOG`) é **sempre transmitida** — não há

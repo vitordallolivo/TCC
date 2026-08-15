@@ -133,14 +133,14 @@ sensor_defaults:
   - { target: SENSOR_ID_I_BATT, linear: 0.020, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 60.0, error_bit: ERROR_SEC_CURRENT_EXCESSIVE }
   - { target: SENSOR_ID_SOC, linear: 1.0, offset: 0.0, min: 0.0, max: 100.0 }
   - { target: SENSOR_ID_TEMPERATURE_BATTERY, linear: 0.040, offset: 0.0, min: -40.0, max: 85.0, error_bit: ERROR_BATT_OVER_TEMPERATURE }
-  # Tubo de Pitot com MPXV7002DP. ÚNICO sensor que não é afim: por Bernoulli
+  # Tubo de Pitot com MPX5002DP. ÚNICO sensor que não é afim: por Bernoulli
   # v = sqrt(2*dP/rho), então a velocidade cresce com a RAIZ da pressão
   # diferencial e nenhuma reta descreve o sensor em faixa alguma. Daí law: sqrt.
   #
   #     v = linear * sqrt(mV_no_pino - zero) + offset
   #
-  # Constantes do ensaio em túnel de vento (Apêndice B da monografia;
-  # Relatorio_Calibracao_Pitot, seção 6, que separa sensor / ar / conversor):
+  # Constantes do ensaio em túnel de vento feito pela Equipe Albatroz no IPT
+  # (Anexo A da monografia), com sensor / ar / conversor separados:
   #     sensibilidade do sensor   S   = 629,8 µV/Pa
   #     saída com escoamento nulo V0  = 2,66442 V  ->  zero = 2664,4 mV
   #     densidade do ensaio       rho = 1,110 kg/m3
