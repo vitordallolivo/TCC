@@ -88,20 +88,7 @@ k_{p} = \sqrt{\frac{2}{\rho\,S}}
 
 Manter $S$ e $V_0$ separadas de $q$ é o que torna a calibração transportável:
 as duas primeiras descrevem o sensor e não mudam com o microcontrolador,
-enquanto $q$ acompanha o conversor. O ensaio foi feito com um conversor de
-10~bits e a SIBA lê com 12~bits, de modo que a mesma calibração vale com a
-resolução melhorada por um fator de aproximadamente seis. Abaixo de
-\SI{3}{\meter\per\second} a medição é dominada pela quantização, o que
-delimita a faixa útil na extremidade inferior.
-
-A Tabela~\ref{tab:pinagem_siba} não inclui sensor barométrico, de modo que
-a SIBA não mede pressão nem temperatura do ambiente para calcular a
-densidade do ar sozinha. A densidade $\rho$ usada nos cálculos aerodinâmicos
-(\autoref{eq:densidade_calculo}) é informada manualmente pelo operador na
-interface, com um valor padrão de atmosfera ao nível do mar
-($\SI{1,225}{\kilo\gram\per\meter\cubed}$); cabe ao operador calcular esse
-valor a partir de leituras locais de pressão e temperatura antes de
-inseri-lo, caso o ensaio exija maior precisão do que o padrão.
+enquanto $q$ acompanha o conversor.
 
 \subsection{\textit{Firmware}}
 
