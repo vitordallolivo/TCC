@@ -54,8 +54,12 @@ static void hal_adc_calib_init(void)
         adc_calib[i].linear = 1.0f;
         adc_calib[i].offset = 0.0f;
     }
-#define X(TID, DEF_LIN, DEF_OFF, MINV, MAXV)   \
-    adc_calib[(TID)].linear = (DEF_LIN);       \
+/* A SAME não usa `zero`/`law` (as 6 entradas são afins com zero=0): o offset
+ * do Hall é levantado no boot e gravado em `offset`. Os dois campos entram na
+ * assinatura só porque a tabela é compartilhada com a SIBA, onde o Pitot usa
+ * a lei de raiz. */
+#define X(TID, DEF_LIN, DEF_OFF, MINV, MAXV, DEF_ZERO, LAW)   \
+    adc_calib[(TID)].linear = (DEF_LIN);                      \
     adc_calib[(TID)].offset = (DEF_OFF);
     SAME_SENSOR_TABLE(X)
 #undef X

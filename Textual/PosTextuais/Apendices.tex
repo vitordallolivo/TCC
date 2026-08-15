@@ -65,4 +65,146 @@ $\Delta V = V_{out} - V_O$ usa o intercepto da regressão de cada configuração
     {\small Fonte: Autor (2026)}
 \end{table}
 
+% ---
+\chapter{Dados brutos da calibração do tubo de Pitot}
+\label{apendice:ensaio_pitot}
+% ---
+
+Coleta completa do ensaio em túnel de vento descrito na
+\autoref{sec:calibracao_pitot}. O tubo de Pitot instrumentado com o sensor de
+pressão diferencial MPXV7002DP foi lido por um conversor A/D de 10 bits com
+referência de \SI{5}{\volt}, em seis patamares de velocidade entre
+\SI{1}{\meter\per\second} e \SI{14,8}{\meter\per\second}, com aquisição
+contínua de 55 a 186 amostras por patamar.
+
+\begin{table}[H]
+    \centering
+    \caption{Condições do ensaio de calibração do tubo de Pitot}
+    \label{tab:pitot_condicoes}
+    \small
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Parâmetro} & \textbf{Valor} & \textbf{Unidade} \\
+        \midrule
+        Densidade do ar ($\rho$)   & 1,110 & \si{\kilo\gram\per\meter\cubed} \\
+        Temperatura                & 25    & \si{\celsius} \\
+        Pressão atmosférica        & 95,0  & \si{\kilo\pascal} \\
+        Resolução do conversor     & 10    & bits \\
+        Tensão de referência       & 5,0   & \si{\volt} \\
+        Resolução equivalente      & 4,89  & \si{\milli\volt}/LSB \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Densidade calculada por $\rho = P/(R\,T)$ a partir da pressão e da
+    temperatura acima; não foi medida durante o ensaio. Fonte: Autor (2026)}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Coleta por patamar de velocidade}
+    \label{tab:pitot_dados_brutos}
+    \small
+    \begin{tabular}{cccccc}
+        \toprule
+        \textbf{$v_{ref}$} & \textbf{Amostras} & \textbf{ADC médio} &
+        \textbf{Desvio} & \textbf{Amplitude} & \textbf{Tensão média} \\
+        {[\si{\meter\per\second}]} & & [LSB] & [LSB] & [LSB] & [\si{\volt}] \\
+        \midrule
+        1,00  & 55  & 546,02 & 0,216 & 1,2  & 2,6687 \\
+        2,89  & 155 & 545,38 & 1,959 & 16,6 & 2,6657 \\
+        5,60  & 159 & 547,20 & 0,886 & 6,9  & 2,6745 \\
+        8,40  & 149 & 549,86 & 0,775 & 7,1  & 2,6875 \\
+        11,57 & 155 & 554,51 & 0,868 & 4,7  & 2,7103 \\
+        14,80 & 186 & 561,07 & 2,445 & 24,1 & 2,7424 \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+A excursão total do conversor em toda a faixa ensaiada é de apenas
+\SI{15,7}{LSB}, ou cerca de \SI{77}{\milli\volt}: o sensor trabalha numa
+janela estreita da escala. O ajuste por mínimos quadrados do modelo
+quadrático $ADC = k\,v^2 + ADC_0$ fornece
+$k = \num{0,071521}$~LSB/(\si{\meter\per\second})$^2$ e
+$ADC_0 = \num{545,14}$~LSB, com $R^2 = \num{0,9944}$; a
+\autoref{tab:pitot_verificacao} confronta a velocidade reconstruída por
+$v = \sqrt{(ADC - ADC_0)/k}$ contra a referência.
+
+\begin{table}[H]
+    \centering
+    \caption{Verificação do ajuste quadrático}
+    \label{tab:pitot_verificacao}
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        \textbf{$v_{ref}$ [\si{\meter\per\second}]} & \textbf{ADC [LSB]} &
+        \textbf{$v$ calculada [\si{\meter\per\second}]} &
+        \textbf{Erro [\si{\meter\per\second}]} & \textbf{Erro [\si{\percent}]} \\
+        \midrule
+        1,00  & 546,02 & 3,51  & $+$2,51 & 250,8 \\
+        2,89  & 545,38 & 1,83  & $-$1,06 & 36,6 \\
+        5,60  & 547,20 & 5,37  & $-$0,23 & 4,2 \\
+        8,40  & 549,86 & 8,12  & $-$0,28 & 3,3 \\
+        11,57 & 554,51 & 11,45 & $-$0,12 & 1,1 \\
+        14,80 & 561,07 & 14,92 & $+$0,12 & 0,8 \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+Acima de \SI{5}{\meter\per\second} o erro médio fica em \SI{2,3}{\percent} e
+cai para menos de \SI{1}{\percent} no topo da faixa. Nos dois primeiros
+patamares o erro é inaceitável, e a causa não é o ajuste: entre 0 e
+\SI{3}{\meter\per\second} a leitura varia menos de \SI{1}{LSB}, de modo que a
+quantização e o ruído dominam completamente o sinal.
+
+As constantes $k$ e $ADC_0$ acima estão amarradas simultaneamente ao sensor,
+ao ar e ao conversor, e por isso não são transportáveis. Separando os três
+estágios --- $\Delta P = \frac{1}{2}\rho v^2$, $V = S\,\Delta P + V_0$ e
+$ADC = V/q$ --- obtêm-se as constantes que descrevem apenas o sensor:
+
+\begin{equation}
+S = \frac{2\,q\,k}{\rho} = \SI{629,8}{\micro\volt\per\pascal}
+\qquad
+V_0 = \SI{2,66442}{\volt}
+\label{eq:pitot_sensor}
+\end{equation}
+
+\noindent
+Estas duas não mudam com a altitude, com a temperatura nem com o
+microcontrolador, e são as efetivamente embarcadas na SIBA
+(\autoref{sec:calibracao_pitot}). A \autoref{tab:pitot_conversores} mostra o
+efeito de trocar o conversor: a SIBA lê com 12 bits e referência de
+\SI{3,3}{\volt}, o que reduz o passo de quantização de \SI{4,89}{\milli\volt}
+para \SI{0,806}{\milli\volt}.
+
+\begin{table}[H]
+    \centering
+    \caption{Constantes equivalentes para diferentes conversores ($\rho = \SI{1,110}{\kilo\gram\per\meter\cubed}$)}
+    \label{tab:pitot_conversores}
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Configuração} & \textbf{$q$} & \textbf{$ADC_0$} &
+        \textbf{$k$} & \textbf{1 LSB a \SI{5}{\meter\per\second}} \\
+        & [\si{\micro\volt}/LSB] & [LSB] & [LSB/(\si{\meter\per\second})$^2$] &
+        [\si{\meter\per\second}] \\
+        \midrule
+        10 bits / \SI{5,0}{\volt} & 4887,6 & 545,1  & 0,07152 & 1,398 \\
+        10 bits / \SI{3,3}{\volt} & 3225,8 & 826,0  & 0,10837 & 0,923 \\
+        12 bits / \SI{5,0}{\volt} & 1221,0 & 2182,2 & 0,28629 & 0,349 \\
+        \textbf{12 bits / \SI{3,3}{\volt} (SIBA)} & \textbf{805,9} &
+            \textbf{3306,3} & \textbf{0,43378} & \textbf{0,231} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
 \end{apendicesenv}

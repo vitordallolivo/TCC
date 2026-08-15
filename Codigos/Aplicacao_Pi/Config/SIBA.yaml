@@ -133,7 +133,32 @@ sensor_defaults:
   - { target: SENSOR_ID_I_BATT, linear: 0.020, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 60.0, error_bit: ERROR_SEC_CURRENT_EXCESSIVE }
   - { target: SENSOR_ID_SOC, linear: 1.0, offset: 0.0, min: 0.0, max: 100.0 }
   - { target: SENSOR_ID_TEMPERATURE_BATTERY, linear: 0.040, offset: 0.0, min: -40.0, max: 85.0, error_bit: ERROR_BATT_OVER_TEMPERATURE }
-  - { target: SENSOR_ID_AIR_SPEED, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  # Tubo de Pitot com MPXV7002DP. ÚNICO sensor que não é afim: por Bernoulli
+  # v = sqrt(2*dP/rho), então a velocidade cresce com a RAIZ da pressão
+  # diferencial e nenhuma reta descreve o sensor em faixa alguma. Daí law: sqrt.
+  #
+  #     v = linear * sqrt(mV_no_pino - zero) + offset
+  #
+  # Constantes do ensaio em túnel de vento (Apêndice B da monografia;
+  # Relatorio_Calibracao_Pitot, seção 6, que separa sensor / ar / conversor):
+  #     sensibilidade do sensor   S   = 629,8 µV/Pa
+  #     saída com escoamento nulo V0  = 2,66442 V  ->  zero = 2664,4 mV
+  #     densidade do ensaio       rho = 1,110 kg/m3
+  #     linear = sqrt(2/(rho*S)) convertido para mV = 1,691423
+  #
+  # `zero` é TENSÃO do sensor, não contagem de ADC: não muda com a resolução
+  # do conversor. O ensaio usou Arduino Uno (10 bits/5 V, 4,89 mV/LSB); a SIBA
+  # lê com 12 bits/3,3 V (0,806 mV/LSB), 6,1x mais fino — a incerteza de 1 LSB
+  # a 5 m/s cai de 1,40 para 0,23 m/s.
+  #
+  # ⚠️ `linear` carrega a densidade do ar embutida. Operar em altitude ou
+  # temperatura bem diferentes exige recalcular por linear = sqrt(2/(rho*S));
+  # enquanto rho for o da calibração o erro se cancela. A SIBA não tem
+  # barômetro para fazer isso sozinha (ver sec:calibracao_pitot).
+  #
+  # min/max: 0 (a raiz satura ali) a 42 m/s, onde a entrada do conversor
+  # esgota. Abaixo de ~3 m/s a leitura é dominada por ruído mesmo com 12 bits.
+  - { target: SENSOR_ID_AIR_SPEED, linear: 1.691423, offset: 0.0, zero: 2664.4, law: sqrt, min: 0.0, max: 42.0 }
   - { target: SENSOR_ID_RPM, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 20000.0, error_bit: ERROR_SEC_RPM_EXCESSIVE }
 
 structs:

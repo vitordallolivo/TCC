@@ -52,12 +52,67 @@ periféricos, estão na \autoref{fig:pcb_siba}.
     Fonte: Autor (2026)
 \end{figure}
 
-\subsection{Calibração do Tubo de Pitot (placeholder)}
+\subsection{Calibração do Tubo de Pitot}
 \label{sec:calibracao_pitot}
 
-\textit{Pendente: parágrafo com o túnel de vento utilizado, a faixa de
-velocidade coberta, o número de pontos ensaiados e o ajuste obtido ---
-depende de ensaio de bancada ainda não realizado.}
+O tubo de Pitot é instrumentado com o sensor de pressão diferencial
+MPXV7002DP e foi calibrado em túnel de vento em seis patamares de velocidade
+entre \SI{1}{\meter\per\second} e \SI{14,8}{\meter\per\second}, com aquisição
+contínua de 55 a 186 amostras por patamar. A coleta completa, as condições do
+ensaio e a verificação do ajuste estão no
+Apêndice~\ref{apendice:ensaio_pitot}.
+
+A cadeia de medição tem três estágios independentes, e convém mantê-los
+separados: o escoamento gera uma pressão dinâmica que depende da densidade do
+ar; o sensor converte essa pressão em tensão segundo sua própria
+sensibilidade; e o conversor converte a tensão em contagens segundo seu passo
+de quantização, conforme \eqref{eq:pitot_estagios}.
+
+\begin{equation}
+\Delta P = \tfrac{1}{2}\rho v^{2}
+\qquad
+V = S\,\Delta P + V_0
+\qquad
+ADC = V/q
+\label{eq:pitot_estagios}
+\end{equation}
+
+Combinando os três, a leitura do conversor cresce com o \textbf{quadrado} da
+velocidade. Essa é a razão de o Pitot ser o único sensor da SIBA que não usa
+o modelo afim descrito na \autoref{sec:padronizacao_placas}: por Bernoulli a
+velocidade cresce com a \textbf{raiz} da pressão diferencial, e nenhuma reta
+descreve o sensor em faixa alguma. O ajuste por mínimos quadrados confirma o
+expoente --- o modelo quadrático atinge $R^2 = \num{0,9944}$, contra
+$\num{0,9063}$ do linear. O \textit{firmware} embarca, portanto, a
+\eqref{eq:pitot_lei}, aplicada sobre a tensão no pino do conversor:
+
+\begin{equation}
+v = k_{p}\,\sqrt{V_{pino} - V_0} + v_{off}
+\qquad
+k_{p} = \sqrt{\frac{2}{\rho\,S}}
+\label{eq:pitot_lei}
+\end{equation}
+
+A separação dos estágios importa porque só ela torna a calibração
+transportável. As constantes $S = \SI{629,8}{\micro\volt\per\pascal}$ e
+$V_0 = \SI{2,66442}{\volt}$ descrevem o sensor e nada mais: não mudam com a
+altitude, com a temperatura nem com o microcontrolador. O ensaio foi
+realizado com um conversor de 10 bits e referência de \SI{5}{\volt}
+(\SI{4,89}{\milli\volt} por LSB), enquanto a SIBA lê com 12 bits e
+\SI{3,3}{\volt} (\SI{0,806}{\milli\volt} por LSB) --- um passo \num{6,1}
+vezes mais fino, que reduz a incerteza de um LSB a
+\SI{5}{\meter\per\second} de \SI{1,40}{\meter\per\second} para
+\SI{0,23}{\meter\per\second}.
+
+Essa incerteza delimita a faixa útil da medição. Acima de
+\SI{5}{\meter\per\second} o erro médio do ajuste é de \SI{2,3}{\percent} e
+cai abaixo de \SI{1}{\percent} no topo da faixa; abaixo de
+\SI{3}{\meter\per\second}, porém, a leitura do ensaio original varia menos de
+um LSB e o sinal passa a ser dominado pela quantização. Não se trata de falha
+do ajuste, e sim do limite de resolução do conjunto sensor mais conversor: a
+dependência quadrática comprime toda a informação de baixa velocidade numa
+fração de contagem. É justamente o extremo inferior da faixa que mais se
+beneficia do conversor de 12 bits da SIBA.
 
 A Tabela~\ref{tab:pinagem_siba} não inclui sensor barométrico, de modo que
 a SIBA não mede pressão nem temperatura do ambiente para calcular a

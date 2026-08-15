@@ -33,6 +33,107 @@ def ke_kt_from_kv(kv, pole_pairs, connection="Y"):
     ke = ke_mec / pole_pairs if pole_pairs else 0.0
     return {"kv_y": kv_y, "ke_mec": ke_mec, "kt": ke_mec, "ke": ke}
 
+# Ponto de partida do diálogo "Criar Motor" quando não há perfil salvo. São os
+# valores REAIS da bancada — motor Scorpion A-5025-310Kv — e os defaults que o
+# firmware da SAME traz compilados (DEF_* em lib/SYS/Observer_Manager.c), para
+# o formulário abrir coerente com a placa em vez de tudo zerado.
+#
+# Procedência:
+#   físicos   : P = 14 do motor; R e L do ensaio de rotor bloqueado
+#               (R = V/2I; L por ressonância LC). Kv 310 é o COMERCIAL
+#               (Delta) — a conversão Δ→Y (Kv_Y = 310/√3 = 179,0) é feita
+#               pelo próprio diálogo.
+#   ganhos Γ  : autotune_cost.py contra a planta COM O ADC MODELADO, métrica
+#               rmse (Scripts/smo_gains.json). Γ carrega Ts embutido: mudou
+#               Ts, roda o autotune de novo em vez de reescalar.
+#   amostragem: ts_adc_us = OBS_TS do firmware.
+MOTOR_DEFAULTS = {
+    "poles": 14,
+    "pole_pairs": 7,
+    "connection": "Delta",     # Kv de catálogo é Delta; o diálogo converte p/ Y
+    "kv_rating": 310.0,
+    "resistance": 0.0173,      # Ω por fase, em Y
+    "inductance": 7.0e-6,      # H por fase, em Y
+    "v_bus": 30.0,
+    "gamma1": 31.622777,
+    "gamma2": -10.0,
+    "gammat": 0.013139,
+    "bl": 18.0,
+    "switch_func": "tanh",
+    "pll_wn": 150.0,
+    "bemf_lpf": 0.0,           # 0 = desligado (a PLL usa ê direto)
+    "torque_lpf": 10000.0,
+    "ts_adc_us": 10.0,
+    "ts_udp_ms": 100.0,
+}
+
+
+def check_conditions(p):
+    """Confere as condições de validade do observador sobre um dict de
+    parâmetros. Devolve lista de (nivel, texto), nivel in {'erro','aviso'}.
+
+    São as mesmas listadas em SAME/CLAUDE.md ("Limites a checar em
+    Observer_Set_Param") e que até aqui não eram verificadas em lugar nenhum,
+    nem na GUI nem no firmware. Violá-las não gera erro: gera estimativa
+    errada em silêncio, que é pior.
+    """
+    out = []
+    R  = float(p.get("resistance") or 0.0)
+    L  = float(p.get("inductance") or 0.0)
+    ts = float(p.get("ts_adc_us") or 0.0) * 1e-6
+    g1 = float(p.get("gamma1") or 0.0)
+    g2 = float(p.get("gamma2") or 0.0)
+    gt = float(p.get("gammat") or 0.0)
+    bl = float(p.get("bl") or 0.0)
+
+    # Sinais fixos: é regra do projeto, não preferência.
+    if g1 <= 0.0:
+        out.append(("erro", "Γ1 tem de ser > 0."))
+    if g2 >= 0.0:
+        out.append(("erro", "Γ2 tem de ser < 0."))
+    if gt <= 0.0:
+        out.append(("erro", "Γt tem de ser > 0."))
+    elif gt >= 1.0:
+        # Φ_e = 1 − Γt é o polo do observador de BEMF.
+        out.append(("erro", f"Γt = {gt:g} ≥ 1: o polo da BEMF Φ_e = 1−Γt "
+                            f"sai do círculo unitário e o observador diverge."))
+
+    # Euler-forward na malha de corrente exige passo bem abaixo da constante
+    # elétrica; a partir de 2L/R o fator Φ_i = 1 − R·Ts/L fica ≤ −1.
+    if R > 0.0 and L > 0.0 and ts > 0.0:
+        ts_max = 2.0 * L / R
+        if ts >= ts_max:
+            out.append(("erro", f"Ts = {ts*1e6:.2f} µs ≥ 2L/R = "
+                                f"{ts_max*1e6:.2f} µs: a discretização de "
+                                f"Euler da corrente fica instável."))
+        phi_i = 1.0 - (R * ts / L)
+        # Chattering: com BL pequeno demais o termo de comutação domina e a
+        # corrente estimada oscila em vez de deslizar.
+        if (1.0 + phi_i) > 0.0 and g1 > 0.0:
+            bl_min = g1 / (1.0 + phi_i)
+            if bl > 0.0 and bl <= bl_min:
+                out.append(("erro", f"BL = {bl:g} ≤ Γ1/(1+Φi) = {bl_min:.2f}: "
+                                    f"o observador entra em chattering."))
+            elif bl > 0.0 and bl < 1.2 * bl_min:
+                out.append(("aviso", f"BL = {bl:g} com folga de só "
+                                     f"{bl/bl_min:.2f}× sobre o limite de "
+                                     f"chattering ({bl_min:.2f})."))
+
+    # O observador de BEMF satura em |Γ2|/Γt: abaixo da BEMF real ele não
+    # consegue representar o sinal e a PLL trava num ângulo errado.
+    if gt > 0.0 and g2 != 0.0:
+        bemf_max = abs(g2) / gt
+        v_bus = float(p.get("v_bus") or 0.0)
+        if v_bus > 0.0:
+            bemf_esperada = v_bus / 2.0
+            if bemf_max < bemf_esperada:
+                out.append(("aviso", f"Teto de BEMF do observador "
+                                     f"|Γ2|/Γt = {bemf_max:.1f} V está abaixo "
+                                     f"dos ~{bemf_esperada:.1f} V esperados "
+                                     f"no barramento: satura em rotação alta."))
+    return out
+
+
 # chave interna (usada pela GUI) -> TARGET_* do SAME.yaml
 # Ganhos do SMO na forma Gamma (Γ = K·Ts, invariante ao passo) — NÃO Ks* (que
 # dependem de Ts). Ver ../../SAME/CLAUDE.md.

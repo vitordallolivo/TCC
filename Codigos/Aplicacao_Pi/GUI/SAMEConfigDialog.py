@@ -1,6 +1,7 @@
 import os
 
 import yaml
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QGroupBox,
                                QDoubleSpinBox, QComboBox, QLabel, QPushButton,
                                QHBoxLayout, QMessageBox, QInputDialog,
@@ -91,8 +92,16 @@ class SAMEConfigDialog(QDialog):
         self.add_combo(fs, "switch_func", "Função de comutação",
                        ["tanh", "saturação", "sigmoide"])
         self.add_spinbox(fs, "pll_wn", "PLL ω_n (Hz)", 1.0, 5000.0, 1)
-        self.add_spinbox(fs, "bemf_lpf", "BEMF LPF (Hz)", 1.0, 5000.0, 1)
-        self.add_spinbox(fs, "torque_lpf", "Torque LPF (Hz)", 0.1, 5000.0, 1)
+        # Mínimo 0: é o default do firmware (DEF_BEMF_LPF = 0), que significa
+        # FILTRO DESLIGADO — a PLL usa ê direto. Com mínimo 1,0 esse estado
+        # não era representável na GUI.
+        sp_bemf = self.add_spinbox(fs, "bemf_lpf", "BEMF LPF (Hz, 0 = desligado)",
+                                   0.0, 5000.0, 1)
+        sp_bemf.setSpecialValueText("desligado")
+        # Teto 50 kHz: o default do firmware é 10 kHz (DEF_TORQUE_LPF) e o
+        # limite anterior, de 5 kHz, silenciosamente CORTAVA esse valor pela
+        # metade ao abrir o diálogo.
+        self.add_spinbox(fs, "torque_lpf", "Torque LPF (Hz)", 0.1, 50000.0, 1)
         gs.setLayout(fs)
         main.addWidget(gs)
 
@@ -104,10 +113,30 @@ class SAMEConfigDialog(QDialog):
         ga.setLayout(fa)
         main.addWidget(ga)
 
+        # --- Grupo 4: Condições de validade do observador ---
+        # Estas relações são do projeto (SAME/CLAUDE.md), e violá-las não gera
+        # erro nenhum em runtime: gera estimativa errada em silêncio. Melhor
+        # dizer aqui, antes de aplicar no hardware.
+        gc = QGroupBox("Condições do observador")
+        fc = QVBoxLayout()
+        self.lbl_cond = QLabel("—")
+        self.lbl_cond.setWordWrap(True)
+        self.lbl_cond.setTextFormat(Qt.RichText)
+        fc.addWidget(self.lbl_cond)
+        gc.setLayout(fc)
+        main.addWidget(gc)
+
         # Recalcula Ke/Kt quando poles/kv/conexão mudam.
         self.inputs["poles"].valueChanged.connect(self._recompute_derived)
         self.inputs["kv_rating"].valueChanged.connect(self._recompute_derived)
         self.combos["connection"].currentTextChanged.connect(self._recompute_derived)
+
+        # Revalida as condições a cada mudança — o custo é um punhado de
+        # contas, e o valor é ver o problema aparecer enquanto se digita.
+        for spin in self.inputs.values():
+            spin.valueChanged.connect(self._update_conditions)
+        for cb in self.combos.values():
+            cb.currentTextChanged.connect(self._update_conditions)
 
         main.addStretch()
         scroll.setWidget(container)
@@ -137,6 +166,27 @@ class SAMEConfigDialog(QDialog):
         self.lbl_kvy.setText(f"{d['kv_y']:.1f} RPM/V")
         self.lbl_ke.setText(f"{d['ke']:.6g}  (Ke_mec={d['ke_mec']:.6g})")
         self.lbl_kt.setText(f"{d['kt']:.6g}")
+        self._update_conditions()
+
+    def _update_conditions(self):
+        """Roda mc.check_conditions e mostra o resultado. Erro em vermelho,
+        aviso em laranja, tudo certo em verde."""
+        try:
+            probs = mc.check_conditions(self._params())
+        except Exception as e:                      # nunca derrubar o diálogo
+            self.lbl_cond.setText(f"<span style='color:#888'>não verificado: {e}</span>")
+            return
+        if not probs:
+            self.lbl_cond.setText(
+                "<span style='color:#2ecc40'>✔ Γ1&gt;0, Γ2&lt;0, 0&lt;Γt&lt;1, "
+                "Ts &lt; 2L/R e BL acima do limite de chattering.</span>")
+            return
+        linhas = []
+        for nivel, txt in probs:
+            cor = "#ff4136" if nivel == "erro" else "#ff851b"
+            marca = "✖" if nivel == "erro" else "⚠"
+            linhas.append(f"<span style='color:{cor}'>{marca} {txt}</span>")
+        self.lbl_cond.setText("<br>".join(linhas))
 
     def _params(self):
         p = {k: spin.value() for k, spin in self.inputs.items()}
@@ -148,8 +198,8 @@ class SAMEConfigDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def load_current_values(self):
-        """Pré-preenche do user_prefs (same_config) ou, na falta, do motor do
-        SAME.yaml (via motor_config.params_from_motor_dict)."""
+        """Pré-preenche do user_prefs (same_config), do motor do SAME.yaml ou,
+        na falta dos dois, dos valores da bancada (mc.MOTOR_DEFAULTS)."""
         saved = self.prefs.get("same_config", {})
         if not saved:
             motores = self.same_yaml.get('motors', {}) or {}
@@ -158,14 +208,18 @@ class SAMEConfigDialog(QDialog):
                 name = list(motores.keys())[0]
             if motores.get(name):
                 saved = mc.params_from_motor_dict(motores.get(name))
+        # Sem nada salvo, abre com o motor da bancada em vez de tudo zerado:
+        # zero em R, L ou Ts não é ponto de partida, é formulário inválido.
+        if not saved:
+            saved = dict(mc.MOTOR_DEFAULTS)
 
         for key, spin in self.inputs.items():
-            v = saved.get(key)
+            v = saved.get(key, mc.MOTOR_DEFAULTS.get(key))
             spin.setValue(float(v) if v is not None else 0.0)
 
-        conn = str(saved.get("connection", "Y"))
+        conn = str(saved.get("connection", mc.MOTOR_DEFAULTS["connection"]))
         self.combos["connection"].setCurrentIndex(1 if conn.lower().startswith("d") else 0)
-        sf = str(saved.get("switch_func", "tanh")).lower()
+        sf = str(saved.get("switch_func", mc.MOTOR_DEFAULTS["switch_func"])).lower()
         idx = {"tanh": 0, "saturação": 1, "sat": 1, "sigmoide": 2}.get(sf, 0)
         self.combos["switch_func"].setCurrentIndex(idx)
 

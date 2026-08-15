@@ -22,10 +22,26 @@
 /* Sentinela "sem limite" para a faixa de validade. */
 #define CMD_CORE_NO_LIMIT       1.0e30f
 
-/*        X(TARGET, DEF_LINEAR, DEF_OFFSET, MIN_VALID, MAX_VALID{% if sensor_defaults_needs_security %}, ERR_BIT{% endif %}) */
+/* Lei de conversão da leitura crua (x, em mV no pino) para grandeza física:
+ *
+ *   SENSOR_LAW_AFFINE : y = linear*(x - zero) + offset
+ *   SENSOR_LAW_SQRT   : y = linear*sqrt(x - zero) + offset
+ *
+ * Com zero = 0 a afim é idêntica ao y = linear*x + offset de sempre, então
+ * nada do que já estava calibrado muda. A raiz existe para o tubo de Pitot:
+ * por Bernoulli a velocidade cresce com a RAIZ da pressão diferencial
+ * (v = sqrt(2*dP/rho)), de modo que reta nenhuma descreve esse sensor.
+ * Abaixo de `zero` a raiz satura em 0 — pressão negativa ali é escoamento
+ * invertido ou tomada entupida, não velocidade. */
+typedef enum {
+    SENSOR_LAW_AFFINE = 0,
+    SENSOR_LAW_SQRT   = 1,
+} sensor_law_t;
+
+/*        X(TARGET, DEF_LINEAR, DEF_OFFSET, MIN_VALID, MAX_VALID, DEF_ZERO, LAW{% if sensor_defaults_needs_security %}, ERR_BIT{% endif %}) */
 #define {{ board | upper }}_SENSOR_TABLE(X) \
 {%- for e in sensor_defaults %}
-    X({{ e.target }}, {{ e.linear_c }}, {{ e.offset_c }}, {{ e.min_c }}, {{ e.max_c }}{% if sensor_defaults_needs_security %}, {{ e.error_bit | default(0) }}{% endif %}){{ " \\" if not loop.last else "" }}
+    X({{ e.target }}, {{ e.linear_c }}, {{ e.offset_c }}, {{ e.min_c }}, {{ e.max_c }}, {{ e.zero_c }}, {{ e.law_c }}{% if sensor_defaults_needs_security %}, {{ e.error_bit | default(0) }}{% endif %}){{ " \\" if not loop.last else "" }}
 {%- endfor %}
 
 #endif /* CMD_CORE_PRM_H */

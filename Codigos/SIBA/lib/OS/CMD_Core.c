@@ -278,7 +278,8 @@ void CMD_Core_Dispatch(const uint8_t *buf, size_t len)
 /* Bit de erro por sensor, na MESMA ordem da tabela — usado por
  * CMD_Core_Validate_Sensor. Índice = sensor_id. */
 static const uint32_t sensor_err_bit[CMD_CORE_SENSOR_COUNT] = {
-#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)   [ID] = (uint32_t)(ERRBIT),
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, DEF_ZERO, LAW, ERRBIT) \
+    [ID] = (uint32_t)(ERRBIT),
     SIBA_SENSOR_TABLE(X)
 #undef X
 };
@@ -322,7 +323,7 @@ void CMD_Core_Init(void)
     /* Inicializa a tabela de sensores a partir de SIBA_SENSOR_TABLE
      * (CMD_Core_prm.h) — defaults de calibração + faixa válida.
      * Sem thread — despacho via OSSI_Submit_CMD → siba_wq (ver OSSI.c). */
-#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)                 \
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, DEF_ZERO, LAW, ERRBIT)  \
     sensor_cfg[ID].Linear_Coeff               = (DEF_LIN);          \
     sensor_cfg[ID].Offset_Coeff               = (DEF_OFF);          \
     sensor_cfg[ID].Linear_Coeff_Reset_Default = (DEF_LIN);          \

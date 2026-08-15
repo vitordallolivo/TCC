@@ -98,6 +98,23 @@ def generate_board(yaml_name, board_dir):
             e['offset_c'] = _c_float(e['offset'])
             e['min_c'] = _c_float(e['min'])
             e['max_c'] = _c_float(e['max'])
+            # `zero` é o ponto da entrada em que a grandeza física vale zero,
+            # na MESMA unidade de x (mV no pino). Com zero = 0 a lei afim recai
+            # exatamente no comportamento anterior (y = linear*x + offset), o
+            # que mantém intactos os sensores já calibrados.
+            e['zero_c'] = _c_float(e.get('zero', 0.0))
+            # `law` escolhe como x vira y:
+            #   affine -> y = linear*(x - zero) + offset      (default)
+            #   sqrt   -> y = linear*sqrt(x - zero) + offset
+            # A raiz existe por causa do tubo de Pitot: por Bernoulli a
+            # velocidade cresce com a RAIZ da pressão diferencial, então
+            # nenhuma reta descreve o sensor em faixa alguma.
+            law = str(e.get('law', 'affine')).lower()
+            if law not in ('affine', 'sqrt'):
+                raise ValueError(
+                    f"{yaml_name}: sensor {e['target']} tem law='{law}'; "
+                    "apenas 'affine' e 'sqrt' são suportados.")
+            e['law_c'] = 'SENSOR_LAW_SQRT' if law == 'sqrt' else 'SENSOR_LAW_AFFINE'
         cfg['sensor_defaults_needs_security'] = any('error_bit' in e for e in sensor_defaults)
         cfg['sensor_defaults_needs_log_manager'] = any(
             e['target'].startswith('SENSOR_ID_') for e in sensor_defaults)

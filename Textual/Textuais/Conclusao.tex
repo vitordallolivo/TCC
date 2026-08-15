@@ -1191,10 +1191,12 @@ Introdução:
     identificação em simulação do coeficiente aerodinâmico global $k_Q$ a
     partir da estimativa de torque do observador atingiu erro relativo de
     \num{3,46}\% frente ao modelo da planta
-    (\autoref{sec:coef_aero}). A execução física do ensaio e a calibração
-    do tubo de Pitot permanecem pendentes
-    (\autoref{sec:resultado_coef_aero_bancada},
-    \autoref{sec:calibracao_pitot}). Objetivo \textbf{parcialmente
+    (\autoref{sec:coef_aero}). O tubo de Pitot foi calibrado em túnel de
+    vento, com as constantes do sensor separadas das do conversor e
+    embarcadas na SIBA (\autoref{sec:calibracao_pitot},
+    Apêndice~\ref{apendice:ensaio_pitot}); a execução física do ensaio de
+    coeficientes permanece pendente
+    (\autoref{sec:resultado_coef_aero_bancada}). Objetivo \textbf{parcialmente
     atingido}.
 
     \item \textbf{Rede de comunicação entre os nós e o supervisório:} o
@@ -1236,7 +1238,9 @@ físico ainda não realizado e não por limitação de escopo:
     \item Identificação de $C_T$ e $C_Q$ da hélice em bancada, e sua
     comparação com as referências APC e UIUC
     (\autoref{sec:resultado_coef_aero_bancada});
-    \item Calibração do tubo de Pitot (\autoref{sec:calibracao_pitot});
+    \item Repetição da calibração do tubo de Pitot registrando pressão e
+    temperatura do ambiente, para fixar a sensibilidade $S$ sem a
+    ambiguidade da densidade adotada (\autoref{sec:calibracao_pitot});
     \item Validação completa da cadeia de medição da SIBA --- bateria,
     células de carga (\autoref{sec:resultado_validacao_siba});
     \item Calibração de canal, piso de ruído e formas de onda reais da SAME

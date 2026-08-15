@@ -240,7 +240,7 @@ void CMD_Core_Init(void)
 {
     /* Preenche sensor_cfg[] a partir de SAME_SENSOR_TABLE (CMD_Core_prm.h):
      * defaults de calibração afim + faixa de validade. */
-#define X(TID, DEF_LIN, DEF_OFF, MINV, MAXV)                       \
+#define X(TID, DEF_LIN, DEF_OFF, MINV, MAXV, DEF_ZERO, LAW)        \
     sensor_cfg[TID].SensorTarget               = (TID);            \
     sensor_cfg[TID].Linear_Coeff               = (DEF_LIN);        \
     sensor_cfg[TID].Offset_Coeff               = (DEF_OFF);        \

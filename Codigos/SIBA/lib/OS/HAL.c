@@ -12,6 +12,7 @@
 #include "OSSI.h"
 #include "Log_Manager.h"
 #include "CMD_Core_prm.h"   /* defaults de calibração/faixa por sensor (tabela) */
+#include <math.h>                 /* sqrtf — lei de raiz do Pitot */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/adc.h>
@@ -102,10 +103,21 @@ static inline float adc_raw_to_mv(uint16_t raw)
     return (float)raw * (float)HAL_ADC_VREF_MV / (float)HAL_ADC_FULL_SCALE;
 }
 
-/* Calibração genérica dos sensores ADC: y = linear*(mV no pino) + offset,
- * mesmo padrão do HX711, ajustada via CMD/shell. Indexado por SENSOR_ID_*;
- * só 6,7,9,10 são usados (8=SOC vem do Battery_Manager, não passa por aqui). */
-struct hal_adc_calib { float linear; float offset; };
+/* Calibração genérica dos sensores ADC, ajustada via CMD/shell. Indexado por
+ * SENSOR_ID_*; só 6,7,9,10 são usados (8=SOC vem do Battery_Manager, não passa
+ * por aqui). Duas leis, escolhidas por sensor na tabela central:
+ *
+ *   SENSOR_LAW_AFFINE : y = linear*(x - zero) + offset   (x = mV no pino)
+ *   SENSOR_LAW_SQRT   : y = linear*sqrt(x - zero) + offset
+ *
+ * Com zero = 0 a afim é o y = linear*x + offset de sempre — nada do que já
+ * estava calibrado muda. A raiz é do tubo de Pitot (Bernoulli). */
+struct hal_adc_calib {
+    float linear;
+    float offset;
+    float zero;
+    uint8_t law;
+};
 
 static struct hal_adc_calib adc_calib[SENSOR_ID_AIR_SPEED + 1];
 
@@ -115,14 +127,18 @@ static void hal_adc_calib_init(void)
     for (size_t i = 0; i < ARRAY_SIZE(adc_calib); i++) {
         adc_calib[i].linear = 1.0f;
         adc_calib[i].offset = 0.0f;
+        adc_calib[i].zero   = 0.0f;
+        adc_calib[i].law    = SENSOR_LAW_AFFINE;
     }
     /* Semeia defaults da tabela central — precisa rodar aqui (não só no
      * cache do CMD_Core) senão v_batt/i_batt saem em mV e a segurança
      * dispara emergência falsa. */
-#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, ERRBIT)          \
-    if ((size_t)(ID) < ARRAY_SIZE(adc_calib)) {              \
-        adc_calib[(ID)].linear = (DEF_LIN);                  \
-        adc_calib[(ID)].offset = (DEF_OFF);                  \
+#define X(ID, DEF_LIN, DEF_OFF, MINV, MAXV, DEF_ZERO, LAW, ERRBIT)   \
+    if ((size_t)(ID) < ARRAY_SIZE(adc_calib)) {                      \
+        adc_calib[(ID)].linear = (DEF_LIN);                          \
+        adc_calib[(ID)].offset = (DEF_OFF);                          \
+        adc_calib[(ID)].zero   = (DEF_ZERO);                         \
+        adc_calib[(ID)].law    = (uint8_t)(LAW);                     \
     }
     SIBA_SENSOR_TABLE(X)
 #undef X
@@ -168,7 +184,20 @@ void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset)
  */
 static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 {
-    return phys_value * adc_calib[sensor_id].linear + adc_calib[sensor_id].offset;
+    const struct hal_adc_calib *c = &adc_calib[sensor_id];
+    float x = phys_value - c->zero;
+
+    if (c->law == SENSOR_LAW_SQRT) {
+        /* Bernoulli: v = sqrt(2*dP/rho). Abaixo do zero satura em 0 — ali a
+         * pressão diferencial é negativa, o que significa escoamento
+         * invertido ou tomada entupida, não velocidade. Sem esta guarda,
+         * sqrtf() de negativo devolveria NaN e contaminaria a telemetria. */
+        if (x <= 0.0f) {
+            return c->offset;
+        }
+        return c->linear * sqrtf(x) + c->offset;
+    }
+    return c->linear * x + c->offset;
 }
 
 #if HAL_ENABLE_ADC && defined(CONFIG_ARCH_POSIX)
@@ -194,8 +223,13 @@ static inline float hal_adc_apply_calib(uint8_t sensor_id, float phys_value)
 #define HAL_SIM_TEMP_GAIN_MV_PER_MVI   0.3f  /* ganho de "temperatura" sobre "corrente" (mV/mV) */
 #define HAL_SIM_TEMP_NOISE            15.0f
 
-#define HAL_SIM_AIRSPEED_MV_PER_RPM   0.25f
-#define HAL_SIM_AIRSPEED_NOISE        25.0f
+/* Pitot: o sintético gera a TENSÃO NO PINO invertendo a lei de raiz, em vez
+ * de uma rampa de mV solta. Sem isso o native_sim leria 0 m/s sempre — o
+ * sensor repousa em ~2664 mV e a rampa antiga (0,25 mV/rpm a partir de zero)
+ * nunca alcançava o `zero` da raiz.
+ *     mV = zero + (v/linear)^2 ,  com v = rpm * HAL_SIM_AIRSPEED_MS_PER_RPM */
+#define HAL_SIM_AIRSPEED_MS_PER_RPM   0.0015f   /* 10000 rpm -> 15 m/s */
+#define HAL_SIM_AIRSPEED_NOISE         1.5f     /* mV (~0,1 m/s a 10 m/s) */
 
 static float hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_FULL;
 
@@ -250,7 +284,18 @@ static void adc_stimulus_work_fn(struct k_work *w)
                   + i_mv * HAL_SIM_TEMP_GAIN_MV_PER_MVI
                   + hal_sim_noise(HAL_SIM_TEMP_NOISE);
 
-    float air_mv = rpm * HAL_SIM_AIRSPEED_MV_PER_RPM + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
+    /* Inverte a lei do sensor com a MESMA calibração que o firmware usa para
+     * ler — assim o native_sim exercita a raiz de verdade, e um erro nas
+     * constantes aparece como velocidade errada em vez de passar batido. */
+    const struct hal_adc_calib *pit = &adc_calib[SENSOR_ID_AIR_SPEED];
+    float air_ms = rpm * HAL_SIM_AIRSPEED_MS_PER_RPM;
+    float air_mv = pit->zero + hal_sim_noise(HAL_SIM_AIRSPEED_NOISE);
+    if (pit->law == SENSOR_LAW_SQRT && pit->linear > 0.0f) {
+        float u = (air_ms - pit->offset) / pit->linear;
+        air_mv += u * u;
+    } else {
+        air_mv += air_ms;   /* lei afim: mV cru mesmo */
+    }
     if (air_mv < 0.0f) air_mv = 0.0f;
 
     adc_emul_const_value_set(adc_dev, ADC_CH_V_BATT,    (uint32_t)hal_sim_clamp_mv(v_mv));
