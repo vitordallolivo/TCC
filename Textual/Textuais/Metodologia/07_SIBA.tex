@@ -55,12 +55,13 @@ periféricos, estão na \autoref{fig:pcb_siba}.
 \subsection{Calibração do Tubo de Pitot}
 \label{sec:calibracao_pitot}
 
-O tubo de Pitot é instrumentado com o sensor de pressão diferencial
-MPX5002DP. A calibração foi realizada em túnel de vento pela Equipe Albatroz
-no IPT, e os dados estão no Anexo~\ref{anexo:ensaio_pitot}.
+O tubo de Pitot emprega um sensor de pressão diferencial. A calibração foi
+realizada em túnel de vento pela Equipe Albatroz no IPT, e os dados estão no
+Anexo~\ref{anexo:ensaio_pitot}.
 
 A cadeia de medição tem três estágios: o escoamento gera a pressão dinâmica,
-o sensor a converte em tensão e o conversor a converte em contagens,
+o sensor a converte em tensão segundo sua sensibilidade $S$ e sua saída de
+repouso $V_0$, e o conversor a converte em contagens segundo seu passo $q$,
 conforme \eqref{eq:pitot_estagios}.
 
 \begin{equation}
@@ -85,13 +86,11 @@ k_{p} = \sqrt{\frac{2}{\rho\,S}}
 \label{eq:pitot_lei}
 \end{equation}
 
-As constantes usadas são $S = \SI{629,8}{\micro\volt\per\pascal}$ e
-$V_0 = \SI{2,66442}{\volt}$, que descrevem o sensor e independem do
-conversor. O ensaio empregou um conversor de 10 bits com referência de
-\SI{5}{\volt}, enquanto a SIBA lê com 12 bits e \SI{3,3}{\volt}: o passo cai
-de \SI{4,89}{\milli\volt} para \SI{0,806}{\milli\volt}, o que reduz a
-incerteza de um LSB a \SI{5}{\meter\per\second} de
-\SI{1,40}{\meter\per\second} para \SI{0,23}{\meter\per\second}. Abaixo de
+Manter $S$ e $V_0$ separadas de $q$ é o que torna a calibração transportável:
+as duas primeiras descrevem o sensor e não mudam com o microcontrolador,
+enquanto $q$ acompanha o conversor. O ensaio foi feito com um conversor de
+10~bits e a SIBA lê com 12~bits, de modo que a mesma calibração vale com a
+resolução melhorada por um fator de aproximadamente seis. Abaixo de
 \SI{3}{\meter\per\second} a medição é dominada pela quantização, o que
 delimita a faixa útil na extremidade inferior.
 

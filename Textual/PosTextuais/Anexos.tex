@@ -17,58 +17,30 @@
 % ---
 
 Ensaio realizado pela Equipe Albatroz no Instituto de Pesquisas Tecnológicas
-(IPT), em túnel de vento, para o tubo de Pitot instrumentado com o sensor de
-pressão diferencial MPX5002DP. A leitura foi feita por conversor A/D de
-10~bits com referência de \SI{5}{\volt} (\SI{4,89}{\milli\volt} por LSB), em
-seis patamares de velocidade, com densidade do ar de
-\SI{1,110}{\kilo\gram\per\meter\cubed}.
-
-\begin{table}[H]
-    \centering
-    \caption{Leituras por patamar de velocidade}
-    \label{tab:pitot_dados_brutos}
-    \small
-    \begin{tabular}{ccccc}
-        \toprule
-        \textbf{$v_{ref}$} & \textbf{Amostras} & \textbf{ADC médio} &
-        \textbf{Desvio} & \textbf{Tensão média} \\
-        {[\si{\meter\per\second}]} & & [LSB] & [LSB] & [\si{\volt}] \\
-        \midrule
-        1,00  & 55  & 546,02 & 0,216 & 2,6687 \\
-        2,89  & 155 & 545,38 & 1,959 & 2,6657 \\
-        5,60  & 159 & 547,20 & 0,886 & 2,6745 \\
-        8,40  & 149 & 549,86 & 0,775 & 2,6875 \\
-        11,57 & 155 & 554,51 & 0,868 & 2,7103 \\
-        14,80 & 186 & 561,07 & 2,445 & 2,7424 \\
-        \bottomrule
-    \end{tabular}
-
-    \vspace{2pt}
-    {\small Fonte: Equipe Albatroz (2026)}
-\end{table}
+(IPT), em túnel de vento, para o tubo de Pitot da bancada. Foram percorridos
+seis patamares de velocidade, com aquisição contínua e um total de
+\num{859} amostras.
 
 \begin{figure}[H]
     \centering
-    \caption{Curva de calibração do tubo de Pitot}
+    \caption{Curva de calibração do tubo de Pitot, em variáveis normalizadas}
     \label{fig:pitot_calibracao}
     \includegraphics[width=0.92\textwidth]{Textuais/Imgs/Metodologia/Pitot_calibracao.png}
 
     \vspace{2pt}
-    {\small As \num{859} amostras individuais em cinza; as médias por patamar,
-    com barras de desvio-padrão, em azul. Fonte: Equipe Albatroz (2026)}
+    {\small Amostras individuais em cinza; médias por patamar, com barras de
+    desvio-padrão, em azul. Fonte: Equipe Albatroz (2026)}
 \end{figure}
 
-O ajuste do modelo quadrático $ADC = k\,v^{2} + ADC_0$ fornece
-$k = \num{0,071521}$~LSB/(\si{\meter\per\second})$^2$ e
-$ADC_0 = \num{545,14}$~LSB, com $R^2 = \num{0,9944}$. Separando as constantes
-do sensor das do conversor, obtêm-se a sensibilidade
-$S = \SI{629,8}{\micro\volt\per\pascal}$ e a saída com escoamento nulo
-$V_0 = \SI{2,66442}{\volt}$, que são as grandezas transportadas para o
-\textit{firmware} da SIBA (\autoref{sec:calibracao_pitot}).
+O ajuste do modelo quadrático $ADC = k\,v^{2} + ADC_0$ atinge
+$R^2 = \num{0,9944}$, contra $\num{0,9063}$ do ajuste linear, confirmando a
+dependência prevista pela \eqref{eq:pitot_estagios}. Os coeficientes
+resultantes são os utilizados pelo \textit{firmware} da SIBA
+(\autoref{sec:calibracao_pitot}).
 
-Acima de \SI{5}{\meter\per\second} o erro do ajuste fica abaixo de
-\SI{4,2}{\percent}. Nos dois primeiros patamares a leitura varia menos de
-\SI{1}{LSB} e o sinal é dominado pela quantização do conversor de 10~bits.
+Nos dois patamares de menor velocidade a variação da leitura fica abaixo de
+uma contagem do conversor, e o sinal passa a ser dominado pela quantização --
+o que delimita a faixa útil na extremidade inferior.
 
 \end{anexosenv}
 
