@@ -532,6 +532,133 @@ comando de rede.
 
 ---
 
+## Otimizações do observador — o que foi feito e o que foi medido
+
+O `Observer_Step` roda **colado ao evento do ADC, sem decimação**: o período
+de um frame de conversão é o orçamento inteiro dele. Ou seja, **o custo do
+observador é o que limita a taxa de amostragem da placa** — não o ADC.
+
+O gargalo era a trigonometria. A versão original avaliava a forma da BEMF
+$f(\cdot)$ **seis vezes por iteração** (três na PLL, três no torque), cada uma
+com `sinf()` da libm, mais `tanhf()` na comutação e `floorf()` no wrap do
+ângulo.
+
+### As mudanças
+
+Selecionáveis por `OBS_IMPL` em `lib/SYS/Observer_Manager.c` (`0` = versão
+original, mantida de propósito como baseline do A/B; `5` = otimizada, padrão):
+
+| # | mudança | ideia |
+|---|---|---|
+| 1 | `Kt = 1,5·ke_mec` pré-calculado | em $T_e = 1{,}5 K_e p$ com $K_e = ke_{mec}/p$ o **$p$ cancela** — a constante inteira sai do laço |
+| 2 | `inv_bl` pré-calculado | era uma divisão em ponto flutuante por passo, só para obter $1/BL$ |
+| 3 | **identidade trigonométrica** | $\frac{1}{\sqrt3}\big(\sin(\theta-\frac{2\pi}{3}) - \sin(\theta-\frac{4\pi}{3})\big) \equiv -\cos\theta$ — as 6 avaliações viram **2 `sincos`** |
+| 4 | `wrap_2pi` sem `floorf` | o ângulo avança $\omega_e T_s \ll 2\pi$ por passo: dois testes e uma subtração resolvem |
+| 5 | **LUT de seno** (512 pontos + interpolação linear) | tabela `static const` em `.rodata`; o cosseno sai da mesma tabela deslocando o índice de $N/4$ |
+| 6 | 2 `sincos` em posições diferentes | a PLL usa $\hat\theta$ **antes** do update, o torque usa $\theta_{out}$ **depois** — reusar um só introduziria atraso de uma amostra |
+
+> ⚠️ A mudança 3 vale **somente para BEMF senoidal**. Para trapezoidal a
+> identidade é falsa e o erro não aparece nem em compilação nem em runtime —
+> vira ângulo e torque errados, em silêncio. Por isso há um
+> `_Static_assert(DEF_BEMF_KIND == 1, ...)` travando isso.
+
+### O que foi medido
+
+**Instruções** — compilado para o ISA real do micro
+(`riscv64-zephyr-elf-gcc -O2 -march=rv32imafc_zicsr_zifencei -mabi=ilp32f`) e
+executado em `qemu-system-riscv32` com a CPU fixada em RV32IMACF, já
+descontado o custo do laço e do estímulo, e **com a PLL travada** (medir antes
+do lock subestimaria, porque o passo pula o `sincos` inteiro):
+
+| variante | instruções/passo | ganho |
+|---|---|---|
+| original (libm + tanh) | **1027** | — |
+| **otimizada (LUT + tanh)** ← padrão | **394** | **2,6×** |
+| otimizada (LUT + sigmoide) | **183** | 5,6× |
+
+**Memória** — no binário de verdade (`make build`, com a pilha Ethernet junto):
+
+| | ROM | RAM |
+|---|---|---|
+| original | 127244 B (62,76 %) | 59628 B (45,49 %) |
+| **otimizada** | **123376 B (60,85 %)** | **59628 B (45,49 %)** |
+| diferença | **−3868 B** | **0 B** |
+
+A LUT de 2052 B **se paga sozinha**: ao eliminar as chamadas a `sinf`, `cosf`,
+`tanhf` e `floorf`, some junto toda a bagagem delas — `__kernel_sinf`,
+`__kernel_cosf`, `__rem_pio2f`, `__kernel_rem_pio2f`, `npio2_hw`, `PIo2` — e
+nenhum desses símbolos sobra no ELF final. A RAM **não muda** porque a tabela é
+`static const` e o linker a coloca em `.rodata` (flash). Se fosse gerada no
+boot com `sinf()`, iria para `.bss` (+2 kB de RAM) **e** obrigaria a manter a
+libm linkada: pior nos dois eixos.
+
+**Exatidão** — A/B contra a versão original, alimentando as duas com a mesma
+sequência de $(v_{\alpha\beta}, i_{\alpha\beta})$ em três patamares de rotação
+(1000 → 3000 → 1000 rpm), com os Γ do autotuning:
+
+| o que muda | erro em `rpm_same` | erro em `torque_eletrico` |
+|---|---|---|
+| LUT + identidade + 2 `sincos` + pré-cálculos | 0,0001 % | **0,0015 %** |
+| trocar `tanh` pela sigmoide algébrica | 0,0093 % | **2,03 %** |
+
+Por isso o padrão é **LUT + tanh**: 2,6× mais rápido, −3,8 kB de flash e
+**numericamente indistinguível** do original. A sigmoide é mais rápida ainda,
+mas os Γ do `smo_gains.json` foram otimizados com `tanh` — usá-la exige
+reotimizar (`autotune_cost.py` com `SMO_SWITCH_FUNC = 2`) antes, senão ela
+troca 211 instruções por 2 % de erro sistemático justamente no torque, que é a
+grandeza que o TCC entrega. Ligar com
+`-DOBS_KEEP_TANH=0 -DDEF_SWITCH=SW_SIGMOID`.
+
+### Como reproduzir
+
+```bash
+# exatidão (host — roda o Observer_Manager.c real via um shim de Zephyr)
+cd tests/observer_golden && make      # A/B com os Γ do autotuning
+make isolate                          # separa erro da LUT x erro da comutação
+
+# instruções e footprint no ISA do alvo (qemu)
+cd tests/observer_bench && make
+make sizes
+```
+
+### E os ciclos de clock?
+
+**Nenhum dos dois testes acima mede ciclo de relógio, e é importante ser
+honesto sobre isso:**
+
+- o `native_sim` roda em x86_64 — valida a matemática, não o custo;
+- o QEMU **não modela microarquitetura**. O núcleo do CH32V307VCT6 é um
+  **QingKe V4F**, RV32IMACF + extensão proprietária XW, **pipeline de 3
+  estágios** com previsão de desvio BHT/BTB/RAS (manual QingKeV4 V1.5,
+  tabela 1-1). O QEMU não simula nada disso, nem wait state de flash, nem
+  latência de `FDIV.S`/`FSQRT.S` — ele conta ~1 ciclo por instrução. O
+  próprio bench evidencia isso imprimindo `mcycle_step` **igual** a
+  `instret_step`.
+- e o CH32V307 **não implementa `mcycle`/`minstret`**: a lista de CSR do
+  QingKe V4 (manual V1.5, tabela 8-1) vai de `mstatus`/`misa` a `pmpaddr`
+  mais os CSRs próprios da WCH, sem nenhum contador de performance.
+
+O que a contagem de instruções permite afirmar é o **CPI médio que cada
+variante aguenta** antes de estourar o período do frame (núcleo a 144 MHz):
+
+| taxa do ADC | orçamento | CPI máx original | CPI máx **otimizada** |
+|---|---|---|---|
+| 101 kSps | 1425 ciclos | 1,39 | **3,6** |
+| 190 kSps | 757 ciclos | **0,74** ❌ | **1,92** ✅ |
+| 252 kSps | 571 ciclos | 0,56 ❌ | 1,45 ⚠️ |
+
+Como o piso físico de CPI é 1,0, a versão original é **impossível** acima de
+~100 kSps. A otimizada destrava ~190 kSps sem mexer em nada de numérico.
+
+**Ciclo real se mede na placa**, e o firmware já traz o instrumento: compile
+com `-DHAL_PROFILE_OBSERVER=1` e a thread de aquisição passa a reportar
+min/média/máx de `Observer_Step` em ciclos de núcleo, com o overhead da
+própria medição descontado. Ele usa `k_cycle_get_32()`, que no `same_board`
+vem do SysTick a `CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC = 144000000` — ou seja,
+**ciclo de núcleo 1:1**, sem precisar de osciloscópio.
+
+---
+
 ## Parâmetros elétricos do motor (R e L) — como são medidos
 
 Os parâmetros $R_s$ (resistência de fase) e $L_s$ (indutância de fase),

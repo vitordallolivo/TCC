@@ -56,7 +56,13 @@ static void handle_func_start(const CMD *cmd)
 {
     if (cmd->target_id == TARGET_DEFAULT) {
         Observer_Reset();
-        LOG_INF("CMD START: observador reiniciado");
+        /* Começar limpo inclui refazer o offset do Hall: o repouso do sensor
+         * deriva entre energizações e com a temperatura, e um offset velho
+         * vira corrente DC fantasma nas 3 fases (sequência zero no Clarke ->
+         * BEMF espúria no SMO). Também é o caminho de recuperação quando a
+         * calibração de boot reprova. Exige o ESC PARADO. */
+        HAL_Calibration_Restart();
+        LOG_INF("CMD START: observador reiniciado + calibracao de offset refeita");
     }
 }
 

@@ -32,4 +32,23 @@ void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset);
 /* @param sensor_id índice @param linear [out] ganho @param offset [out] deslocamento */
 void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset);
 
+/*
+ * @brief true depois que o offset do sensor Hall de corrente foi levantado no
+ * boot e o observador foi liberado.
+ *
+ * Enquanto for false, `rpm_same` e `torque_eletrico` da telemetria NÃO são
+ * válidos: o observador está parado de propósito. O motivo está em HAL.c —
+ * o repouso do SS49E varia alguns mV entre energizações, e essa componente é
+ * comum às três fases, então atravessa a Clarke como sequência zero e vira
+ * BEMF espúria no SMO.
+ */
+bool HAL_Calibration_Done(void);
+
+/*
+ * @brief Refaz a calibração de offset do zero (espera de estabilização +
+ * acumulação), com o ESC parado. Sem isto, uma calibração reprovada só se
+ * recupera reiniciando a placa. Ligada ao FUNC_START/TARGET_DEFAULT do CMD.
+ */
+void HAL_Calibration_Restart(void);
+
 #endif /* HAL_H */

@@ -100,14 +100,25 @@ class EstimationRunner:
 
     # Conveniências nomeadas -------------------------------------------------
     def run_smo_gains(self, R=None, L=None, Ts=None, plot=False, maxiter=None,
-                      popsize=None, json_path=None, on_line=None, on_done=None):
-        """Ganhos do SMO -> autotune_cost.py. Passa R/L/Ts da bancada."""
+                      popsize=None, json_path=None, time_metric=None,
+                      w_tq=None, w_rpm=None, on_line=None, on_done=None):
+        """Ganhos do SMO -> autotune_cost.py. Passa R/L/Ts da bancada.
+
+        `time_metric`, `w_tq` e `w_rpm` definem CONTRA O QUE os Γ estão sendo
+        otimizados (métrica do erro e peso relativo torque x rpm) — não são
+        ajuste de desempenho. Ficam registrados no bloco `config` do
+        smo_gains.json, senão depois não dá pra saber sob que critério
+        aqueles ganhos foram escolhidos.
+        """
         args = []
         if R is not None: args += ["--R", R]
         if L is not None: args += ["--L", L]
         if Ts is not None: args += ["--Ts", Ts]
         if maxiter is not None: args += ["--maxiter", maxiter]
         if popsize is not None: args += ["--popsize", popsize]
+        if time_metric: args += ["--time-metric", time_metric]
+        if w_tq is not None: args += ["--w-tq", w_tq]
+        if w_rpm is not None: args += ["--w-rpm", w_rpm]
         if plot: args += ["--plot"]
         if json_path: args += ["--json", json_path]
         return self.run("autotune_cost.py", args=args, on_line=on_line, on_done=on_done)

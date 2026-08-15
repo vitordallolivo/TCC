@@ -15,6 +15,48 @@
 
 LOG_MODULE_REGISTER(observer, LOG_LEVEL_INF);
 
+/* ------------------------------------------------------------------------ *
+ * OBS_IMPL — variante do caminho quente (só Observer_Step muda; parâmetros,
+ * CMD e diagnóstico são idênticos nas duas).
+ *
+ *   0 = V0: transcrição direta do script — 6x f_shape() com sinf(), tanhf()
+ *           na comutação, floorf() no wrap, 1/BL e 1/inv_p dentro do laço.
+ *           Mantido como BASELINE do A/B (não otimizar aqui).
+ *   5 = V5: LUT512 + interpolação, identidade g_beta == -cos(theta),
+ *           comutação sigmoide, 2 sincos (PLL antes / torque depois do
+ *           update), Kt e inv_bl pré-calculados, wrap sem floorf.
+ *
+ * Catálogo por mudança e plano de validação: CLAUDE.md.
+ * ------------------------------------------------------------------------ */
+#ifndef OBS_IMPL
+#define OBS_IMPL 5
+#endif
+
+/* A troca tanh -> sigmoide é uma SEGUNDA otimização, independente da LUT, e é
+ * OPT-IN. Medido em tests/observer_golden (Γ do autotuning, 3 patamares):
+ *
+ *   LUT + identidade + 2 sincos (tanh dos dois lados) -> 0,0015 % no torque
+ *   só trocar tanh por sigmoide                       -> 2,03 %   no torque
+ *
+ * Ou seja, 100 % do desvio do V5 vem da comutação, nenhum da LUT — e 2,03 %
+ * estoura a tolerância de 1 % do plano de validação (o catálogo estimava
+ * 0,34 %; a medição no ISA real desmentiu). Os Γ do smo_gains.json foram
+ * otimizados com SMO_SWITCH_FUNC=1 (tanh), então a sigmoide só faz sentido
+ * DEPOIS de reotimizar com SMO_SWITCH_FUNC=2.
+ *
+ * Default = tanh: fica numericamente indistinguível do V0 e ainda assim 2,6x
+ * mais rápido (1027 -> 394 instret), o que já destrava ~190 kSps. Para ligar
+ * a sigmoide (183 instret, ~252 kSps) depois de reotimizar os Γ:
+ *     -DOBS_KEEP_TANH=0 -DDEF_SWITCH=SW_SIGMOID
+ */
+#ifndef OBS_KEEP_TANH
+#define OBS_KEEP_TANH 1
+#endif
+
+#if OBS_IMPL >= 5
+#include "Observer_Sin_LUT.h"
+#endif
+
 /* A libc mínima do Zephyr não define M_PI (não é padrão C). */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,15 +78,66 @@ enum { SW_SAT = 0, SW_TANH = 1, SW_SIGMOID = 2 };
 #define DEF_RS           17.3e-3f
 #define DEF_LS           7.0e-6f
 #define DEF_KV           (310.0f / 1.7320508075688772f)  /* Kv já em estrela (Y) */
-#define DEF_GAMMA1       5.0f      /* Ks1·Ts = 500000·10µs  (Γ_s1 > 0) */
-#define DEF_GAMMA2      (-1.0f)    /* Ks2·Ts = -100000·10µs (Γ_s2 < 0) */
-#define DEF_GAMMAT       0.05f     /* Kt·Ts  = 5000·10µs    (Γ_t  > 0) */
+/* Γ do autotuning (autotune_cost.py, differential-evolution, Ts_sim = 10 µs
+ * == DEF_TS). Fonte: Aplicacao_Pi/Scripts/smo_gains.json.
+ *
+ * Os defaults antigos (Γ1=5, Γ2=−1, Γt=0,05) NÃO faziam o observador
+ * convergir: medidos em tests/observer_golden contra uma planta com torque
+ * real de 0,612 N·m, davam 0,96 N·m a 1000 rpm e 1,87 N·m a 3000 rpm — erro
+ * de 57 % e 205 %, e dependente da rotação quando o torque real é constante.
+ * O `î` simplesmente não seguia o `i`.
+ *
+ * Estes vêm da simulação COM O ADC MODELADO (quantização de 12 bits, retenção
+ * no frame, filtro antialiasing e o skew entre as 3 conversões) — que é o que
+ * o observador de fato enxerga — e com a métrica de custo `rmse`.
+ *
+ * Γ1 e Γ2 batem no teto do otimizador em todas as configurações testadas; quem
+ * se move é Γt, e ele é bem sensível ao que se está otimizando:
+ *
+ *   planta ideal   + huber : Γt = 0,066771   (Φ_e = 0,933)
+ *   planta com ADC + huber : Γt = 0,029435   (Φ_e = 0,971)
+ *   planta com ADC + rmse  : Γt = 0,013139   (Φ_e = 0,987)  <- este
+ *
+ * A direção é coerente: quanto mais realista a entrada (quantização e skew) e
+ * quanto mais o custo pesa o TORQUE de fato (ver a nota sobre o Huber em
+ * autotune_cost.py), mais lento o polo da BEMF precisa ser.
+ *
+ * ⚠️ Γ carrega Ts embutido (Γ = K·Ts). Se OBS_TS mudar, estes valores têm de
+ * ser regerados com `autotune_cost.py --Ts <novo>` — não reescalados à mão.
+ *
+ * ⚠️ Γ1 e Γ2 param no LIMITE do otimizador (BOUNDS_LOG dá Γ1 ≤ 10^1,5 e
+ * |Γ2| ≤ 10), não num ótimo interior. Alargar exige subir BL junto, porque o
+ * limite de chattering é BL > Γ1/(1+Φi) — com Γ1 = 31,62 e BL = 18 a folga é
+ * de só 1,12×. */
+#define DEF_GAMMA1       31.622777f   /* Γ_s1 > 0 */
+#define DEF_GAMMA2      (-10.0f)      /* Γ_s2 < 0 */
+#define DEF_GAMMAT       0.013139f    /* Γ_t  > 0 */
 #define DEF_TORQUE_LPF   10000.0f  /* fc_torque do script */
 #define DEF_BEMF_LPF     0.0f      /* 0 = desligado → PLL usa ê direto (== script) */
 #define DEF_TS           10.0e-6f  /* 10 µs */
 #define DEF_BL           18.0f
+
+/* tanh nas duas variantes (== SMO_SWITCH_FUNC=1 do test_coeff_auto.py, que é
+ * com o que os Γ do smo_gains.json foram otimizados). A sigmoide é opt-in —
+ * ver a nota de OBS_KEEP_TANH acima. */
+#ifndef DEF_SWITCH
 #define DEF_SWITCH       SW_TANH
+#endif
+
 #define DEF_BEMF_KIND    1         /* 1 = senoidal, 0 = trapezoidal */
+
+#if OBS_IMPL >= 5
+/* O V5 troca as 6 avaliações de f_shape() pelo par (sin, -cos), o que vale
+ * SÓ para BEMF senoidal:
+ *     (1/raiz(3))*(sin(th-2pi/3) - sin(th-4pi/3)) == -cos(th)
+ * Para trapezoidal a identidade é FALSA e o erro não aparece nem em
+ * compilação nem em runtime — vira ângulo e torque errados, silenciosamente.
+ * O caminho para trapezoidal é LUT com 3 consultas de f_shape, não voltar
+ * para libm. Ver CLAUDE.md. */
+_Static_assert(DEF_BEMF_KIND == 1,
+    "OBS_IMPL>=5: o par (sin, -cos) assume BEMF senoidal. "
+    "Para trapezoidal, usar a LUT com 3 consultas de f_shape.");
+#endif
 
 /* ---- Parâmetros configuráveis (valores "crus" vindos por CMD) ----------- */
 typedef struct {
@@ -75,9 +168,11 @@ typedef struct {
     float Kp_pll;      /* 2ζω_n */
     float Ki_pll;      /* ω_n² */
     float Ke;          /* Ke_mec/p */
+    float Kt;          /* 1.5·ke_mec — o p de Te=1.5·Ke·p cancela com Ke=ke_mec/p */
     float inv_p;       /* 1/p */
     float ts;          /* cópia rápida do passo */
     float bl;
+    float inv_bl;      /* 1/BL (fora do laço: era uma FDIV por passo no V0) */
     int   switch_func;
     int   bemf_kind;
 } obs_const;
@@ -121,6 +216,7 @@ static struct k_mutex cfg_mutex;
  * @param kind 1 = senoidal, 0 = trapezoidal
  * @return valor normalizado em [-1, 1]
  */
+#if OBS_IMPL < 5
 static inline float __attribute__((always_inline))
 f_shape(float theta, int kind)
 {
@@ -135,6 +231,7 @@ f_shape(float theta, int kind)
     else if (th < (float)(11.0*M_PI/6.0)) return -1.0f;
     else                                  return (6.0f/(float)M_PI) * (th - TWO_PI);
 }
+#endif /* OBS_IMPL < 5 */
 
 /**
  * @brief Função de comutação s(e) com camada de contorno.
@@ -147,15 +244,23 @@ static inline float __attribute__((always_inline))
 switch_fn(float e, float inv_bl, int kind)
 {
     float x = e * inv_bl;
+#if OBS_KEEP_TANH
     if (kind == SW_TANH) {
         return tanhf(x);
-    } else if (kind == SW_SAT) {
+    }
+#else
+    /* Sob V5 o ramo tanh NÃO é compilado — é o que tira tanhf (e a bagagem de
+     * libm que vem junto) do binário e paga a flash da LUT. switch_func não
+     * tem target de CMD, então a escolha é de compilação; um SW_TANH residual
+     * cai na sigmoide, que é a mesma forma (ver CLAUDE.md). */
+#endif
+    if (kind == SW_SAT) {
         if (x > 1.0f) return 1.0f;
         if (x < -1.0f) return -1.0f;
         return x;
-    } else { /* sigmoide algébrica */
-        return x / (1.0f + fabsf(x));
     }
+    /* sigmoide algébrica */
+    return x / (1.0f + fabsf(x));
 }
 
 /**
@@ -166,9 +271,60 @@ switch_fn(float e, float inv_bl, int kind)
 static inline float __attribute__((always_inline))
 wrap_2pi(float th)
 {
+#if OBS_IMPL < 5
     th -= TWO_PI * floorf(th * INV_TWO_PI);
     return th;
+#else
+    /* Caminho comum: θ avança ω_e·Ts < 2π por passo, então um único
+     * ajuste resolve — dois testes e uma subtração, sem chamada. */
+    if (th >= TWO_PI) {
+        th -= TWO_PI;
+        if (th < TWO_PI) return th;
+    } else if (th >= 0.0f) {
+        return th;
+    } else {
+        th += TWO_PI;
+        if (th >= 0.0f) return th;
+    }
+    /* Fallback para transitório grande (ω_e explodindo antes do lock).
+     * Trunca com cast pra int em vez de floorf(): é o floorf que arrasta
+     * libm de volta e come a economia de flash da LUT. */
+    th -= TWO_PI * (float)(int32_t)(th * INV_TWO_PI);
+    if (th < 0.0f) th += TWO_PI;
+    return th;
+#endif
 }
+
+#if OBS_IMPL >= 5
+/**
+ * @brief sin/cos de um ângulo por LUT512 com interpolação linear.
+ *
+ * O cosseno sai da MESMA tabela deslocando o índice de N/4 (+π/2), então as
+ * duas saídas custam dois pares de leituras e um mul-add cada — nenhuma
+ * chamada a libm. Ver Observer_Sin_LUT.h.
+ *
+ * @param th ângulo em rad; deve ser >= 0 (wrap_2pi garante). O AND com
+ *           OBS_LUT_MASK cobre o caso de borda th == 2π exato (arredondamento).
+ * @param s [out] sin(th)
+ * @param c [out] cos(th)
+ */
+static inline void __attribute__((always_inline))
+sincos_lut(float th, float *s, float *c)
+{
+    float x = th * ((float)OBS_LUT_N / TWO_PI);   /* rad → índice fracionário */
+    uint32_t i = (uint32_t)x;
+    float frac = x - (float)i;
+
+    uint32_t is = i & OBS_LUT_MASK;
+    uint32_t ic = (i + OBS_LUT_QUARTER) & OBS_LUT_MASK;
+
+    float s0 = obs_sin_lut[is], s1 = obs_sin_lut[is + 1];
+    float c0 = obs_sin_lut[ic], c1 = obs_sin_lut[ic + 1];
+
+    *s = s0 + frac * (s1 - s0);
+    *c = c0 + frac * (c1 - c0);
+}
+#endif /* OBS_IMPL >= 5 */
 
 /**
  * @brief Recalcula as constantes de discretização a partir dos parâmetros
@@ -203,7 +359,15 @@ static void Observer_Recompute(const obs_params *p, obs_const *c)
     c->inv_p = (p->pole_pairs > 0.0f) ? (1.0f / p->pole_pairs) : 0.0f;
     c->Ke    = ke_mec * c->inv_p;
 
+    /* Te = 1.5·Ke·p com Ke = ke_mec/p ⇒ o p cancela. Kt = 1.5·ke_mec é
+     * algebricamente idêntico ao que o V0 calcula no laço, sem a FDIV do
+     * round-trip 1/inv_p. Consequência: pole_pairs deixa de zerar Te quando
+     * p ≤ 0 (só afeta rpm_same, via inv_p) — daí a guarda explícita abaixo,
+     * que preserva o comportamento do V0. Ver CLAUDE.md. */
+    c->Kt = (p->pole_pairs > 0.0f) ? (1.5f * ke_mec) : 0.0f;
+
     c->bl          = p->bl;
+    c->inv_bl      = (p->bl != 0.0f) ? (1.0f / p->bl) : 0.0f;
     c->switch_func = p->switch_func;
     c->bemf_kind   = p->bemf_kind;
 }
@@ -246,7 +410,8 @@ void Observer_Init(void)
     Observer_Reset();
     atomic_clear(&reconfig_pending);
 
-    LOG_INF("Observer init: p=%d Rs=%.4f L=%.2eH Kv=%.1f Ts=%.1fus",
+    LOG_INF("Observer init (V%d): p=%d Rs=%.4f L=%.2eH Kv=%.1f Ts=%.1fus",
+            OBS_IMPL,
             (int)live_params.pole_pairs, (double)live_params.Rs,
             (double)live_params.Ls, (double)live_params.Kv,
             (double)(live_params.ts * 1e6f));
@@ -355,9 +520,15 @@ void Observer_Apply_Pending(void)
     LOG_INF("Observer: reconfigurado e reiniciado");
 }
 
+#if OBS_IMPL < 5
 /**
- * @brief Executa um passo do SMO+PLL (referencial αβ). Caminho quente, sem
- * lock, estado/constantes em registradores de FP.
+ * @brief V0 — executa um passo do SMO+PLL (referencial αβ). Caminho quente,
+ * sem lock, estado/constantes em registradores de FP.
+ *
+ * BASELINE do A/B contra o V5: transcrição direta do laço do
+ * test_coeff_auto.py. Não otimizar — é o que dá sentido ao número de
+ * referência (ver CLAUDE.md e tests/observer_golden/).
+ *
  * @param v_alpha, v_beta tensão de fase em αβ (V)
  * @param i_alpha, i_beta corrente de fase em αβ (A)
  */
@@ -462,6 +633,124 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
      * embarcados, subtrair (B·ω+τc). Por ora, espelha Te. */
     out_torque_helice = tq_lpf;
 }
+
+#else /* OBS_IMPL >= 5 */
+
+/**
+ * @brief V5 — um passo do SMO+PLL (referencial αβ), caminho quente otimizado.
+ *
+ * Mesmas equações do V0; o que muda é como f(·) é avaliada:
+ *
+ *  - identidade (só para BEMF senoidal, travada pelo _Static_assert acima):
+ *        g_α = sin θ ,  g_β = (1/√3)(sin(θ−2π/3) − sin(θ−4π/3)) ≡ −cos θ
+ *    → as 6 avaliações de f_shape() viram 2 sincos.
+ *  - os 2 sincos ficam em POSIÇÕES DIFERENTES de propósito: a PLL usa θ̂
+ *    ANTES do update, o torque usa θ_out DEPOIS. Reusar um só introduziria
+ *    atraso de uma amostra (0,53 % no torque a 3000 rpm) para economizar ~5
+ *    instruções — não vale (ver CLAUDE.md).
+ *  - Kt e inv_bl vêm de obs_const (duas FDIV a menos por passo).
+ *
+ * @param v_alpha, v_beta tensão de fase em αβ (V)
+ * @param i_alpha, i_beta corrente de fase em αβ (A)
+ */
+void __attribute__((hot, flatten))
+Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
+{
+    /* Constantes → registradores */
+    register const float Phi_i    = live_const.Phi_i;
+    register const float Gamma_v  = live_const.Gamma_v;
+    register const float Gamma_s1 = live_const.Gamma_s1;
+    register const float Gamma_s2 = live_const.Gamma_s2;
+    register const float Phi_e    = live_const.Phi_e;
+    register const float alpha_tq = live_const.alpha_tq;
+    register const float a_bemf   = live_const.alpha_bemf;
+    register const float Kp_pll   = live_const.Kp_pll;
+    register const float Ki_pll   = live_const.Ki_pll;
+    register const float Kt       = live_const.Kt;      /* 1.5·ke_mec */
+    register const float inv_p    = live_const.inv_p;
+    register const float ts       = live_const.ts;
+    register const float inv_bl   = live_const.inv_bl;
+    const int sw = live_const.switch_func;
+
+    /* Estado → registradores */
+    register float i_hat_al = live_state.i_hat_al;
+    register float i_hat_be = live_state.i_hat_be;
+    register float e_hat_al = live_state.e_hat_al;
+    register float e_hat_be = live_state.e_hat_be;
+    register float integral_pll = live_state.integral_pll;
+    register float th_est   = live_state.th_est;
+    register float tq_lpf   = live_state.tq_lpf;
+
+    /* ── SMO: erro de corrente + comutação ── */
+    register float s_al = switch_fn(i_alpha - i_hat_al, inv_bl, sw);
+    register float s_be = switch_fn(i_beta  - i_hat_be, inv_bl, sw);
+
+    /* ── Observador de corrente (Γ_s1) ── */
+    i_hat_al = Phi_i * i_hat_al + Gamma_v * (v_alpha - e_hat_al) + Gamma_s1 * s_al;
+    i_hat_be = Phi_i * i_hat_be + Gamma_v * (v_beta  - e_hat_be) + Gamma_s1 * s_be;
+
+    /* ── Observador de BEMF (Γ_s2, polo Φ_e) ── */
+    e_hat_al = Phi_e * e_hat_al + Gamma_s2 * s_al;
+    e_hat_be = Phi_e * e_hat_be + Gamma_s2 * s_be;
+
+    /* ── LPF opcional de BEMF antes da PLL (a_bemf==0 → passa direto) ── */
+    register float pll_e_al = e_hat_al;
+    register float pll_e_be = e_hat_be;
+    if (a_bemf > 0.0f) {
+        register float el = live_state.e_lpf_al + a_bemf * (e_hat_al - live_state.e_lpf_al);
+        register float eb = live_state.e_lpf_be + a_bemf * (e_hat_be - live_state.e_lpf_be);
+        live_state.e_lpf_al = el;
+        live_state.e_lpf_be = eb;
+        pll_e_al = el;
+        pll_e_be = eb;
+    }
+
+    /* ── PLL (1º sincos: θ̂ ANTES do update) ── */
+    register float amp_E = sqrtf(pll_e_al * pll_e_al + pll_e_be * pll_e_be);
+    register float erro_fase;
+    if (amp_E > 1.0f) {
+        float sin_th, cos_th;
+        sincos_lut(th_est, &sin_th, &cos_th);
+        /* (g_α·ê_β − g_β·ê_α)/|ê| com g_α=sin, g_β=−cos */
+        erro_fase = (sin_th * pll_e_be + cos_th * pll_e_al) / amp_E;
+    } else {
+        erro_fase = 0.0f;
+    }
+
+    integral_pll += erro_fase * ts;
+    register float omega_est_elec = Kp_pll * erro_fase + Ki_pll * integral_pll;
+    th_est = wrap_2pi(th_est + omega_est_elec * ts);
+
+    /* θ_out = θ̂ (compensação de fase do front-end analógico fica desligada
+     * por padrão — ver test_coeff_auto.py phase_mode==3). */
+    register float th_out = th_est;
+
+    /* ── Torque (2º sincos: θ_out DEPOIS do update) ──
+     * Te = 1.5·Ke·p·(f_a·î_α + f_b·î_β), f_a = sin θ_out, f_b = −cos θ_out. */
+    float sin_o, cos_o;
+    sincos_lut(th_out, &sin_o, &cos_o);
+    register float t_inst = Kt * (sin_o * i_hat_al - cos_o * i_hat_be);
+    tq_lpf = alpha_tq * t_inst + (1.0f - alpha_tq) * tq_lpf;
+
+    /* ── Estado de volta à memória ── */
+    live_state.i_hat_al = i_hat_al;
+    live_state.i_hat_be = i_hat_be;
+    live_state.e_hat_al = e_hat_al;
+    live_state.e_hat_be = e_hat_be;
+    live_state.integral_pll = integral_pll;
+    live_state.th_est   = th_est;
+    live_state.tq_lpf   = tq_lpf;
+
+    /* ── Saídas (rad/s elétrico → rpm mecânico) ── */
+    register float omega_mech = omega_est_elec * inv_p;
+    out_rpm = omega_mech * (30.0f / (float)M_PI);
+    out_te  = tq_lpf;
+    out_amp_e     = amp_E;
+    out_phase_err = erro_fase;
+    out_torque_helice = tq_lpf;
+}
+
+#endif /* OBS_IMPL */
 
 /** @brief Rotação mecânica estimada. @return rpm mecânico (rpm_same). */
 float Observer_Get_Rpm(void)            { return out_rpm; }

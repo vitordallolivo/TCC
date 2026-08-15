@@ -103,6 +103,14 @@ error_bits:
   - { name: ERROR_CFG_GAMMA_SIGN,          bit: 17, group: "Configuração", msg: "Sinais dos ganhos Γ incorretos (regra fixa: Γ1 > 0, Γ2 < 0, Γt > 0)" }
   # --- Sistema ---
   - { name: ERROR_SYS_ADC_READ_FAILED, bit: 24, group: "Sistema", msg: "Falha na leitura do ADC (aquisição elétrica interrompida)" }
+  - { name: ERROR_SYS_ADC_FRAME_DROP,  bit: 25, group: "Sistema", msg: "Frames do ADC descartados — a ISR não acompanhou a taxa de conversão; as amostras do observador estão deslocadas no tempo" }
+  # --- Calibração de offset (sensor Hall de corrente) ---
+  # O SS49E parte em Vcc/2 e deriva no aquecimento inicial do ASIC: nos ensaios
+  # de bancada o repouso a 0 A variou 5,8 mV entre corridas, o que na cadeia de
+  # 16,875 mV/A vale 0,31 A de corrente fantasma — comum às 3 fases, portanto
+  # sequência zero na Clarke e BEMF espúria no SMO. Daí a medição no boot.
+  - { name: ERROR_CAL_IN_PROGRESS, bit: 26, group: "Calibração", msg: "Calibração de offset em andamento (aguardando o sensor Hall estabilizar, com o ESC parado) — rotação e torque ainda não são válidos" }
+  - { name: ERROR_CAL_FAILED,      bit: 27, group: "Calibração", msg: "Calibração de offset falhou: ruído alto demais nas correntes com o ESC parado — ESC energizado durante a calibração, sensor mal alimentado ou terra aberto" }
 
 # Limiares dos checadores do Security_Manager (SAME). FONTE ÚNICA: gera os
 # #defines em lib/SYS/Security_prm.h (via generate.py). Ajuste em bancada aqui —
@@ -116,17 +124,48 @@ security_limits:
   - { name: SM_BEMF_MIN,       value: 1.0,     comment: "|ê| mínimo p/ PLL travar (deve casar com o limiar em Observer_Step)" }
   - { name: SM_PLL_ERR_MAX,    value: 0.35,    comment: "erro de fase da PLL tolerável [rad]" }
   - { name: SM_RPM_MAX,        value: 60000.0, comment: "rpm mecânico plausível máximo" }
+  # --- Calibração de offset do Hall no boot ---
+  - { name: SM_CAL_SETTLE_MS,  value: 2000.0,  comment: "espera antes de amostrar o offset [ms]: o SS49E parte em Vcc/2 e deriva no aquecimento inicial do ASIC; medir cedo trava um offset errado" }
+  - { name: SM_CAL_FRAMES,     value: 4096.0,  comment: "frames acumulados para a média do offset (com o ESC parado)" }
+  - { name: SM_CAL_STD_MAX_MV, value: 8.0,     comment: "desvio-padrão máximo tolerado nas amostras de offset [mV no pino]; acima disso a calibração FALHA em vez de gravar lixo (8 mV ~ 0,47 A na cadeia)" }
 
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida por
 # sensor calibrável — fonte única, alimenta CMD_Core_prm.h (gerado, ver
 # generate.py). `target` tem que ser um nome de enums.target_type existente.
+# A entrada `x` da reta é a tensão NO PINO do ADC, em mV (HAL::raw_to_mv).
+#
+# CORRENTE — SS49E (N=1, condutor passando uma vez pelo furo do toróide) com
+# divisor R1=2k0 / R2=18k na saída: o repouso do sensor é ratiométrico em
+# Vcc/2 = 2,5 V e ±60 A levariam a saída a 3,625 V, acima dos 3,3 V que o
+# conversor aceita.
+#   sensibilidade do sensor : 18,750 mV/A   (regressão do ensaio, N=1)
+#   atenuação do divisor    : k = 18/(18+2) = 0,900
+#   ganho da cadeia         : 18,750 x 0,900 = 16,875 mV/A  (47,7 mA/LSB)
+#   linear                  : 1/16,875 = 0,0592593 A/mV
+#   offset nominal          : -(2,4866 x 0,900) V x linear = -132,64 A
+#
+# ⚠️ O OFFSET AQUI É SÓ CHUTE DE PARTIDA — tem de ser levantado a cada boot.
+# Nos três ensaios do Apêndice A o repouso a 0 A caiu em 2,48570 / 2,48640 /
+# 2,49150 V: 5,8 mV de espalhamento, que nesta cadeia valem 0,31 A de corrente
+# FANTASMA. E ela é comum às três fases, então atravessa a Clarke como
+# componente de sequência zero e vira BEMF espúria no SMO. Por isso o firmware
+# mede o repouso real no boot, com o ESC parado, e sobrescreve estes valores.
+# Ver SAME/CLAUDE.md, "Calibração de offset dos sensores".
+#
+# TENSÃO — divisor R1=130k / R2=7k5; fundo de escala 60,5 V (dobro do
+# barramento, folga para o sobressinal de comutação).
+#   atenuação : k = 7,5/137,5 = 0,0545455
+#   linear    : 1/k/1000 = 0,0183333 V/mV   (14,8 mV/LSB)
+#
+# min/max: faixa física da cadeia. Fora dela = sensor saturado, desconectado
+# ou terra aberto.
 sensor_defaults:
-  - { target: TARGET_CURRENT_A, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
-  - { target: TARGET_CURRENT_B, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
-  - { target: TARGET_CURRENT_C, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
-  - { target: TARGET_VOLTAGE_A, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
-  - { target: TARGET_VOLTAGE_B, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
-  - { target: TARGET_VOLTAGE_C, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: TARGET_CURRENT_A, linear: 0.0592593, offset: -132.64, min: -70.0, max: 70.0 }
+  - { target: TARGET_CURRENT_B, linear: 0.0592593, offset: -132.64, min: -70.0, max: 70.0 }
+  - { target: TARGET_CURRENT_C, linear: 0.0592593, offset: -132.64, min: -70.0, max: 70.0 }
+  - { target: TARGET_VOLTAGE_A, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
+  - { target: TARGET_VOLTAGE_B, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
+  - { target: TARGET_VOLTAGE_C, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
 
 structs:
 

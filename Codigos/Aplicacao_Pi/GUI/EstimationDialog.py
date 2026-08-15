@@ -13,8 +13,9 @@ import pyqtgraph as pg
 import yaml
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QVBoxLayout,
+    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QGroupBox,
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
+    QSpinBox, QVBoxLayout,
 )
 
 from Communication_Data.estimation import EstimationRunner
@@ -84,6 +85,50 @@ class EstimationDialog(QDialog):
         self.chk_plot = QCheckBox("Plotar o resultado final (gera figuras ao terminar)")
         form.addRow(self.chk_plot)
         root.addWidget(params)
+
+        # --- Função de custo: define CONTRA O QUE os Γ são otimizados -----
+        cost = QGroupBox("Função de custo")
+        cform = QFormLayout(cost)
+
+        self.cb_metric = QComboBox()
+        # (rótulo na GUI, valor passado ao script)
+        for _lbl, _val in (("RMS (rmse)", "rmse"),
+                           ("Média (mae)", "mae"),
+                           ("Huber", "huber")):
+            self.cb_metric.addItem(_lbl, _val)
+        self.cb_metric.setCurrentIndex(0)      # RMS: pesos valem o que dizem
+        self.cb_metric.setToolTip(
+            "Como o erro no tempo vira número.\n\n"
+            "RMS e Média mantêm os ganhos abaixo com o peso declarado.\n\n"
+            "Huber é quadrático para resíduo pequeno e linear para grande, "
+            "então ele COMPRIME o termo de resíduo menor. Medido nesta "
+            "bancada, o torque cai no ramo quadrático e o rpm no linear: o "
+            "rpm acaba pesando ~1,6x o torque mesmo com ganho de torque = 2x "
+            "o de rpm.")
+
+        self.sp_wtq = QDoubleSpinBox()
+        self.sp_wtq.setRange(0.0, 100.0); self.sp_wtq.setSingleStep(0.1)
+        self.sp_wtq.setDecimals(2); self.sp_wtq.setValue(1.0)
+        self.sp_wtq.setToolTip("Peso do erro de TORQUE no custo. É a grandeza "
+                               "que a bancada entrega — normalmente o maior.")
+
+        self.sp_wrpm = QDoubleSpinBox()
+        self.sp_wrpm.setRange(0.0, 100.0); self.sp_wrpm.setSingleStep(0.1)
+        self.sp_wrpm.setDecimals(2); self.sp_wrpm.setValue(0.5)
+        self.sp_wrpm.setToolTip("Peso do erro de ROTAÇÃO no custo.")
+
+        cform.addRow("Métrica do erro:", self.cb_metric)
+        cform.addRow("Ganho torque:", self.sp_wtq)
+        cform.addRow("Ganho rpm:", self.sp_wrpm)
+
+        self.lbl_cost_hint = QLabel()
+        self.lbl_cost_hint.setWordWrap(True)
+        self.lbl_cost_hint.setStyleSheet("color:#888; font-size:8pt;")
+        cform.addRow(self.lbl_cost_hint)
+        self.cb_metric.currentIndexChanged.connect(self._update_cost_hint)
+        self._update_cost_hint()
+
+        root.addWidget(cost)
 
         # --- Controles ---
         ctrl = QHBoxLayout()
@@ -158,14 +203,32 @@ class EstimationDialog(QDialog):
         self.btn_apply.setEnabled(False); self.lbl_result.setText("—")
 
         self.json_out = os.path.join(self.config_dir, "..", "Scripts", "smo_gains.json")
+        metric = self.cb_metric.currentData()
+        w_tq   = self.sp_wtq.value()
+        w_rpm  = self.sp_wrpm.value()
+
         ok = self.runner.run_smo_gains(
             R=R, L=L, Ts=Ts, plot=self.chk_plot.isChecked(),
             maxiter=self.sp_maxiter.value(), popsize=self.sp_popsize.value(),
+            time_metric=metric, w_tq=w_tq, w_rpm=w_rpm,
             on_line=self._on_line, on_done=lambda rc: self.sig_done.emit(rc),
         )
         if ok:
             self.btn_run.setEnabled(False); self.btn_stop.setEnabled(True)
             self._append_log(f"[GUI] Iniciado (R={R} Ω, L={L} H, Ts={Ts} s).")
+            self._append_log(f"[GUI] Custo: métrica={metric} | "
+                             f"ganho torque={w_tq} | ganho rpm={w_rpm}.")
+
+    def _update_cost_hint(self):
+        """Avisa quando a métrica escolhida re-pondera os ganhos por conta."""
+        if self.cb_metric.currentData() == "huber":
+            self.lbl_cost_hint.setText(
+                "⚠ Huber comprime o termo de resíduo menor. Nesta bancada o "
+                "rpm acaba pesando ~1,6× o torque mesmo com ganho de torque "
+                "maior — os valores acima deixam de valer o que dizem.")
+        else:
+            self.lbl_cost_hint.setText(
+                "Os dois termos entram com o peso declarado.")
 
     def _stop(self):
         self.runner.stop_all()

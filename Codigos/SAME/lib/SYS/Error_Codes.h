@@ -22,6 +22,9 @@ typedef enum {
     ERROR_CFG_MOTOR_PARAM_INVALID = (1U << 16),  /* Configuração: Parâmetro do motor inválido (R, L, pares de polos, Kv ou Ts ≤ 0) — configure antes de estimar */
     ERROR_CFG_GAMMA_SIGN = (1U << 17),  /* Configuração: Sinais dos ganhos Γ incorretos (regra fixa: Γ1 > 0, Γ2 < 0, Γt > 0) */
     ERROR_SYS_ADC_READ_FAILED = (1U << 24),  /* Sistema: Falha na leitura do ADC (aquisição elétrica interrompida) */
+    ERROR_SYS_ADC_FRAME_DROP = (1U << 25),  /* Sistema: Frames do ADC descartados — a ISR não acompanhou a taxa de conversão; as amostras do observador estão deslocadas no tempo */
+    ERROR_CAL_IN_PROGRESS = (1U << 26),  /* Calibração: Calibração de offset em andamento (aguardando o sensor Hall estabilizar, com o ESC parado) — rotação e torque ainda não são válidos */
+    ERROR_CAL_FAILED = (1U << 27),  /* Calibração: Calibração de offset falhou: ruído alto demais nas correntes com o ESC parado — ESC energizado durante a calibração, sensor mal alimentado ou terra aberto */
 } same_error_bit_t;
 
 #endif /* ERROR_CODES_H */

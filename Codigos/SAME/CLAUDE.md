@@ -49,13 +49,25 @@ SAME/
 │   ├── CMD_Core_prm.h               # TABELA de sensores (currents/voltages) — como na SIBA
 │   ├── Common_Types.h / CMD.h       # GERADOS do SAME.yaml
 │   └── TCKEC.h                      # stub (sem thread de polling — só eventos)
-└── lib/SYS/
-    ├── Log_Manager.{h,c}            # TELEMETRY_LOG + timer de TX (Ts_udp); .h GERADO
-    ├── Observer_Manager.{h,c}       # SMO + PLL + torque (núcleo — ver abaixo)
-    ├── Security_Manager.{h,c}       # error_code agregado (diagnóstico, sem emergência)
-    ├── Error_Codes.h                # enum same_error_bit_t — GERADO (error_bits do yaml)
-    └── Security_prm.h               # limiares SM_* dos checadores — GERADO (security_limits)
+├── lib/SYS/
+│   ├── Log_Manager.{h,c}            # TELEMETRY_LOG + timer de TX (Ts_udp); .h GERADO
+│   ├── Observer_Manager.{h,c}       # SMO + PLL + torque (núcleo — ver abaixo)
+│   ├── Observer_Sin_LUT.h           # LUT512 do V5 — GERADA (gen_sin_lut.py), .rodata
+│   ├── Security_Manager.{h,c}       # error_code agregado (diagnóstico, sem emergência)
+│   ├── Error_Codes.h                # enum same_error_bit_t — GERADO (error_bits do yaml)
+│   └── Security_prm.h               # limiares SM_* dos checadores — GERADO (security_limits)
+└── tests/                           # não entram no build do firmware
+    ├── observer_golden/             # A/B numérico V0 x V5 (host, shim de Zephyr)
+    └── observer_bench/              # instret + footprint em rv32imafc (qemu)
 ```
+
+**Os dois testes são complementares e nenhum sozinho fecha a questão:**
+`observer_golden` compila o `Observer_Manager.c` **real** contra um shim mínimo
+de Zephyr e roda no host — valida a matemática (é x86_64, não diz nada sobre
+custo). `observer_bench` compila o mesmo arquivo para o ISA do alvo e conta
+`minstret` no qemu — valida custo e footprint, não a integração. E os dois
+juntos ainda não cobrem DMA, registrador do ADC nem ciclo real: isso só na
+placa.
 
 **Modelo de eventos (pedido do projeto — poucas threads):** só **duas** threads
 de I/O bloqueante — a de aquisição (bloqueia na conversão dos ADCs → roda o
@@ -103,7 +115,15 @@ então a SAME reaproveita a base que a SIBA já resolveu, em vez de refazer:
 
 ## Aquisição — cadeia ADC/DMA e dimensionamento de `Ts_adc`
 
-> Referência: **CH32F/V20x_V30x_V31x Reference Manual, cap. 12** (ADC).
+> Referência: **CH32F/V20x_V30x_V31x Reference Manual, cap. 12** (ADC) —
+> cópia local em `~/Documentos/Projetos/MCU_or_OS/CH32V307VTC6/ADC.pdf`.
+> **Fonte secundária obrigatória:** o exemplo oficial da WCH em
+> `~/Documentos/Projetos/MCU_or_OS/CH32V307VTC6/ch32v307-main/EVT/EXAM/ADC/DualADC_RegSimul/`
+> e a SDK em `EVT/EXAM/SRC/Peripheral/src/ch32v30x_adc.c`. O RM diz o que os
+> bits fazem; o exemplo mostra a **ordem** validada e as compensações de
+> software que o RM não menciona (ver "Calibração" nas decisões em aberto — o
+> offset residual da autocalibração só aparece lá).
+>
 > Esta seção fixa a taxa efetiva da malha, que é o que define
 > `Ts_adc` → `K = Γ/Ts` e o passo do observador.
 
@@ -480,6 +500,96 @@ algebricamente idêntico ao que o V0 calcula. `pole_pairs` continua valendo para
 | 7 | 2º `sincos` pós-update (corrige ¹) | +5 | −0,53 % | ≈0 | 0 | nenhum |
 | | **V5 = V3+7 ← recomendado** | **169** | **0,34 %** | **−3056 B** | **0 B** | |
 
+### ✅ Implementado e MEDIDO (`OBS_IMPL` em `Observer_Manager.c`)
+
+O V5 está implementado; o V0 fica selecionável por `-DOBS_IMPL=0` **de
+propósito**, porque é ele que dá sentido ao A/B. Números reproduzidos neste
+repo com `riscv64-zephyr-elf-gcc -O2 -march=rv32imafc_zicsr_zifencei
+-mabi=ilp32f` + `qemu-system-riscv32` (`tests/observer_bench`, alvo `make`),
+já descontado o custo do laço/estímulo, e com a **PLL travada** (medir antes do
+lock subestima o custo, porque o passo pula o `sincos` inteiro):
+
+| variante | instret | Δ flash | Δ RAM | libm restante | ΔTe em regime vs V0 |
+|---|---|---|---|---|---|
+| V0 (libm + tanh) | **1027** | base | base | 9 símbolos, ~4,7 kB | — |
+| **V5 + tanh** | **394** | **−3866 B** | **0 B** | só `tanhf` (218 B) | **0,0015 %** |
+| **V5 + sigmoide** | **183** | **−5046 B** | **0 B** | **nenhum** | **2,03 %** |
+
+Confere com o catálogo (1105/169 previstos × 1027/183 medidos). `obs_sin_lut`
+sai como símbolo `r` de 2052 B (`.rodata`) e o `.bss` fica **idêntico** nas três
+variantes — a LUT não foi para a RAM.
+
+**Footprint no binário de verdade** (`make build`, com a pilha Ethernet junto —
+que é o que decide se sobra espaço, não o observador):
+
+| | ROM | RAM |
+|---|---|---|
+| V0 | 127244 B (62,76 %) | 59628 B (45,49 %) |
+| **V5** | **123376 B (60,85 %)** | **59628 B (45,49 %)** |
+| Δ | **−3868 B** | **0 B** |
+
+Os critérios de aceite do plano de validação estão **todos cumpridos** no
+`same_board`: flash cai ~3,9 kB, RAM não muda, e `sinf`, `cosf`, `tanhf`,
+`floorf`, `__kernel_sinf`, `__kernel_cosf`, `__rem_pio2f`, `__kernel_rem_pio2f`,
+`npio2_hw` e `PIo2` **sumiram todos** do ELF — nada mais no firmware chama a
+trigonometria da libm, então a economia se realiza inteira.
+
+**A decomposição muda a recomendação.** O A/B em `tests/observer_golden`
+separa as duas fontes de desvio e elas não são comparáveis:
+
+| o que muda | rpm (regime) | Te (regime) |
+|---|---|---|
+| LUT + identidade + 2 `sincos` + `Kt`/`inv_bl` (tanh nos dois lados) | 0,0001 % | **0,0015 %** |
+| só trocar tanh → sigmoide (LUT nos dois lados) | 0,0093 % | **2,03 %** |
+
+Ou seja: **todo o desvio vem da comutação, nenhum vem da LUT.** E os 2,03 %
+medidos são 6× o «+0,34 %» estimado no catálogo — acima da tolerância de 1 %
+do próprio plano de validação. Daí:
+
+- **V5 + tanh é a escolha default**: 2,6× mais rápido que o V0, −3,8 kB de
+  flash e **numericamente indistinguível** (0,0015 % no torque, dentro do ruído
+  do `float`). Não exige reotimizar Γ, não exige nada da bancada.
+- **V5 + sigmoide** só depois de rodar o `autotune_cost.py` com
+  `SMO_SWITCH_FUNC = 2`. Enquanto os Γ vierem de um autotuning feito com tanh,
+  a sigmoide é uma troca de 211 instret por 2 % de erro sistemático no torque —
+  ruim, já que o torque é a grandeza que o TCC entrega.
+
+Orçamento resultante a 144 MHz (CPI médio que cada variante aguenta):
+
+| taxa | orçamento | CPI máx V0 | CPI máx **V5+tanh** | CPI máx V5+sigmoide |
+|---|---|---|---|---|
+| 101 kSps | 1425 | 1,39 | **3,6** | 7,8 |
+| 190 kSps | 757 | **0,74** | **1,92** | 4,1 |
+| 252 kSps | 571 | 0,56 | 1,45 | 3,1 |
+| 373 kSps | 386 | 0,38 | 0,98 | 2,1 |
+
+O V0 é impossível acima de ~100 kSps (piso de CPI é 1,0). **O V5+tanh destrava
+190 kSps sem mexer em nada de numérico**; 252 kSps com tanh fica no limite
+(CPI ≤ 1,45, apertado com wait state de flash) e é aí — só aí — que a sigmoide
+passa a valer a reotimização dos Γ.
+
+> Continua valendo: **instret não é ciclo**. Quem fecha o `SMPx` é o GPIO
+> toggle na ISR do ADC, na placa.
+
+### Como rodar os dois testes
+
+```bash
+# equivalência numérica (host, roda o Observer_Manager.c real via shim Zephyr)
+cd tests/observer_golden && make        # A/B com os Γ do autotuning
+make isolate                            # separa erro da LUT x erro da comutação
+make factory                            # mesmo A/B com os DEF_GAMMA* de fábrica
+
+# custo e footprint no ISA real (rv32imafc + qemu)
+cd tests/observer_bench && make         # instret por chamada
+make sizes                              # text/rodata/bss + libm remanescente
+```
+
+⚠️ **O A/B só é informativo com os Γ do autotuning.** Com os `DEF_GAMMA*` de
+fábrica o observador não converge (`î` não segue `i`) e as duas variantes são
+comparadas num regime degenerado: `make factory` dá 58 % de desvio no torque e
+não quer dizer nada sobre a otimização. Ver o item «`DEF_GAMMA*` divergem do
+autotuning» abaixo — é o mesmo defeito, agora com número.
+
 ¹ **A reutilização de `g_α/g_β` como `f_a/f_b` NÃO é exata.** No V0 o torque usa
 o ângulo *depois* do update da PLL e a PLL usa o de *antes*; reusar um único
 `sincos` introduz atraso de uma amostra (0,022 rad a 3000 rpm → 0,53 % no
@@ -751,10 +861,57 @@ tq_lpf ← α_tq·Te + (1 − α_tq)·tq_lpf           # → torque_eletrico
 
 - **`Scripts/test_coeff_auto.py`** — simulação completa planta+SMO+PLL (as
   equações acima). **Modelo do que o firmware da SAME deve embarcar.** Parâmetros
-  no topo (`R_s=17.3 mΩ`, `L_s=7 µH`, `P=14`/`p=7`, `Kv=310/√3`, `Ts=10 µs`).
+  no topo (`R_s=17.3 mΩ`, `L_s=7 µH`, `P=14`/`p=7`, `Kv=310/√3`).
+
+  **Duas bases de tempo (a planta é contínua, o observador não é):**
+
+  | | símbolo | valor |
+  |---|---|---|
+  | passo da planta | `Ts_plant` | `TS_ADC / N_SUB` = 0,833 µs |
+  | frame do ADC = passo do SMO | `TS_ADC` (`Ts`) | 10 µs — **igual ao `OBS_TS`** |
+  | sub-passos por frame | `N_SUB` | 12 (múltiplo de 3: são 3 conversões) |
+
+  Com `ADC_MODEL = 1` o caminho de medição reproduz o hardware: filtro
+  antialiasing **por fase** (+ polo do Hall na corrente) → condicionamento para
+  tensão no pino → **amostragem sequencial dentro do frame** (V_x e i_x da mesma
+  fase caem juntos, mas A, B e C são convertidas uma após a outra) →
+  quantização de 12 bits com saturação → Clarke de 3 termos, a **mesma** do
+  `HAL.c`. `ADC_MODEL = 0` volta ao comportamento antigo (sinais ideais).
+
+  Efeitos que só aparecem com isso ligado: o `i_a+i_b+i_c` medido **não é
+  zero** (pico de ~8 A nas comutações, 2,2 A rms — é o skew de 6,67 µs entre a
+  1ª e a 3ª conversão do frame), e o front-end atrasa a corrente o bastante
+  para importar frente ao `di/dt` de 2,1 MA/s do inversor.
+
+  As figuras `ADC_amostragem.png`, `ADC_impacto_estimativa.png` e
+  `ADC_ideal_vs_amostrado.png` decompõem isso: planta → após o front-end →
+  retido pelo ADC.
+
+  > ⚠️ `TS_ADC` **tem** de ser o `OBS_TS` do firmware: Γ = K·Ts carrega o passo
+  > embutido. Mudou um, roda `autotune_cost.py --Ts <novo>` — não reescale à mão.
 - **`Scripts/autotune_cost.py`** — otimiza **Γ** (invariante a `Ts`) e emite
   `RESULT ... Gamma_s1=… Gamma_s2=… Gamma_t=…`; rodado pela GUI (menu
   **Estimativas → Estimar Ganhos SMO**).
+
+  **A função de custo é configurável pela GUI** (grupo "Função de custo") e por
+  CLI: `--time-metric {mae,mse,rmse,mape,huber}`, `--w-tq`, `--w-rpm`. Os três
+  ficam gravados no bloco `config` do `smo_gains.json` — sem isso não dá para
+  saber depois sob que critério aqueles Γ foram escolhidos.
+
+  > ⚠️ **`huber` re-pondera os termos por conta própria.** Ele é quadrático
+  > abaixo de `HUBER_DELTA` e linear acima, então comprime o termo de resíduo
+  > **menor**. Medido nesta bancada (resíduos normalizados: torque r ≈ 0,32–0,56,
+  > rpm r ≈ 0,78–1,06):
+  >
+  > | métrica | termo torque (W=1,0) | termo rpm (W=0,5) | razão rpm/torque |
+  > |---|---|---|---|
+  > | mae | 0,548 | 0,528 | 0,96 |
+  > | rmse | 0,635 | 0,645 | 1,02 |
+  > | **huber** | **0,199** | **0,323** | **1,62** |
+  >
+  > Com Huber o rpm pesa **1,6× o torque apesar de `W_TQ` ser o dobro de
+  > `W_RPM`** — e justo contra o torque, que é o que o TCC entrega. Por isso o
+  > default passou a ser **`rmse`**, onde os pesos declarados valem.
 
 > O `Ts=10 µs` do script coincide com `SMPx = 28,5 @12 MHz` (9,87 µs) — é o
 > ponto de operação conservador e o mais fácil de correlacionar simulação ×
@@ -793,35 +950,208 @@ Codigos/
   não chegam ao limite de 14 MHz do ADC (mínimo 18 MHz). Definir se cai em
   12 MHz pelo prescaler estendido do RCC ou baixando o APB2 — **todas as taxas
   da tabela de `Ts_adc` escalam com esse valor.**
-- **`Ts_adc` real** (define `K = Γ/Ts` e o passo do observador): a meta anterior
-  de ~333 kSps/canal **não é atingível** com 3 canais/ADC (máximo prático
-  252 kSps em `SMPx = 7,5`). Enquanto `Observer_Step` usar `sinf` de libm, o
-  teto é ~100 kSps (`SMPx = 28,5`). Fixar após medir a ISR com GPIO toggle.
-  Configurável por `TARGET_TS_ADC`.
-- **LUT de seno em `Observer_Manager.c`**: adotar o **V5** (LUT512 `static const`
-  + sigmoide + 2 `sincos`) — medido em 169 instret contra 1105 do atual (6,5×),
-  desvio de 0,34 % no torque, **−3 kB de flash e 0 B de RAM**. Ver a seção de
-  otimização para o catálogo por mudança e o plano de validação
-  (`rom_report`/`ram_report` na placa + vetor golden no `native_sim`).
-- **`DEF_GAMMA*` divergem do autotuning**: os defaults no `.c` (Γ₁=5, Γ₂=−1,
-  Γₜ=0,05) dão teto de BEMF de 20 V contra os 17,3 V físicos e **42,6 % de erro
-  no torque a 3000 rpm**; os ganhos do `autotune_cost.py` (Γ₁=31,62, Γ₂=−10,
-  Γₜ=0,0667) levam isso a 5,9 %. Alinhar os defaults.
+- 🔴 **`Ts_adc` real do firmware está 6,3× fora do `OBS_TS` do observador.**
+  Auditado no código (não é estimativa de projeto — é o que `make build` gera
+  hoje). São três contribuições independentes, todas em `drivers/adc/adc_ch32v307.c`
+  e `lib/OS/HAL.c`:
+
+  1. **`adc_set_sample_times()` fixa `SMPx = 239,5` para todo canal** (grava
+     `0x7` em cada campo). A tabela de `Ts_adc` acima toda assume `SMPx`
+     escolhível; 239,5 nem aparece nela. `T_CONV = 250,5` ADCCLK × 3 canais =
+     **751,5 ADCCLK por frame**.
+  2. **`adc_rcc_enable()` usa `ADCPRE = /6`** → com PCLK2 = 144 MHz dá
+     **ADCCLK = 24 MHz**, 1,7× acima do limite de 14 MHz do periférico (o
+     próprio comentário do driver admite isso). Nesse clock, o frame sai em
+     **31,3 µs → 31,9 kSps/canal**.
+  3. **`hal_read_raw()` gasta DOIS transfer-complete por passo do observador.**
+     `adc_ch32v307_read()` faz `k_sem_reset()` antes do `k_sem_take()`, então o
+     `adc_read(adc2)` **descarta o semáforo que a ISR do frame já tinha dado** e
+     espera o frame seguinte. O pareamento V↔i sobrevive (a ISR escreve os dois
+     `user_buf` a cada TC), mas a taxa do observador cai pela metade:
+     **período efetivo ≈ 62,6 µs.**
+
+  Contra `DEF_TS = 10 µs`, isso é **6,3× de erro** — e ele entra duas vezes:
+  `Φ_i = 1 − Rs·Ts/Ls` e `Γ_v = Ts/Ls` são calculados com o `ts` da constante
+  (0,975 e 1,43) enquanto o hardware amostra a 62,6 µs (deveria ser 0,845 e
+  8,94), **e** os Γ do autotuning carregam `Ts = 10 µs` embutido (`Γ = K·Ts`),
+  então o `K` efetivo sai 6,3× menor que o otimizado. Pior: como o laço é
+  «espera 2 TCs», o passo **não é fixo** — jitta com o tempo de execução da
+  thread, e Euler-forward com passo variável não é o modelo que os Γ descrevem.
+
+  **Estado: (1) e (3) corrigidos, (2) é decisão de sistema — ver abaixo.**
+
+  - (3) corrigido: em modo dual o escravo não espera mais. `adc_ch32v307_read()`
+    devolve imediatamente para o ADC2, porque quando `adc_read(adc1)` retorna o
+    buffer do ADC2 **já foi preenchido pela mesma ISR**. Vale 2× na taxa.
+  - (1) corrigido: `SMPx` virou `CH32_ADC_SMP`, default `011` (28,5 ciclos), e
+    `adc_set_sample_times()` agora **limpa o campo antes de gravar** — antes só
+    fazia `|=` com `0x7`, o que travava o campo em 239,5 para sempre.
+  - (2) melhorado (`/6` → `/8`), mas **não resolvido — e resolver custa caro**.
+    O prescaler estendido do RCC **não existe** nesta família: conferido na SDK
+    da WCH (`ch32v30x_rcc.c`: `CFGR0_ADCPRE_Reset_Mask = 0xFFFF3FFF` limpa só
+    `[15:14]`; `ch32v30x_rcc.h` define só `RCC_PCLK2_Div2/4/6/8`). Com
+    PCLK2 = 144 MHz, o divisor máximo `/8` dá **18 MHz — 1,29× acima dos
+    14 MHz** do manual. `/8` é também o que o exemplo oficial da WCH usa.
+
+  **Ponto de operação atual:**
+
+  | | valor |
+  |---|---|
+  | PCLK2 | 144 MHz (**PPRE2 não é tocado**) |
+  | ADCCLK | 18 MHz ⚠️ (limite 14 MHz) |
+  | `SMPx` | 28,5 ciclos (`CH32_ADC_SMP = 011`) |
+  | frame (3 canais) | **6,583 µs** |
+  | taxa | 151,9 kSps/canal |
+
+  > 🚫 **Não baixe o PPRE2 sem decidir isso explicitamente.** Pôr o ADC em
+  > spec exige PCLK2 = 72 MHz, e o PCLK2 é **compartilhado**: como
+  > `clock_control_wch_rcc.c` devolve sempre o clock de AHB em
+  > `clock_control_get_rate()` ignorando PPRE2, o driver de USART calcularia
+  > `divn = 144 MHz / current-speed` com o PCLK2 real em 72 MHz e o console
+  > iria para metade do baud, exigindo compensar `current-speed` no DTS.
+  > **Isso quebra um console que funciona** para ganhar 18 → 12 MHz. A troca
+  > existe e está implementada atrás de `CH32_ADC_LOWER_APB2`, mas fica
+  > DESLIGADA até alguém decidir que vale.
+
+  **Consequência que sobra:** o frame de 6,583 µs não é o `OBS_TS` de 10 µs.
+  Nenhum `SMPx` fecha 10 µs a 18 MHz (41,5 → 8,75 µs; 55,5 → 11,08 µs), então
+  o caminho é o inverso: **fixar `OBS_TS_NS` no período real do frame e rodar
+  o `autotune_cost.py` com `Ts_sim` igual a ele**, já que Γ = K·Ts. Enquanto
+  isso não for feito, o driver dispara um `LOG_WRN` no boot dizendo exatamente
+  qual é o `Ts` real e qual o observador assume.
+
+  O driver avisa no boot nos dois casos: um `LOG_WRN` se `ADCCLK > 14 MHz` e
+  outro se o período do frame divergir de `OBS_TS_NS` (exportado por
+  `Observer_Manager.h`) em mais de 2 %. O `Ts` do hardware deixou de ser
+  invisível — que era o problema de origem.
+- ~~**LUT de seno em `Observer_Manager.c`**~~ implementado: `OBS_IMPL=5` em
+  `Observer_Manager.c` + `lib/SYS/Observer_Sin_LUT.h` (gerado por
+  `tests/observer_golden/gen_sin_lut.py`). Medido em **1027 → 394 instret**
+  (V5+tanh, desvio de 0,0015 % no torque) ou **183** (V5+sigmoide, 2,03 %),
+  **−3,8/−5,0 kB de flash e 0 B de RAM**. Ver a seção de otimização — a
+  recomendação passou a ser **V5+tanh**, porque a sigmoide sozinha responde por
+  100 % do desvio e exige reotimizar Γ. Falta só o `rom_report`/`ram_report` na
+  placa (o footprint aqui foi medido no bench bare-metal, não no binário com a
+  pilha Ethernet).
+- 🔴 **`DEF_GAMMA*` divergem do autotuning** — confirmado em bancada de teste
+  (`tests/observer_golden`, planta `v = R_s·i + L_s·di/dt + e`, torque real
+  0,612 N·m): com os defaults do `.c` (Γ₁=5, Γ₂=−1, Γₜ=0,05) o observador
+  estima **0,96 N·m a 1000 rpm e 1,87 N·m a 3000 rpm** — 57 % e 205 % de erro,
+  e dependente da rotação, quando o torque real é constante nos dois patamares.
+  O `î` simplesmente não segue o `i`. Com os Γ do `smo_gains.json`
+  (Γ₁=31,6228, Γ₂=−10, Γₜ=0,066771) cai para 0,660 / 0,757 N·m (8 % e 24 %) e a
+  rotação fica exata (999,99 / 2999,99 rpm). **Alinhar os `DEF_GAMMA*` com o
+  `smo_gains.json` é a maior melhoria isolada de exatidão disponível hoje** — e
+  é uma linha. O erro residual de 8–24 % é outro assunto (Γ otimizado com
+  `w_tq`/`w_rpm`, não para exatidão de torque em regime).
 - **Limites a checar em `Observer_Set_Param`**: `Ts < 2·Ls/Rs`;
   `0 < Γₜ < 1`; `BL > Γ₁/(1+Φᵢ)`; `|Γ₂|/Γₜ ≥ BEMF_max`. O terceiro é o mais
   frágil — `DEF_BL` é constante fixa enquanto Γ₁ vem do autotuning, e com
   Γ₁=31,62 a folga até o início do chattering é de só 1,4×. **BL deveria ser
   derivado de Γ₁.**
-- **Buffer de DMA em ping-pong**: 6 words (2 frames) com half-transfer +
-  transfer-complete, em vez de 3 words. Sem isso há corrida entre DMA e ISR.
-  Adicionar contador de sequência + bit de descarte em `error_bits`, já que o
-  ADC **não tem flag de overrun** nos canais regulares.
-- **Calibração na inicialização**: implementar as duas etapas (autocalibração de
-  HW `RSTCAL`/`CAL` por ADC em modo independente com `BUFEN=0`, depois offset
-  dos sensores). **O ADC2 exige espera de ≥2 s para o Hall de corrente
-  estabilizar** antes de amostrar o offset. Precisa de: bit de status
-  *calibrando*/*falhou* em `error_bits`, mascaramento dos checadores
-  dependentes de offset, e gate no `Observer_Step` até concluir.
+- ~~**Buffer de DMA em ping-pong**~~ implementado: `g_dual_dma_buf` passou a
+  2 frames (`CNTR = 2·ch_count`) com `DMA_CFGR_HTIE` **e** `DMA_CFGR_TCIE`. A
+  ISR processa a metade estável (half-transfer → 1ª metade;
+  transfer-complete → 2ª), então DMA e ISR nunca tocam o mesmo frame. Como
+  não há flag de overrun nos canais regulares, as duas flags **simultâneas**
+  são a única evidência de frame perdido e viraram o contador
+  `dropped_frames`, exposto por `adc_ch32v307_get_stats()`. **Falta ligar esse
+  contador a um bit de `error_bits`** no `SAME.yaml` e regenerar — é a parte
+  que cruza para a `Aplicacao_Pi`.
+- 🔴 ~~**Calibração de HW**~~ corrigida — e o defeito era **maior do que a
+  ordem**. Conferido contra o cap. 12 do RM (`ADC.pdf`) e contra o exemplo
+  oficial da WCH (`EVT/EXAM/ADC/DualADC_RegSimul`):
+
+  **A autocalibração de hardware sozinha NÃO zera o erro.** `RSTCAL`/`CAL`
+  deixa um resíduo, e o próprio fabricante o compensa em software: a rotina
+  `Get_CalibrationValue()` da SDK roda a autocalibração **dez vezes**, lê o
+  código que o HW deixa em `RDATAR` (§12.2.2 item 4), ordena, **descarta os 2
+  menores e os 2 maiores**, tira a média dos 6 do meio e devolve
+  `2048 − mediana` — um offset com sinal que tem de ser somado em **todas** as
+  amostras, com os extremos 0 e 4095 passando sem correção (são saturações).
+
+  O driver não fazia nada disso — usava uma única passada de `RSTCAL`/`CAL` e
+  jogava o código fora. **Num nó de medição elétrica esse resíduo não é
+  cosmético:** ele é comum às três fases, atravessa a Clarke como componente
+  de sequência zero e vira BEMF fantasma no SMO — o mesmo mecanismo que o
+  documento já descrevia para o offset do Hall. Agora está implementado
+  (`adc_get_calibration_value()` + `adc_apply_cal()`), com o offset de cada
+  ADC aplicado na ISR e registrado no log de boot.
+
+  A **ordem** também foi refeita, seguindo o exemplo oficial (não a intuição):
+  `DUALMOD`/`SCAN` + `BUFEN`/`PGA` zerados → `CTLR2` sem `ADON` → `ADON`
+  sozinho + tSTAB → **calibração** → **só então o canal de DMA sobe** → `SWSTART`.
+  O canal de DMA vem por último porque a calibração lê `RDATAR`, e um DMA já
+  ativo consumiria esse código antes. `EXTTRIG` + `EXTSEL = 111` passaram a ser
+  programados **nos dois** ADCs: o §12.2.7 exige trigger habilitado no mestre
+  e no escravo, com o escravo em software trigger, "to prevent spurious
+  triggers to start unwanted slave conversion". O caminho independente (SIBA)
+  recebeu a mesma sequência.
+
+  Conferidos contra o RM e batendo com o driver: `PGA[28:27]`, `BUFEN[26]`,
+  `DUALMOD[19:16]=0110`, `SCAN[8]`, `SWSTART[22]`, `EXTTRIG[20]`,
+  `EXTSEL[19:17]`, `ALIGN[11]`, `DMA[8]`, `RSTCAL[3]`, `CAL[2]`, `CONT[1]`,
+  `ADON[0]`, `L[23:20] = n−1`, `SMPx` de 3 bits em `SAMPTR2`, e
+  `CONT=1 + SCAN=1` = "continuous scan mode". Também confirmado que o bit de
+  DMA vai **só no ADC1** (o exemplo oficial faz `ADC_DMACmd(ADC1, ENABLE)` e
+  nada no ADC2) e que `RDATAR[31:16]` = ADC2, `[15:0]` = ADC1.
+
+  > ⚠️ Se o PGA for usado nos shunts: `BUFEN=1` pede tempo de amostragem
+  > **≥ 7,5T** (§12.3.2). O default atual (28,5T) já satisfaz.
+- **O `native_sim` não exercita NADA da cadeia de ADC.** O overlay declara
+  `adc1`/`adc2` como `zephyr,adc-emul` e o `CMakeLists.txt` diz que «HAL.c usa
+  só a API genérica», mas `HAL.c` sob `CONFIG_ARCH_POSIX` desvia para o gerador
+  senoidal sintético e **nunca chama `adc_read()`** — o `adc_stimulus` citado
+  no comentário do overlay não existe. Consequência prática: nenhum dos
+  defeitos de aquisição acima é detectável no `native_sim` como ele está.
+  Fazer o caminho POSIX passar pelo `adc-emul` (via
+  `adc_emul_const_value_set()`) faria o `native_sim` pegar pelo menos o
+  sequenciamento do `adc_read()` — que é onde está o bug de 2×.
+- ~~**Calibração na inicialização**~~ implementada (`HAL.c`, seção "Calibração
+  de offset do sensor Hall"): espera `SM_CAL_SETTLE_MS` (2 s), acumula
+  `SM_CAL_FRAMES` (4096) com o ESC parado, valida pelo desvio-padrão
+  (`SM_CAL_STD_MAX_MV`) e grava o offset por fase. `ERROR_CAL_IN_PROGRESS` e
+  `ERROR_CAL_FAILED` entraram no `error_bits`; o `Observer_Step` fica
+  **bloqueado** até concluir.
+
+  > A média/variância usa **Welford em `float`**, não somatório+soma de
+  > quadrados. Com 4096 amostras de ~2238 mV, Σx² chega a 2,05e10, onde o ulp
+  > do `float` é 2048: a variância sairia de `E[x²]−E[x]²` entre dois números
+  > de ~5e6 cujo resultado esperado é da ordem de dezenas — cancelamento
+  > catastrófico. Fazer em `double` resolveria e custaria **+9 kB de flash**
+  > em soft-float (medido), já que o CH32V307 só tem FPU de precisão simples.
+
+  Validado no `native_sim`, que agora sintetiza **tensão no pino em mV** (não
+  V/A prontos) e parte com o motor PARADO: a calibração mede o repouso, remove
+  a corrente fantasma e só então libera o observador — com o motor girando
+  desde o boot ela corretamente **reprova** (desvio ~95 mV = os 8 A de pico na
+  cadeia).
+
+## Condicionamento dos sensores — constantes de projeto
+
+Fonte: monografia, `Textuais/Metodologia/08_SAME.tex` e o ensaio do Apêndice A.
+Os valores vivem no `sensor_defaults` do `SAME.yaml` (geram `CMD_Core_prm.h`);
+`HAL_prm.h` repete só o que o gerador sintético do `native_sim` precisa.
+
+| | corrente | tensão de fase |
+|---|---|---|
+| sensor | SS49E, N=1 (condutor pelo furo do toróide) | divisor resistivo |
+| divisor | R1=2k0 / R2=18k → k = 0,900 | R1=130k / R2=7k5 → k = 0,0545 |
+| ganho da cadeia | 18,750 × 0,900 = **16,875 mV/A** | **54,55 mV/V** |
+| fundo de escala | ±60 A (satura em +62,9 A) | 60,5 V |
+| resolução | 47,7 mA/LSB | 14,8 mV/LSB |
+| repouso | 2,4866 V × 0,900 = **2,238 V** | 0 V |
+| polo do front-end | 40,2 kHz (+ 56 kHz do próprio Hall) | 40,1 kHz |
+
+O SS49E é ratiométrico e repousa em Vcc/2 — por isso o divisor: ±60 A levaria a
+saída a 3,625 V, acima dos 3,3 V do conversor.
+
+> 🔴 **O repouso não é constante e é por isso que a calibração de boot existe.**
+> Nos três ensaios do Apêndice A o valor a 0 A caiu em 2,48570 / 2,48640 /
+> 2,49150 V — **5,8 mV de espalhamento**, que na cadeia valem **0,31 A de
+> corrente fantasma**. E o erro é comum às três fases, então **não se cancela
+> no Clarke de 3 termos**: entra como sequência zero e vira BEMF espúria no
+> SMO. Gravar offset de catálogo não resolve.
 - **Filtro antialiasing**: `f_c ≈ 5–8 kHz`, 2ª ordem, entre a fundamental
   (`f_e ≈ 800 Hz` em 6S) e a portadora do ESC (~30 kHz). Confirmar a topologia
   no esquemático do front-end.

@@ -13,6 +13,21 @@
  * Ganhos na forma Γ (Gamma = K·Ts, invariante ao passo): Γ_s1>0, Γ_s2<0, Γ_t>0.
  */
 
+/*
+ * Passo de amostragem que o observador ASSUME, em nanosegundos.
+ *
+ * Isto tem de ser o período de um frame do ADC. Os ganhos Γ carregam o Ts
+ * embutido (Γ = K·Ts, conversão feita no autotune_cost.py), então se o
+ * hardware amostrar num período diferente deste, os Γ otimizados
+ * simplesmente não descrevem o observador embarcado — e Φ_i = 1 − Rs·Ts/Ls
+ * e Γ_v = Ts/Ls passam a descrever uma planta que não é a medida.
+ *
+ * O driver do ADC calcula o período real do frame a partir de ADCCLK, SMPx e
+ * do número de canais, e avisa no log se divergir daqui. Ver CLAUDE.md,
+ * "`Ts` fixo e auditoria CMD × compile-time".
+ */
+#define OBS_TS_NS   10000U    /* 10 µs — == DEF_TS e == Ts_sim do autotuning */
+
 /* @brief Aplica defaults e zera estado. Chamar em main() antes do HAL. */
 void Observer_Init(void);
 

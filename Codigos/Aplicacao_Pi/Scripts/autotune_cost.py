@@ -19,7 +19,22 @@ import matplotlib.pyplot as plt
 
 # ===================== CONFIG =====================
 COST_MODE   = "time"         # "time" | "fft" | "hybrid"
-TIME_METRIC = "huber"        # "mae"|"mse"|"rmse"|"mape"|"huber"
+# "mae"|"mse"|"rmse"|"mape"|"huber" — sobrescrevível por --time-metric.
+#
+# Default = rmse, NÃO huber, e o motivo é medido: o Huber é quadrático abaixo
+# de HUBER_DELTA e linear acima, então ele comprime o termo de resíduo MENOR.
+# Nesta bancada os resíduos normalizados de torque caem em r ~ 0,32-0,56 (ramo
+# quadrático) e os de rpm em r ~ 0,78-1,06 (já no linear). Resultado medido:
+#
+#   métrica | termo torque (W=1,0) | termo rpm (W=0,5) | razão rpm/torque
+#   mae     |        0,548         |       0,528       |      0,96
+#   rmse    |        0,635         |       0,645       |      1,02
+#   huber   |        0,199         |       0,323       |      1,62
+#
+# Ou seja: com Huber o rpm pesa 1,6x o torque APESAR de W_TQ ser o dobro de
+# W_RPM — os pesos deixam de valer o que dizem, e justo contra o torque, que é
+# a grandeza que a bancada entrega. Com rmse/mae eles ficam equilibrados.
+TIME_METRIC = "rmse"
 METODO      = "differential-evolution"   # ou "nelder-mead"
 MAXITER     = 30             # nº máx. de gerações (DE) — pode vir por --maxiter
 POPSIZE     = 10             # tamanho da população (DE) — pode vir por --popsize
@@ -363,6 +378,13 @@ if __name__ == "__main__":
     ap.add_argument("--plot", action="store_true", help="Gera as figuras ao final")
     ap.add_argument("--json", default=None, help="Caminho do smo_gains.json de saída")
     ap.add_argument("--outdir", default=None, help="Diretório das figuras")
+    ap.add_argument("--time-metric", default=None,
+                    choices=["mae", "mse", "rmse", "mape", "huber"],
+                    help="Métrica do erro no tempo (default: %s)" % TIME_METRIC)
+    ap.add_argument("--w-tq", type=float, default=None,
+                    help="Peso do termo de TORQUE no custo (default: %s)" % W_TQ)
+    ap.add_argument("--w-rpm", type=float, default=None,
+                    help="Peso do termo de RPM no custo (default: %s)" % W_RPM)
     args = ap.parse_args()
 
     # Injeta R/L no módulo do simulador ANTES de qualquer chamada a run_sim_core
@@ -370,10 +392,32 @@ if __name__ == "__main__":
     if args.R is not None: m.R_s = args.R
     if args.L is not None: m.L_s = args.L
     if args.Ts is not None:
+        # Ts é o passo do OBSERVADOR (= período do frame do ADC). run_sim_core
+        # deriva o passo da planta do próprio argumento (Ts/n_sub), mas
+        # TS_ADC/Ts_plant do módulo alimentam rótulos e a corrida de detalhe —
+        # manter os três coerentes, senão a figura diz um Ts e a simulação usa
+        # outro.
         m.Ts = args.Ts
+        m.TS_ADC = args.Ts
+        m.Ts_plant = args.Ts / m.N_SUB
         Ts = args.Ts
     if args.maxiter is not None: MAXITER = args.maxiter
     if args.popsize is not None: POPSIZE = args.popsize
+
+    # Métrica e pesos do custo. Mudam O QUE está sendo otimizado, não só a
+    # velocidade — por isso são expostos na GUI e vão gravados no
+    # smo_gains.json (bloco `config`), senão não dá para saber depois contra
+    # que critério aqueles Γ foram escolhidos.
+    #
+    # ⚠️ `huber` re-pondera os termos sem avisar. Ele é quadrático abaixo de
+    # HUBER_DELTA e linear acima; medido nesta bancada, os resíduos de torque
+    # ficam em r ~ 0,32-0,56 (ramo quadrático, comprimidos a 0,5r²) e os de
+    # rpm em r ~ 0,78-1,06 (já no ramo linear). Resultado: o termo de rpm pesa
+    # ~1,6x o de torque MESMO com W_TQ = 2*W_RPM. Com mae/rmse os dois ficam
+    # equilibrados (razão ~1,0) e os pesos declarados valem o que dizem.
+    if args.time_metric is not None: TIME_METRIC = args.time_metric
+    if args.w_tq  is not None: W_TQ  = args.w_tq
+    if args.w_rpm is not None: W_RPM = args.w_rpm
     FAZER_PLOTS = bool(args.plot)
     RODAR_PLOT_PI = bool(args.plot)
     if args.json: SAIDA_JSON = args.json
