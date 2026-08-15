@@ -48,7 +48,7 @@ class EstimationDialog(QDialog):
         self.same_yaml_path = same_yaml_path
         self.setWindowTitle("Estimar Ganhos do SMO (autotuning)")
         self.setWindowFlags(Qt.Window)
-        self.resize(720, 560)
+        self.resize(1000, 780)
 
         self.runner = EstimationRunner.from_config_dir(
             config_dir, log_fn=lambda m: self.sig_log.emit(m)
@@ -84,7 +84,6 @@ class EstimationDialog(QDialog):
         form.addRow("População (popsize):", self.sp_popsize)
         self.chk_plot = QCheckBox("Plotar o resultado final (gera figuras ao terminar)")
         form.addRow(self.chk_plot)
-        root.addWidget(params)
 
         # --- Função de custo: define CONTRA O QUE os Γ são otimizados -----
         cost = QGroupBox("Função de custo")
@@ -128,7 +127,13 @@ class EstimationDialog(QDialog):
         self.cb_metric.currentIndexChanged.connect(self._update_cost_hint)
         self._update_cost_hint()
 
-        root.addWidget(cost)
+        # Os dois grupos são formulários curtos: lado a lado em vez de
+        # empilhados, para sobrar altura pra curva de custo — que é o que se
+        # fica olhando enquanto a otimização roda.
+        top = QHBoxLayout()
+        top.addWidget(params, 1)
+        top.addWidget(cost, 1)
+        root.addLayout(top)
 
         # --- Controles ---
         ctrl = QHBoxLayout()
@@ -153,15 +158,19 @@ class EstimationDialog(QDialog):
         self.plot.addLegend()
         self.curve_cost = self.plot.plot(pen=pg.mkPen("#1E90FF", width=1), name="Custo")
         self.curve_best = self.plot.plot(pen=pg.mkPen("#2ecc40", width=2), name="Melhor")
-        self.plot.setMaximumHeight(200)
-        root.addWidget(self.plot)
+        # A curva de custo é o foco da tela: cresce com a janela (stretch alto)
+        # e tem piso generoso. Antes estava capada em 200 px, o que a espremia
+        # justamente no que se passa mais tempo olhando.
+        self.plot.setMinimumHeight(300)
+        root.addWidget(self.plot, 5)
         self._evals, self._costs, self._bests = [], [], []
 
         # --- Log ---
         self.log = QPlainTextEdit(); self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
         self.log.setStyleSheet("background:#0F0F0F; color:#DCDCDC; font-family:monospace; font-size:9pt;")
-        root.addWidget(self.log)
+        self.log.setMinimumHeight(90)
+        root.addWidget(self.log, 1)   # cede espaço para o gráfico
 
         # --- Resultado + aplicar ---
         self.grp_result = QGroupBox("Resultado")
