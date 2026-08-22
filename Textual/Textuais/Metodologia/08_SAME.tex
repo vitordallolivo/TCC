@@ -141,7 +141,7 @@ filtro \textit{antialiasing} da aquisição.
         \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{7,5}{\kilo\ohm}] (3.6,-2.4);
         \draw (3.6,-2.4) node[ground]{};
         \draw (3.6,0) -- (5.6,0);
-        \draw (5.6,0) to[C, l_=$C$, a^=\SI{560}{\pico\farad}] (5.6,-2.4);
+        \draw (5.6,0) to[C, l_=$C$] (5.6,-2.4);
         \draw (5.6,-2.4) -- (3.6,-2.4);
         \draw (5.6,0) to[short, -o] (7.0,0) node[right] {$V_{ADC}$};
     \end{circuitikz}
@@ -171,49 +171,14 @@ comutação --- e a resolução em \SI{14,8}{\milli\volt} por LSB.
 
 A resistência equivalente do divisor é de \SI{7,09}{\kilo\ohm}, abaixo do limite
 de \SI{11,4}{\kilo\ohm} imposto pela Tabela~\ref{tab:rain_max} para o menor
-tempo de amostragem tabelado, de modo que a escolha de $t_s$ fica livre. Com
-$C = \SI{560}{\pico\farad}$ a frequência de corte resulta em
-\SI{40,1}{\kilo\hertz}.
+tempo de amostragem tabelado, de modo que a escolha de $t_s$ fica livre.
 
-As harmônicas da comutação do ESC acima de $f_S/2$ são rebatidas para dentro da
-banda de interesse. A de ordem 28, em \SI{336}{\kilo\hertz}, cai a
-\SI{3}{\kilo\hertz}, dentro da faixa da fundamental elétrica. O filtro a atenua
-de $-\SI{28,9}{\decibel}$ para $-\SI{47,5}{\decibel}$, como mostra a
-\autoref{fig:alias_tensao}.
-
-\begin{figure}[H]
-    \centering
-    \caption{Harmônicas do PWM na entrada do ADC e rebatimento da 28\textsuperscript{a} harmônica (\SI{336}{\kilo\hertz}) para \SI{3}{\kilo\hertz}, no caminho de tensão}
-    \label{fig:alias_tensao}
-    \begin{tikzpicture}
-        \begin{axis}[
-            width=0.92\textwidth, height=6.2cm, clip=false,
-            xlabel={$f$ [\si{\kilo\hertz}]}, ylabel={Amplitude [\si{\decibel}]},
-            xmin=0, xmax=400, ymin=-75, ymax=18,
-            xtick={0,100,200,300,400}, ytick={0,-20,-40,-60,-80},
-            extra x ticks={166.5,333},
-            extra x tick labels={$f_S/2$,$f_S$},
-            extra x tick style={grid=major, grid style={dashed,gray!60},
-                                tick label style={font=\small}},
-            grid=both, grid style={dotted,gray!30},
-            tick label style={font=\small}, label style={font=\small},
-        ]
-            \draw[fill=green!18, draw=none] (axis cs:0,-75) rectangle (axis cs:12,0);
-            \node[font=\small, green!45!black, anchor=west] at (axis cs:18,-62) {banda de interesse};
-            \addplot[ycomb, black!70, line width=0.9pt] coordinates {(12,-0.37) (24,-7.35) (36,-12.11) (48,-15.90) (60,-19.08) (72,-21.82) (84,-24.22) (96,-26.34) (108,-28.25) (120,-29.98) (132,-31.56) (144,-33.01) (156,-34.36) (168,-35.61) (180,-36.77) (192,-37.87) (204,-38.90) (216,-39.88) (228,-40.80) (240,-41.68) (252,-42.52) (264,-43.32) (276,-44.08) (288,-44.81) (300,-45.52) (312,-46.19) (324,-46.84) (336,-47.47) (348,-48.07) (360,-48.66) (372,-49.23) (384,-49.77) (396,-50.31)};
-            \addplot[green!50!black, dashed, thick, domain=0:400, samples=200] {-10*log10(1+(x/40.1)^2)};
-            \node[font=\small, green!45!black, anchor=south] at (axis cs:300,-17.5) {filtro};
-            \draw[blue!65!black, thick, dashed] (axis cs:336,-47.5) -- (axis cs:336,5);
-            \draw[blue!65!black, thick, -{Latex}] (axis cs:336,5) -- (axis cs:3,5);
-            \draw[blue!65!black, thick, dashed, -{Latex}] (axis cs:3,5) -- (axis cs:3,-47.5);
-            \fill[blue!65!black] (axis cs:336,-47.5) circle (2pt);
-            \fill[blue!65!black] (axis cs:3,-47.5) circle (2pt);
-            \node[font=\small, blue!65!black, above] at (axis cs:170,5) {$-47{,}5$ dB};
-        \end{axis}
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
+O capacitor fica em aberto nesta etapa. Fixadas as resistências, ele é o único
+grau de liberdade que resta, e seu valor decorre da frequência de corte
+adotada. Essa escolha não se resolve pelo projeto do divisor: depende do ruído
+medido no sensor, do rebatimento no conversor e da banda que o observador
+efetivamente aproveita, e por isso é tratada com os dados de bancada na
+\autoref{sec:resultado_fc}.
 
 O divisor consome \SI{218}{\micro\ampere} com o
 barramento em \SI{30}{\volt}, dissipando \SI{6,2}{\milli\watt} em $R_1$.
@@ -385,29 +350,89 @@ correntes da ordem de grandeza da aplicação final, recorre-se à
 \autoref{eq:B_hopkinson}: enrolando $N$ espiras no toróide obtém-se o mesmo
 campo que uma corrente $N$ vezes maior atravessando o furo uma única vez, o
 que permite varrer a faixa de interesse do sensor a partir de correntes
-modestas. Foram ensaiadas três configurações --- $N = 1$, com o condutor
-atravessando o furo central, que é a topologia de uso real, e $N = 4$ e
-$N = 8$, com espiras enroladas externamente ao toróide. A corrente foi
-imposta por fonte de bancada Minipa operando em modo de limitação de
-corrente com a saída em curto-circuito controlado, e medida com multímetro,
-assim como a tensão de saída do sensor. A faixa varrida foi de 0 a
-\SI{5,33}{\ampere}, limite da instrumentação, o que alcança
-\SI{516}{\gauss} na configuração de oito espiras --- pouco mais da metade
-da faixa magnética típica do elemento. Durante a coleta observou-se deriva
-na tensão de alimentação do sensor, que desloca $V_O$ ao longo do ensaio;
-para suprimir essa dependência adota-se a variável
-$\Delta V = V_{out} - V_O$, com $V_O$ estimado como o intercepto da
-regressão linear, o que remove a componente contínua variável sem alterar o
+modestas.
+
+A \autoref{fig:ensaio_hall_setup} reúne a cadeia de medida e as três
+configurações ensaiadas. A corrente é imposta por fonte de bancada Minipa
+operando em modo de limitação de corrente com a saída em curto-circuito
+controlado, e é medida com multímetro, assim como a tensão de saída do
+sensor. As configurações diferem apenas no número de espiras: $N = 1$, com o
+condutor atravessando o furo central, que é a topologia de uso real, e
+$N = 4$ e $N = 8$, com espiras enroladas externamente ao toróide.
+
+\begin{figure}[H]
+    \centering
+    \caption{Ensaio de caracterização do conjunto núcleo--sensor: cadeia de medida e configurações de enrolamento}
+    \label{fig:ensaio_hall_setup}
+    \begin{tikzpicture}[
+        bloco/.style={rectangle, draw, thick, fill=white, text width=2.3cm,
+                      text centered, minimum height=1.0cm, font=\small},
+        seta/.style={draw, thick, -{Stealth[length=2.4mm, width=1.4mm]}}
+    ]
+        \node[bloco] (fonte) {Fonte Minipa\\ (limitação de corrente)};
+        \node[bloco, right=0.9cm of fonte] (ampe) {Multímetro\\ corrente $I$};
+        \node[bloco, right=0.9cm of ampe] (nucleo) {Conjunto\\ núcleo--sensor};
+        \node[bloco, right=0.9cm of nucleo] (volt) {Multímetro\\ tensão $V_{out}$};
+        \node[bloco, above=0.8cm of nucleo] (vcc) {Alimentação\\ \SI{5}{\volt}};
+        \draw[seta] (fonte) -- (ampe);
+        \draw[seta] (ampe) -- (nucleo);
+        \draw[seta] (nucleo) -- (volt);
+        \draw[seta] (vcc) -- (nucleo);
+
+        % --- N = 1: condutor perpendicular ao plano, pelo furo central
+        \begin{scope}[shift={($(fonte.south)+(0.4,-2.6)$)}]
+            \draw[thick] (0,0) circle (0.85);
+            \draw[thick] (0,0) circle (0.45);
+            \fill[white] (-0.13,-0.9) rectangle (0.13,-0.4);
+            \draw[thick] (-0.13,-0.9) -- (-0.13,-0.4);
+            \draw[thick] (0.13,-0.9) -- (0.13,-0.4);
+            \fill[black!20, draw=black, thick] (-0.11,-0.85) rectangle (0.11,-0.45);
+            \draw[thick] (0,0) circle (0.13);
+            \fill (0,0) circle (0.035);
+            \node[font=\small, align=center] at (0,-1.45) {$N = 1$\\ (furo central)};
+        \end{scope}
+
+        % --- N = 4 e N = 8: espiras externas
+        \foreach \dx/\N/\passo in {4.6/4/90, 8.6/8/45} {
+            \begin{scope}[shift={($(fonte.south)+(\dx,-2.6)$)}]
+                \draw[thick] (0,0) circle (0.85);
+                \draw[thick] (0,0) circle (0.45);
+                \foreach \a in {0,\passo,...,359} {
+                    \draw[thick] (\a+20:0.35) -- (\a+20:0.95);
+                }
+                \fill[white] (-0.13,-0.9) rectangle (0.13,-0.4);
+                \draw[thick] (-0.13,-0.9) -- (-0.13,-0.4);
+                \draw[thick] (0.13,-0.9) -- (0.13,-0.4);
+                \fill[black!20, draw=black, thick] (-0.11,-0.85) rectangle (0.11,-0.45);
+                \node[font=\small, align=center] at (0,-1.45) {$N = \N$\\ (espiras externas)};
+            \end{scope}
+        }
+
+        \node[font=\small, anchor=north, align=center]
+             at ($(fonte.south)+(4.6,-5.0)$)
+             {Campo no elemento sensor proporcional a $N\,I$; em cinza, o elemento Hall no entreferro.};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A faixa varrida foi de 0 a \SI{5,33}{\ampere}, limite da instrumentação, o
+que alcança \SI{516}{\gauss} na configuração de oito espiras --- pouco mais
+da metade da faixa magnética típica do elemento.
+
+Durante a coleta observou-se deriva na tensão de alimentação do sensor, que
+desloca $V_O$ ao longo do ensaio. Para suprimir essa dependência adota-se a
+variável $\Delta V = V_{out} - V_O$, com $V_O$ estimado como o intercepto da
+regressão linear: a componente contínua variável é removida sem alterar o
 coeficiente angular, que é a grandeza de interesse. Os dados brutos das três
 configurações estão reproduzidos no Apêndice~\ref{apendice:ensaio_hall}.
 
 A dinâmica do conjunto não é objeto de ensaio próprio: adota-se o modelo de
 primeira ordem, análogo a uma rede RC, com polo único em torno de
 \SI{56}{\kilo\hertz} inferido do tempo de resposta de
-\SI{3}{\micro\second} declarado em catálogo. Esse polo é levado em conta na
-avaliação da coerência de fase entre os caminhos de tensão e de corrente
-exigida pelo observador, por ficar acima do polo do estágio de tensão
-(\autoref{sec:condicionamento}).
+\SI{3}{\micro\second} declarado em catálogo. Esse polo se soma ao do filtro do
+caminho de corrente e entra na escolha da frequência de corte
+(\autoref{sec:resultado_fc}).
 
 A saída do sensor não pode ser levada diretamente ao ADC: o repouso do SS49E é
 ratiométrico e se situa em $V_{CC}/2 = \SI{2,5}{\volt}$, alimentado a
@@ -427,7 +452,7 @@ conversão e ao mesmo tempo estabelece o filtro \textit{antialiasing}.
         \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{18}{\kilo\ohm}] (3.6,-2.4);
         \draw (3.6,-2.4) node[ground]{};
         \draw (3.6,0) -- (5.6,0);
-        \draw (5.6,0) to[C, l_=$C$, a^=\SI{2,2}{\nano\farad}] (5.6,-2.4);
+        \draw (5.6,0) to[C, l_=$C$] (5.6,-2.4);
         \draw (5.6,-2.4) -- (3.6,-2.4);
         \draw (5.6,0) to[short, -o] (7.0,0) node[right] {$V_{ADC}$};
     \end{circuitikz}
@@ -441,58 +466,18 @@ $R_2 = \SI{18}{\kilo\ohm}$ resulta $k = 0{,}900$, o que leva a faixa de
 $\pm\SI{60}{\ampere}$ para \SIrange{1,225}{3,250}{\volt}, com corrente nula em
 \SI{2,238}{\volt}; o topo da janela de conversão só é atingido em
 $+\SI{62,9}{\ampere}$. A resistência equivalente é
-$R_1 \parallel R_2 = \SI{1,8}{\kilo\ohm}$ e
-$C = \SI{2,2}{\nano\farad}$ dão $f_c = \SI{40,2}{\kilo\hertz}$, o mesmo polo do
-caminho de tensão. A igualdade entre os dois polos preserva a coerência de fase
-exigida pelo observador: o atraso do filtro é comum aos dois caminhos e se
-cancela na diferença entre eles.
-
-A atenuação na frequência de Nyquist sobe de \SI{-9,9}{\decibel}, que o sensor
-sozinho oferece, para \SI{-22,5}{\decibel}. Em \SI{12}{\kilo\hertz} o custo é de
-\SI{-0,37}{\decibel}. Como o polo do sensor se soma ao do filtro, a harmônica de
-ordem 28 chega a $-\SI{63,1}{\decibel}$ neste caminho
-(\autoref{fig:alias_corrente}), contra $-\SI{47,5}{\decibel}$ no de tensão.
-
-\begin{figure}[H]
-    \centering
-    \caption{Harmônicas do PWM na entrada do ADC e rebatimento da 28\textsuperscript{a} harmônica (\SI{336}{\kilo\hertz}) para \SI{3}{\kilo\hertz}, no caminho de corrente}
-    \label{fig:alias_corrente}
-    \begin{tikzpicture}
-        \begin{axis}[
-            width=0.92\textwidth, height=6.2cm, clip=false,
-            xlabel={$f$ [\si{\kilo\hertz}]}, ylabel={Amplitude [\si{\decibel}]},
-            xmin=0, xmax=400, ymin=-95, ymax=18,
-            xtick={0,100,200,300,400}, ytick={0,-20,-40,-60,-80},
-            extra x ticks={166.5,333},
-            extra x tick labels={$f_S/2$,$f_S$},
-            extra x tick style={grid=major, grid style={dashed,gray!60},
-                                tick label style={font=\small}},
-            grid=both, grid style={dotted,gray!30},
-            tick label style={font=\small}, label style={font=\small},
-        ]
-            \draw[fill=green!18, draw=none] (axis cs:0,-95) rectangle (axis cs:12,0);
-            \node[font=\small, green!45!black, anchor=west] at (axis cs:18,-80) {banda de interesse};
-            \addplot[ycomb, black!70, line width=0.9pt] coordinates {(12,-0.57) (24,-8.08) (36,-13.60) (48,-18.28) (60,-22.39) (72,-26.04) (84,-29.32) (96,-32.28) (108,-34.97) (120,-37.44) (132,-39.71) (144,-41.81) (156,-43.76) (168,-45.59) (180,-47.30) (192,-48.91) (204,-50.43) (216,-51.87) (228,-53.23) (240,-54.53) (252,-55.77) (264,-56.96) (276,-58.09) (288,-59.18) (300,-60.22) (312,-61.23) (324,-62.19) (336,-63.13) (348,-64.03) (360,-64.90) (372,-65.75) (384,-66.57) (396,-67.36)};
-            \addplot[green!50!black, dashed, thick, domain=0:400, samples=200] {-10*log10(1+(x/40.2)^2)-10*log10(1+(x/56)^2)};
-            \node[font=\small, green!45!black, anchor=south] at (axis cs:300,-32.2) {filtro};
-            \draw[blue!65!black, thick, dashed] (axis cs:336,-63.1) -- (axis cs:336,5);
-            \draw[blue!65!black, thick, -{Latex}] (axis cs:336,5) -- (axis cs:3,5);
-            \draw[blue!65!black, thick, dashed, -{Latex}] (axis cs:3,5) -- (axis cs:3,-63.1);
-            \fill[blue!65!black] (axis cs:336,-63.1) circle (2pt);
-            \fill[blue!65!black] (axis cs:3,-63.1) circle (2pt);
-            \node[font=\small, blue!65!black, above] at (axis cs:170,5) {$-63{,}1$ dB};
-        \end{axis}
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
+$R_1 \parallel R_2 = \SI{1,8}{\kilo\ohm}$. O capacitor, como no caminho de
+tensão, fica em aberto nesta etapa: os dois ramos recebem a mesma frequência de
+corte, de modo que o atraso do filtro seja comum a ambos e se cancele na
+comparação entre tensão e corrente exigida pelo observador. O valor adotado é
+justificado na \autoref{sec:resultado_fc}.
 
 Duas correntes precisam ser verificadas nessa topologia, já que não há
 amplificador isolando o sensor do ADC. A primeira é a carga que o divisor impõe
-ao sensor: \SI{181}{\micro\ampere} em fundo de escala, aos quais se somam até
-\SI{183}{\micro\ampere} de pico para carregar o capacitor na frequência de
-chaveamento, totalizando \SI{364}{\micro\ampere} --- pouco mais de um terço da
-corrente de saída mínima de catálogo, \SI{1}{\milli\ampere}. A segunda é a
+ao sensor: \SI{181}{\micro\ampere} em fundo de escala, aos quais se soma o pico
+que carrega o capacitor na frequência de chaveamento. O valor de $C$ é escolhido
+de modo que a soma permaneça abaixo da corrente de saída mínima de catálogo,
+\SI{1}{\milli\ampere}. A segunda é a
 corrente de amostragem do próprio ADC, cujo erro de ganho neste caminho é o da
 \autoref{eq:cond_ganho_i}. Esse erro é absorvido na calibração, que por isso é
 feita sobre a cadeia completa, com o divisor montado, e não sobre o sensor

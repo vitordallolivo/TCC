@@ -62,8 +62,33 @@ Instale o [MacTeX](https://www.tug.org/mactex/).
 
 ## Como compilar
 
+O jeito curto, a partir desta pasta (`Textual/`):
+
+```bash
+make
+```
+
+O `Makefile` faz as passagens de `pdflatex`/`bibtex` na ordem certa e só recompila se algum `.tex`,
+o `.bib` ou alguma imagem tiver mudado desde o último PDF. Alvos disponíveis:
+
+| Comando | O que faz |
+| --- | --- |
+| `make` | compila tudo (`pdflatex` + `bibtex` + `pdflatex` x2) |
+| `make quick` | uma passada só de `pdflatex` — rascunho rápido, referências podem ficar velhas |
+| `make view` | compila (se preciso) e abre o PDF |
+| `make watch` | recompila sozinho a cada alteração salva (precisa de `latexmk`) |
+| `make bib` | roda só o `bibtex` |
+| `make clean` | apaga os auxiliares, mantém o PDF |
+| `make mrproper` | apaga auxiliares e PDF |
+| `make help` | lista os alvos |
+
+Ao final da compilação o `make` lista as referências cruzadas e citações que ficaram sem destino
+(`Reference ... undefined`); se der erro de LaTeX, mostra as primeiras linhas de erro do `.log`.
+
+### Na mão
+
 O documento usa **bibtex** (não biber) para a bibliografia, com o estilo `.bst` incluso no repositório.
-A partir desta pasta (`Textual/`):
+Sem o `make`, a sequência é:
 
 ```bash
 pdflatex abntex2-model_UDESC_2024

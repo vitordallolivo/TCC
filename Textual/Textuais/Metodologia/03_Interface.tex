@@ -135,8 +135,7 @@ coeficiente da hélice; e os ensaios mecânicos da bancada simplificada,
 concentram o monitoramento e a calibração desses sensores da SIBA; e
 \textbf{Opções} reúne as telas de diagnóstico (configuração de sensores,
 gerenciador de placas, painel de erros). Um combo à parte, fora da barra de
-menus, seleciona o Modo de Operação (\texttt{SPMM}/\texttt{SIBA}/
-\texttt{SAME}/\texttt{SIBA+SAME}), que decide quais placas se conectam e quais
+menus, seleciona o modo de operação  que decide quais placas se conectam e quais
 gráficos ficam visíveis na tela principal.
 
 \begin{figure}[H]
@@ -253,23 +252,6 @@ Para que essa parametrização interativa e o monitoramento operem com alta conf
 
 Como ilustrado na \autoref{fig:yaml_example_config}, essa abordagem padroniza e centraliza a configuração do projeto em cinco arquivos YAML: \textit{commands.yaml} (comandos de texto do \textit{TinyTerminal}), \textit{user\_prefs.yaml} (preferências da janela principal), \textit{plots.yaml} (mapeamento das variáveis de telemetria para os gráficos) e os arquivos de cada placa, \textit{SIBA.yaml} e \textit{SAME.yaml}. Os arquivos de placa alimentam dois caminhos independentes: em tempo de compilação, o \textit{script} auxiliar \textit{generate.py} os processa para gerar os cabeçalhos C compartilhados pelo \textit{firmware}; em tempo de execução, o \textit{TinyTerminal} os lê para resolver comandos de texto no mesmo formato binário. Um terceiro caminho é particular à SAME: os diálogos de calibração e estimação (motor, hélice, ganhos do observador) não só leem o \textit{SAME.yaml} como também escrevem de volta nele os resultados obtidos --- diferente da calibração de sensor via comando de rede (\autoref{fig:seq_calibracao}), que fica só na memória volátil da placa, esses parâmetros do motor persistem em disco entre sessões. Garante-se, assim, que \textit{firmware} e aplicação \textit{desktop} compartilhem a mesma fonte de dados, e que o ajuste feito numa sessão da interface esteja disponível na próxima.
 
-O comando (\texttt{CMD}) resultante dessa geração, comum às placas SIBA e SAME,
-é uma estrutura compacta de 8 \textit{bytes}, reproduzida a seguir:
-
-\begin{verbatim}
-typedef struct __attribute__((packed)) {
-    func_type      function;         // o que fazer
-    instruct_type  instruction;      // como fazer
-    int8_t         target_id;        // em quem
-    float          value;            // o dado
-    int8_t         action_or_status; // acao ou status
-} CMD;
-\end{verbatim}
-
-O atributo \texttt{packed} elimina o preenchimento que o compilador
-normalmente insere entre campos, e o lado \textit{Python} empacota o mesmo
-formato com \texttt{struct.pack("<BBBfb", ...)} --- o \texttt{<} força
-\textit{little-endian}, a ordem de \textit{bytes} nativa do RISC-V de destino.
 O pacote de telemetria (\texttt{TELEMETRY\_LOG}) enviado em sentido inverso
 segue a mesma lógica de geração, com campos específicos por placa.
 

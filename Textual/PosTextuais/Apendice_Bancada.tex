@@ -1,0 +1,123 @@
+% ----------------------------------------------------------
+% Apendice - Dados brutos dos ensaios de bancada do motor
+% GERADO POR analise/p4_apendice.py — nao editar a mao, editar o script.
+% ----------------------------------------------------------
+
+% ---
+\chapter{Dados do motor a vazio}
+\label{apendice:bancada}
+% ---
+
+Cada linha da \autoref{tab:bancada_patamares} corresponde a um patamar de
+rotação em regime permanente. As colunas $E_1$ e $I_1$ são amplitudes de pico
+da componente fundamental de fase. A potência convertida é obtida por
+$P_{conv} = 3\,(\langle v_x i_x\rangle - R_s I_{rms}^2)$, isto é, a potência
+elétrica média que entra nas três fases descontada da dissipação resistiva, e
+o torque de perdas por $T_e = P_{conv}/\omega_m$. A coluna $u(T_e)$ traz o
+erro padrão robusto do patamar e $N$, o número de registros promediados nele.
+
+\begin{table}[H]
+    \centering
+    \caption{Pontos experimentais da regressão de perdas a vazio}
+    \label{tab:bancada_patamares}
+    \small
+    \begin{tabular}{rrrrrrrrrr}
+        \toprule
+        \textbf{$n$ [rpm]} & \textbf{$\omega_m$ [\si{\radian\per\second}]} & \textbf{$E_1$ [\si{\volt}]} & \textbf{$I_1$ [\si{\ampere}]} & \textbf{$I_{rms}$ [\si{\ampere}]} & \textbf{$\cos\varphi$} & \textbf{$P_{conv}$ [\si{\watt}]} & \textbf{$T_e$ [\si{\milli\newton\meter}]} & \textbf{$u(T_e)$} & \textbf{$N$} \\
+        \midrule
+        1243 & 130{,}1 & 2{,}37 & 0{,}705 & 0{,}712 & 0{,}953 & 2{,}87 & 22{,}08 & 0{,}509 & 3 \\
+        1664 & 174{,}3 & 2{,}98 & 0{,}760 & 0{,}790 & 0{,}969 & 4{,}25 & 24{,}18 & 0{,}153 & 4 \\
+        2427 & 254{,}2 & 4{,}51 & 0{,}928 & 0{,}942 & 0{,}878 & 5{,}52 & 21{,}71 & 0{,}015 & 3 \\
+        2460 & 257{,}6 & 4{,}60 & 0{,}945 & 0{,}958 & 0{,}847 & 5{,}59 & 21{,}72 & 0{,}080 & 13 \\
+        3697 & 387{,}2 & 6{,}88 & 1{,}073 & 1{,}200 & 0{,}932 & 10{,}41 & 26{,}88 & 0{,}504 & 2 \\
+        4093 & 428{,}6 & 7{,}62 & 1{,}164 & 1{,}441 & 0{,}863 & 11{,}70 & 27{,}30 & 0{,}095 & 12 \\
+        4097 & 429{,}0 & 7{,}68 & 1{,}176 & 1{,}348 & 0{,}989 & 13{,}64 & 31{,}79 & 0{,}444 & 13 \\
+        4517 & 473{,}0 & 8{,}41 & 1{,}360 & 1{,}706 & 0{,}848 & 14{,}47 & 30{,}44 & 0{,}249 & 16 \\
+        5010 & 524{,}6 & 9{,}32 & 1{,}322 & 1{,}662 & 0{,}857 & 15{,}72 & 30{,}34 & 0{,}130 & 36 \\
+        5606 & 587{,}0 & 10{,}40 & 1{,}389 & 1{,}744 & 0{,}864 & 19{,}00 & 32{,}65 & 0{,}164 & 29 \\
+        6025 & 631{,}0 & 11{,}20 & 1{,}621 & 2{,}007 & 0{,}859 & 23{,}19 & 36{,}95 & 0{,}330 & 27 \\
+        6171 & 646{,}2 & 11{,}45 & 1{,}532 & 1{,}919 & 0{,}840 & 22{,}37 & 34{,}78 & 0{,}213 & 24 \\
+        6265 & 656{,}1 & 11{,}69 & 1{,}427 & 1{,}579 & 0{,}969 & 24{,}33 & 37{,}07 & 0{,}031 & 11 \\
+        6686 & 700{,}1 & 12{,}45 & 1{,}618 & 1{,}641 & 0{,}963 & 28{,}14 & 40{,}18 & 1{,}157 & 6 \\
+        6698 & 701{,}4 & 12{,}44 & 1{,}837 & 1{,}992 & 0{,}782 & 28{,}19 & 40{,}27 & 0{,}269 & 38 \\
+        6711 & 702{,}8 & 12{,}50 & 1{,}519 & 1{,}583 & 0{,}965 & 26{,}69 & 37{,}97 & 0{,}047 & 21 \\
+        6715 & 703{,}2 & 12{,}47 & 1{,}888 & 1{,}961 & 0{,}755 & 28{,}40 & 40{,}38 & 0{,}072 & 25 \\
+        6728 & 704{,}6 & 12{,}51 & 1{,}522 & 1{,}480 & 0{,}973 & 26{,}89 & 38{,}17 & 0{,}169 & 37 \\
+        6728 & 704{,}6 & 12{,}55 & 1{,}511 & 1{,}489 & 0{,}965 & 26{,}53 & 37{,}86 & 0{,}104 & 55 \\
+        \bottomrule
+    \end{tabular}
+
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+A \autoref{tab:bancada_parametros} reúne as grandezas levantadas na
+bancada. As incertezas de $B$ e $\tau_c$ são os intervalos de
+\SI{95}{\percent} da regressão linear, e a densidade espectral de ruído é a
+mediana do patamar branco acima de \SI{300}{\kilo\hertz}.
+
+\begin{table}[H]
+    \centering
+    \caption{Parâmetros levantados na bancada}
+    \label{tab:bancada_parametros}
+    \small
+    \begin{tabular}{lrl}
+        \toprule
+        \textbf{Grandeza} & \textbf{Valor} & \textbf{Unidade} \\
+        \midrule
+        Atrito viscoso $B$ & 32{,}44\,$\pm$\,4{,}40 & $\times 10^{-6}$~\si{\newton\meter\second\per\radian} \\
+        Atrito seco $\tau_c$ & 15{,}52\,$\pm$\,2{,}42 & \si{\milli\newton\meter} \\
+        Coeficiente de determinação $R^2$ & 0{,}9247 & --- \\
+        Constante de FEM $K_{e1}$ & 17{,}773 & \si{\milli\volt\second\per\radian} \\
+        Fluxo do ímã $\lambda_m$ & 2{,}539 & \si{\milli\weber} \\
+        Constante de torque $K_t$ & 26{,}66 & \si{\milli\newton\meter\per\ampere} \\
+        $K_v$ implícito (barramento, a vazio) & 310 & rpm/\si{\volt} \\
+        Pares de polos $p$ & 7 & --- \\
+        Patamares na regressão & 19 & --- \\
+        Registros válidos & 378 & --- \\
+        \midrule
+        Ruído do SS49E, sem filtro & 719 & \si{\milli\ampere} rms \\
+        Densidade espectral do ruído & 0{,}441 & \si{\milli\ampere}$/\sqrt{\si{\hertz}}$ \\
+        Degrau do ADC, corrente & 47{,}7 & \si{\milli\ampere} \\
+        Degrau do ADC, tensão & 14{,}8 & \si{\milli\volt} \\
+        Chaveamento do ESC & 8{,}0 & \si{\kilo\hertz} \\
+        Frame do ADC & 100 & \si{\kilo\hertz} \\
+        $f_e$ máxima & 805 & \si{\hertz} \\
+        $f_c$ projetada (corrente e tensão) & 20 & \si{\kilo\hertz} \\
+        \bottomrule
+    \end{tabular}
+
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+Na \autoref{tab:bancada_smo}, a estimativa
+$\hat T_e(i)$ usa a corrente medida projetada sobre o ângulo estimado, e
+$\hat T_e(\hat\imath)$, a corrente reconstruída pelo modelo interno do
+observador. A última coluna, $r_{v_c}$, é o resíduo da reconstrução da
+terceira tensão de fase dentro da banda útil.
+
+\begin{table}[H]
+    \centering
+    \caption{Observador por modos deslizantes contra a medida direta}
+    \label{tab:bancada_smo}
+    \small
+    \begin{tabular}{rrrrrrrrr}
+        \toprule
+        \textbf{$n$} & \textbf{$\hat n$} & \textbf{$\varepsilon_n$} & \textbf{$T_e$} & \textbf{$\hat T_e$ ($i$)} & \textbf{$\varepsilon$} & \textbf{$\hat T_e$ ($\hat\imath$)} & \textbf{$\varepsilon$} & \textbf{$r_{v_c}$} \\
+        \textbf{[RPM]} & \textbf{[RPM]} & \textbf{[\si{\percent}]} & \textbf{[\si{\milli\newton\meter}]} & \textbf{[\si{\milli\newton\meter}]} & \textbf{[\si{\percent}]} & \textbf{[\si{\milli\newton\meter}]} & \textbf{[\si{\percent}]} & \textbf{[\si{\percent}]} \\
+        \midrule
+        2267 & 2272 & +0{,}220 & 28{,}08 & 23{,}83 & $-$15{,}1 & 35{,}72 & +27{,}2 & 3{,}6 \\
+        4538 & 4539 & +0{,}006 & 32{,}52 & 29{,}95 & $-$7{,}9 & 52{,}68 & +62{,}0 & 3{,}6 \\
+        5683 & 5681 & $-$0{,}034 & 32{,}24 & 30{,}94 & $-$4{,}0 & 59{,}90 & +85{,}8 & 2{,}6 \\
+        5824 & 5813 & $-$0{,}192 & 29{,}06 & 27{,}09 & $-$6{,}8 & 56{,}67 & +95{,}1 & 10{,}3 \\
+        6724 & 6723 & $-$0{,}010 & 38{,}35 & 37{,}48 & $-$2{,}3 & 71{,}39 & +86{,}2 & 1{,}4 \\
+        \bottomrule
+    \end{tabular}
+
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}

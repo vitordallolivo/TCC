@@ -950,3 +950,555 @@ inventado. Local = onde está o `\label` da figura ou da nota `Pendente`.
   (27/16/12 mm) daria $A_e = 66$ mm² e $L_e = 67{,}5$ mm — a diferença é o
   desconto de área efetiva do fabricante, e é a origem admitida da tolerância
   de ±15 % de $A_l$.
+
+---
+
+## ✅ Instrumentação dos ensaios com o motor em rotação (nova subseção)
+
+Escrita a subseção `sec:resultado_setup_scope`, em `Textuais/Conclusao.tex`,
+imediatamente antes de "Coeficientes Mecânicos". Descreve o setup
+improvisado de aquisição, sem transdutor de torque:
+
+- **Osciloscópio PicoScope Série 5000** do laboratório do PET, com o
+  programa de aquisição do próprio fabricante.
+- **Quatro canais analógicos + dois digitais**, e essa contagem é que
+  definiu o que foi medido: duas tensões de fase e duas correntes de fase
+  no analógico; comando do gerador de pulsos e tacômetro óptico no
+  digital.
+- Correntes lidas pela saída em tensão dos **sensores de efeito Hall da
+  própria placa**.
+- Terceira tensão e terceira corrente **não medidas** — reconstruídas na
+  análise pela soma nula das três (enrolamento equilibrado, sem retorno
+  pelo neutro).
+- **Alimentação por bateria**: barramento flutuante, sem laço de terra com
+  a referência das pontas de prova, e sem a ondulação da retificação
+  somada às tensões medidas.
+- **Neutro virtual**: o motor é ligado em estrela e não traz o neutro para
+  fora, então ele foi refeito com três resistores iguais, um por fase,
+  unidos em um nó comum, que serve de referência às pontas de prova.
+  Citação nova no `.bib`: `nidec_neutral_point` (glossário Nidec).
+
+### Figuras criadas (as duas em espaço reservado, tracejadas)
+
+| label | falta |
+|---|---|
+| `fig:setup_picoscope_sw` | captura de tela do programa do PicoScope com os 4 canais analógicos e os 2 digitais |
+| `fig:setup_picoscope_fisico` | fotografia da montagem: motor, bateria, os três resistores do neutro virtual, placa de medição e pontas de prova |
+
+### Precisa de revisão do autor
+
+- **Valor dos resistores do neutro virtual não está no texto** — foi escrito
+  apenas que é "alto frente à impedância de fase". Se o autor souber o valor
+  usado, colocar o número.
+- Confirmar que a reconstrução da terceira fase (soma nula) é mesmo o que o
+  pipeline de análise faz, e não uma terceira ponta que eu não conheço.
+- Confirmar o modelo exato do PicoScope (só "Série 5000" foi informado); se
+  houver o número completo (ex.: 5444D MSO), vale trocar.
+
+---
+
+## ✅ Resultados dos ensaios de bancada (três seções escritas)
+
+Tudo em `Textuais/Conclusao.tex`. Compilado limpo (pdflatex + bibtex + 2x
+pdflatex): zero referência ou citação indefinida.
+
+### 1. Coeficientes Mecânicos — `sec:resultado_coef_mec`
+
+Saiu do placeholder. O que entrou:
+
+- 19 patamares, de 130 a 705 rad/s, com o motor em vazio na montagem
+  improvisada (liga com `sec:resultado_setup_scope`).
+- Torque pelo **balanço de potência por fase** — dito explicitamente que não
+  há transdutor de torque e que o cálculo não depende de forma de onda, $K_e$
+  nem ângulo, logo é independente do observador.
+- $B = (32{,}4 \pm 4{,}4)\times10^{-6}$ N·m·s/rad e
+  $\tau_c = (15{,}5 \pm 2{,}4)$ mN·m, $R^2 = 0{,}925$ (eq.
+  `eq:resultado_b_tauc`, label mantido).
+- Parágrafo explicando que o $\tau_c$ alto é **histerese no ferro**, não
+  resíduo — $\tau_c$ agrega atrito seco + histerese, $B$ agrega viscoso +
+  ventilação + corrente parasita.
+- Validação do tacômetro: $-7{,}9\times10^{-4}\,\%$ ± $3{,}7\times10^{-2}\,\%$
+  sobre 267 registros → um pulso por volta e sete pares de polos.
+- $K_e$ medido equivale a 310 RPM/V, igual à placa.
+- **Erro da simulação registrado**: o autotuning partiu do $K_v$ de linha
+  tratado como de fase, então usou $K_e$ 3× maior; texto diz que os ganhos
+  seguem válidos (otimização é sobre erro de seguimento, não escala de
+  torque) e que o valor bom para o firmware é o de bancada.
+
+Figuras: `bancada_te_omega`, `bancada_te_residuo`, `bancada_tacometro`,
+`bancada_ke`. Aponta para `tab:bancada_patamares` do apêndice.
+
+**Removido**: o ensaio de momento de inércia. Sumiram a
+`\subsubsection{Momento de Inércia}` da metodologia (já tinha saído),
+a figura `fig:coastdown`, a tabela placeholder `tab:resultado_atrito`, e as
+duas remissões órfãs a `sec:momento_inercia` na Conclusão e na lista de
+pendências. $J$ não aparece mais em lugar nenhum.
+
+### 2. Projeto das Frequências de Corte — `sec:resultado_fc`
+
+Nova subseção, logo após a síntese da simulação do SMO.
+
+- Ruído do sensor sem filtro: 719 mA rms, ~15× o degrau do conversor (≈4 bits
+  da palavra) → filtrar é condição, não refinamento.
+- Varredura mostra o observador **insensível** de 3 kHz para cima, porque ele
+  próprio é passa-baixas (estimador de FEM com polo em 1,06 kHz, sincronismo
+  em 150 Hz). Logo o corte não se justifica por desempenho do observador.
+- O que decide: **rebatimento** no conversor e **faixa dinâmica**.
+- Projeto: **20 kHz, um polo, iguais nos dois ramos** — a igualdade é o ponto,
+  porque o atraso comum se cancela no erro de fase tensão×corrente.
+
+Figuras: `bancada_espectros`, `bancada_restricoes_fc`. Tabelas do apêndice
+citadas: `tab:bancada_varredura_fc`, `tab:bancada_restricoes_fc`.
+
+### 3. Observador nos Registros de Bancada — `sec:resultado_smo_bancada`
+
+- Velocidade: 0,092 % de erro médio.
+- Torque: **−7,2 %** com a corrente **medida** projetada no ângulo estimado;
+  **+71 %** com a corrente do modelo. Conclusão prática dita no texto:
+  projetar a medida, a do modelo serve só à realimentação interna.
+- Ângulo dentro de 0,3° de média contra a integral dos pulsos do tacômetro,
+  em registro de 0,5 s.
+- Limite de baixa rotação: sincronismo a 150 Hz, abaixo de ~1930 RPM o ângulo
+  não trava; velocidade continua saindo, torque não.
+
+Figuras: `bancada_smo_alfabeta`, `bancada_smo_rpm_torque`,
+`bancada_smo_angulo_tacometro`. Tabela `tab:bancada_smo`.
+
+### Precisa de revisão do autor
+
+- **Apêndice da bancada mantido** — as três seções citam quatro das suas seis
+  tabelas (`tab:bancada_patamares`, `tab:bancada_restricoes_fc`,
+  `tab:bancada_varredura_fc`, `tab:bancada_smo`). Ficaram sem citação
+  `tab:bancada_inventario` e `tab:bancada_parametros`; se o autor quiser
+  enxugar o apêndice, são essas duas as candidatas.
+- A afirmação de que **os ganhos do autotuning seguem válidos apesar do $K_e$
+  3× maior** é interpretação minha (a otimização é sobre erro de seguimento).
+  Vale conferir se o autor concorda ou se prefere rodar o autotuning de novo
+  com o $K_e$ de bancada.
+- A frase de fechamento da simulação foi reescrita: antes dizia "restando a
+  validação experimental em bancada como etapa subsequente", agora anuncia as
+  duas subseções experimentais que vêm em seguida.
+- Não foram escritas seções para as figuras que o autor apagou
+  (`bancada_te_vs_fc`, `bancada_comando_rpm`, `bancada_smo_vs_fc`,
+  `bancada_smo_rpm`, `bancada_smo_angulo_patamares`) — o conteúdo delas ou
+  ficou como frase no texto (o caso da varredura de $f_c$) ou saiu de vez.
+
+---
+
+## ✅ Apêndice B enxugado e renomeado
+
+`PosTextuais/Apendice_Bancada.tex`. Compilado e conferido na página do PDF.
+
+- **Título**: "Dados dos ensaios de bancada do motor" → **"Dados do motor a
+  vazio"** (Apêndice B). O parágrafo de abertura acompanhou a troca. O label
+  `apendice:bancada` foi mantido, então a remissão em
+  `sec:resultado_coef_mec` continua válida.
+- **Tabela de inventário das sessões de captura removida** por inteiro
+  (`tab:bancada_inventario`). Não era citada em lugar nenhum do texto. As
+  tabelas seguintes subiram um número: a de restrições, que era a 20, agora
+  é a **19**.
+- **Tabela de restrições sobre $f_c$ reformatada** — o cabeçalho de uma
+  linha só estourava a margem direita. Agora são duas linhas (grandeza em
+  cima, unidade embaixo), com as duas colunas de ruído agrupadas sob um
+  `\multicolumn` "Ruído $\sigma_i$" com `\cmidrule`. O que saiu do
+  cabeçalho foi para a nota de rodapé da tabela: o atraso é medido em
+  $f_{e,\max} = \SI{805}{\hertz}$ e a atenuação em \SI{8}{\kilo\hertz}.
+  A tabela agora fecha dentro da margem.
+
+### Precisa de revisão do autor
+
+- **O arquivo é gerado por `p4_apendice.py`** (cabeçalho do próprio `.tex`
+  avisa "não editar a mão"). O script não está nesta máquina, então as três
+  mudanças foram feitas direto no `.tex`. **Se o script rodar de novo, elas
+  se perdem** — as mesmas alterações precisam ser levadas para
+  `p4_apendice.py`.
+- `tab:bancada_parametros` continua sem citação no corpo do texto; é a única
+  que sobrou nessa situação depois da remoção do inventário.
+
+---
+
+## ✅ Notas de rodapé das tabelas do Apêndice B viraram texto
+
+As cinco tabelas do apêndice traziam, entre a tabela e a linha de fonte, uma
+nota em corpo menor explicando símbolos, unidades e critérios de cálculo.
+Todas foram **removidas dali** e reescritas como **parágrafo corrido antes de
+cada tabela**, em norma culta e citando a tabela por `\autoref`. Abaixo da
+tabela ficou só `Fonte: Autor (2026)`.
+
+O que virou texto, tabela por tabela:
+
+| tabela | conteúdo movido para o parágrafo de abertura |
+|---|---|
+| `tab:bancada_patamares` | $E_1$ e $I_1$ como amplitudes de pico da fundamental, a fórmula de $P_{conv}$ e de $T_e$, o significado de $u(T_e)$ e de $N$ |
+| `tab:bancada_parametros` | incertezas como intervalos de 95 % da regressão; densidade de ruído como mediana do patamar branco acima de 300 kHz |
+| `tab:bancada_restricoes_fc` | filtro de um polo; atraso medido em $f_{e,\max}$; atenuação medida em 8 kHz; definição do ganho de dobramento |
+| `tab:bancada_varredura_fc` | cinco registros de 2267 a 6724 RPM, filtros casados, médias sobre número inteiro de períodos elétricos após o travamento do PLL |
+| `tab:bancada_smo` | unidades das colunas e a distinção entre $\hat T_e(i)$ (corrente medida) e $\hat T_e(\hat\imath)$ (corrente do modelo); definição de $r_{v_c}$ |
+
+Efeito colateral bom: `tab:bancada_parametros`, que estava sem citação
+nenhuma, agora é citada pelo próprio parágrafo que a antecede. Todas as cinco
+tabelas do apêndice passam a ser citadas em texto.
+
+Compilado e conferido nas páginas renderizadas do PDF: nenhuma nota sobrou
+sob as tabelas, e as remissões continuam resolvidas.
+
+### Precisa de revisão do autor
+
+- Vale a mesma ressalva de antes: o `.tex` é gerado por `p4_apendice.py`, que
+  não está nesta máquina. Se o script rodar de novo, as notas voltam para
+  baixo das tabelas — a mudança precisa ser levada para o gerador.
+
+---
+
+## ✅ LM358 e atraso de fase do condicionamento removidos
+
+`Textuais/Conclusao.tex`. Compilado limpo, sem referência indefinida.
+
+Na subseção **Condicionamento Analógico e seu Impacto na Reconstrução**
+(`sec:condicionamento`) saíram:
+
+- o parágrafo que atribuía ao **LM358** um modelo de polo dominante em
+  \SI{45,2}{\kilo\hertz} e \SI{41,5}{\degree} de atraso em
+  \SI{40}{\kilo\hertz};
+- a **tabela `tab:fase_ampop`** (atraso de fase e atenuação por frequência);
+- o parágrafo dos **três cenários de inconsistência de fase** (tensão
+  atrasada com corrente ideal, ambos atrasados, ambos com compensação
+  proporcional à velocidade).
+
+A subseção ficou com um fator só — a queda da amplitude da FEM com a rotação
+e a perda de relação sinal-ruído em baixa velocidade —, e o parágrafo de
+abertura foi reescrito de "dois fatores físicos" para "um fator físico".
+
+Fora da subseção, na seção adiante:
+
+- o parágrafo da seção do **sensor de corrente** que comparava o polo de
+  \SI{56}{\kilo\hertz} do caminho de corrente com o de
+  \SI{45,2}{\kilo\hertz} do estágio de tensão foi removido inteiro;
+- a **síntese da simulação** não credita mais ao condicionamento a
+  verificação de tolerância do observador (frase do LM358 apagada);
+- a **lista de objetivos da Conclusão** não fala mais em "efeito do
+  condicionamento analógico sobre a reconstrução".
+
+Zero ocorrência de `LM358`, de `45,2` e de `tab:fase_ampop` no arquivo.
+
+### Precisa de revisão do autor
+
+- O título da subseção continua **"Condicionamento Analógico e seu Impacto na
+  Reconstrução"**, mas o conteúdo que sobrou trata da amplitude da FEM, não do
+  estágio analógico. Se quiser, dá para renomear para algo como "Limite de
+  Baixa Rotação na Reconstrução" — não fiz porque `sec:condicionamento` é
+  citada em três pontos do texto e a troca de título não foi pedida.
+
+---
+
+## ✅ Trecho da corrente do modelo apagado e remissões ao Apêndice B
+
+`Textuais/Conclusao.tex`. Compilado limpo.
+
+- **Apagado** o trecho de `sec:resultado_smo_bancada` que comparava o torque
+  estimado com a corrente do modelo (o \SI{+71}{\percent}) e concluía que a
+  estimação deve projetar a corrente medida. Ficou só o resultado com a
+  corrente medida (\SI{-7,2}{\percent}), seguido da remissão à tabela do
+  apêndice.
+- A coluna $\hat T_e(\hat\imath)$ **continua na tabela do apêndice**
+  (`tab:bancada_smo`) como dado bruto, com a definição no parágrafo que a
+  antecede — só a análise saiu do capítulo.
+
+### Remissões ao apêndice acrescentadas
+
+Cada afirmação numérica das três seções agora aponta para a tabela de onde o
+número saiu:
+
+| onde | passou a citar |
+|---|---|
+| perdas mecânicas | já citava `tab:bancada_patamares` |
+| validação do tacômetro e $K_e$ | `tab:bancada_parametros` |
+| ruído de 719 mA rms | `tab:bancada_parametros` |
+| insensibilidade do observador ao corte | `tab:bancada_varredura_fc` |
+| faixa admissível de $f_c$ | `tab:bancada_restricoes_fc` |
+| observador contra medida | `tab:bancada_smo` |
+
+Todas nomeando o `\autoref{apendice:bancada}` junto, para deixar explícito
+de onde vêm os dados experimentais.
+
+---
+
+## ✅ 4.5.1 saiu de placeholder: Calibração de Canal
+
+`Textuais/Conclusao.tex`. Compilado e conferido na página renderizada.
+
+A seção era duplicata do que a bancada do PicoScope já mostrava (formas de
+onda reais) e o resto estava pendente. Foi reescrita com os dados de
+calibração da SAME, que já existiam no arquivo de configuração:
+
+- **Reta afim por canal**: valor físico = escala × tensão no pino do
+  conversor + deslocamento de zero, com os dois números vindo do projeto da
+  cadeia e vivendo no arquivo de configuração compartilhado entre
+  \textit{firmware} e supervisão. Descrito em português, sem nome de campo
+  nem de constante (regra 7).
+- **Corrente**: \SI{18,750}{\milli\volt\per\ampere} do sensor com uma
+  passagem pelo furo, divisor 2,0 k / 18 k atenuando 0,900 (porque o repouso
+  em 2,5 V mais 60 A chegaria a 3,625 V, acima dos 3,3 V do conversor),
+  cadeia em \SI{16,875}{\milli\volt\per\ampere},
+  \SI{47,7}{\milli\ampere} por degrau.
+- **Tensão**: divisor 130 k / 7,5 k, atenuação 0,0545455, fundo de escala
+  60,5 V (dobro do barramento), \SI{14,8}{\milli\volt} por degrau.
+- **Tabela `tab:resultado_calibracao_canal_same` refeita**: era placeholder
+  com "Pendente" nas células, agora traz atenuação, escala da cadeia, degrau
+  do ADC e faixa válida dos dois caminhos. Um parágrafo explica que a faixa
+  válida é critério de diagnóstico (saturado, desconectado, terra aberto),
+  não folga.
+- **Zero levantado a cada energização**: os três repousos a 0 A do
+  \autoref{apendice:ensaio_hall} (2,48570 / 2,48640 / 2,49150 V) dão 5,8 mV
+  de espalhamento, ou 0,31 A de corrente inexistente; por ser comum às três
+  fases, atravessa a Clarke como sequência zero e vira FEM espúria no
+  observador. Daí o firmware medir o repouso real no boot.
+- **Ressalva do ensaio improvisado**: as tensões de fase foram medidas direto
+  pelas pontas do osciloscópio, **sem o divisor da placa** — então a cadeia
+  de corrente foi exercitada com o motor girando, a de tensão continua
+  verificada só pelo projeto.
+- **Figura de formas de onda apagada** (`fig:formas_onda_reais`, era caixa
+  tracejada). O texto passou a apontar para a
+  `fig:bancada_smo_alfabeta`, que já mostra tensão e corrente reais.
+
+### Conclusão ajustada
+
+- O objetivo do sistema de medição elétrica passou de "parcialmente atingido"
+  para **"majoritariamente atingido"**, já que a escala dos canais fechou.
+- A lista de pendências não fala mais em "calibração de canal"; o que sobrou
+  é **piso de ruído com o ESC chaveando** e **verificação da cadeia de tensão
+  contra instrumento de referência**, com a ressalva do divisor não
+  exercitado.
+
+### Precisa de revisão do autor
+
+- Os números da cadeia vieram do arquivo de configuração do projeto, não de
+  um ensaio de calibração de canal. O texto diz isso ("saem do projeto da
+  cadeia"), mas convém confirmar se o orientador aceita apresentar escala de
+  projeto em capítulo de resultado, ou se prefere que isso migre para a
+  metodologia e a seção fique só com o que foi medido.
+- A escala de tensão foi expressa como \SI{54,5}{\milli\volt\per\volt}
+  na tabela (o inverso da atenuação de 0,0545455 é 18,33 V/V). Conferir se
+  essa é a forma que o autor prefere ler.
+
+---
+
+## ✅ Conclusão atualizada para o estado real do trabalho
+
+`Textuais/Conclusao.tex`, seções **Conclusão** e **Limitações e Itens
+Pendentes**. Compilado limpo.
+
+O texto ainda dizia que a validação física em bancada não tinha sido
+executada, o que ficou falso depois dos ensaios com o motor. O que mudou:
+
+- **Parágrafo de síntese reescrito.** Agora afirma que a cadeia de medição
+  elétrica foi percorrida com o motor real, na montagem improvisada com
+  osciloscópio, e que dali saíram os coeficientes de perdas, a constante de
+  FEM, o critério das frequências de corte e a validação do observador contra
+  medidas independentes.
+- **O que falta ficou nomeado com precisão**: o conjunto completo
+  instrumentado, com hélice acoplada, células de carga e tubo de Pitot em
+  operação simultânea sob supervisão da SIBA. O texto diz explicitamente que
+  essa etapa está prevista para o **segundo semestre de 2026** e que é ela, e
+  não a ausência de ensaio com o motor, que separa os objetivos "atingidos"
+  dos "parcialmente atingidos".
+- **Lista de pendências**: ganhou a frase de que todos os itens estão
+  programados para o segundo semestre de 2026, dentro do prazo de fechamento,
+  e ganhou um item novo — **montagem final do conjunto na estrutura da
+  bancada** (`sec:resultado_montagem_final`), que tinha seção reservada mas
+  não aparecia na lista.
+- **Remissão a `human.md` apagada do corpo do trabalho.** O parágrafo de
+  encerramento das pendências mandava o leitor consultar "`human.md` na raiz
+  do repositório" — arquivo de trabalho interno, que não cabe no texto
+  entregue.
+
+### Precisa de revisão do autor
+
+- Escrevi "**segundo semestre de 2026**" em dois pontos. Se o prazo for outro
+  (defesa em data específica, ou ensaio marcado), é trocar nos dois lugares.
+- O objetivo 2 está declarado **atingido**. Ele não menciona o erro do $K_e$
+  na simulação, que está descrito em `sec:resultado_coef_mec`. Se o
+  orientador achar que a Conclusão deve registrar essa correção, cabe uma
+  frase ali.
+
+---
+
+## ✅ Agradecimento ao Alexandre
+
+`PreTextuais/Agradecimentos.tex`, segundo parágrafo. A frase solta que estava
+grudada no fim do parágrafo ("também deixo meu agradecimento especial ao
+Alexandre que me ajudou a tornar alguns ensaios mais rápidos") virou frase
+própria, com o papel dele nomeado:
+
+> Agradeço, em especial, ao Alexandre, membro do setor de elétrica da equipe
+> Albatroz, pela ajuda na montagem do sistema de aquisição e por agilizar a
+> preparação dos ensaios.
+
+Usei "Agradeço, em especial" para não repetir "Deixo um agradecimento
+especial", que já abre o mesmo parágrafo.
+
+### Precisa de revisão do autor
+
+- Ficou só o primeiro nome. Se for para constar o sobrenome, é só dizer qual.
+
+---
+
+## ✅ Apêndice B reduzido a três tabelas
+
+`PosTextuais/Apendice_Bancada.tex`. Compilado e conferido nas páginas
+renderizadas.
+
+- **Parágrafo de abertura do apêndice apagado** (o que descrevia os 743
+  registros e os canais adquiridos). O capítulo agora começa direto no
+  parágrafo da primeira tabela.
+- **Tabela de restrições numéricas sobre $f_c$ removida**
+  (`tab:bancada_restricoes_fc`), junto com o parágrafo que a apresentava. A
+  informação continua no capítulo pela `fig:bancada_restricoes_fc`.
+- **Tabela de qualidade do observador contra $f_c$ removida**
+  (`tab:bancada_varredura_fc`), junto com o parágrafo dela. A conclusão que
+  importava --- observador insensível ao corte de 3 kHz para cima ---
+  continua afirmada no texto de `sec:resultado_fc`, agora sem remissão a
+  tabela.
+- As duas remissões correspondentes em `Textuais/Conclusao.tex` foram
+  retiradas; nenhum `\autoref` órfão sobrou.
+- **Unidades acrescentadas ao cabeçalho** da tabela do observador
+  (`tab:bancada_smo`), em segunda linha: RPM nas rotações,
+  \si{\milli\newton\meter} nos torques e \si{\percent} nos erros e no
+  resíduo. O parágrafo que antecede a tabela deixou de listar as unidades e
+  ficou só com a definição de $\hat T_e(i)$, $\hat T_e(\hat\imath)$ e
+  $r_{v_c}$.
+
+O apêndice ficou com três tabelas: pontos experimentais da regressão
+(Tabela 16), parâmetros levantados (Tabela 17) e observador contra a medida
+direta (Tabela 18).
+
+---
+
+## ✅ Dimensionamento do filtro passa-baixas removido da metodologia
+
+`Textuais/Metodologia/08_SAME.tex`. Compilado limpo, sem referência
+indefinida. Fica valendo a divisão: a metodologia mostra a topologia e a
+relação entre $C$ e $f_c$; o valor de $f_c$ e sua justificativa são resultado
+(`sec:resultado_fc`).
+
+**Caminho de tensão** (`sec:same_divisor_tensao`):
+
+- Capacitor da `fig:cond_tensao` **sem valor** no esquema — só `$C$`. O
+  \SI{560}{\pico\farad} saiu.
+- Apagada a frase "Com $C = 560$ pF a frequência de corte resulta em
+  \SI{40,1}{\kilo\hertz}". No lugar entrou um parágrafo dizendo que o
+  capacitor fica em aberto, que ele é o único grau de liberdade restante uma
+  vez fixadas as resistências, e que a escolha depende de ruído medido,
+  rebatimento e banda útil do observador — remetendo à
+  `\autoref{sec:resultado_fc}`.
+- **Apagados** o parágrafo do rebatimento da 28ª harmônica (336 kHz → 3 kHz,
+  −28,9 dB → −47,5 dB) e a **`fig:alias_tensao`** inteira (o gráfico TikZ das
+  harmônicas do PWM).
+
+**Caminho de corrente** (`sec:same_sensor_corrente`):
+
+- Capacitor da `fig:cond_corrente` **sem valor**. O \SI{2,2}{\nano\farad}
+  saiu.
+- Apagada a frase do $f_c = \SI{40,2}{\kilo\hertz}$. Ficou registrado que
+  os dois ramos recebem **a mesma** frequência de corte, para o atraso ser
+  comum e se cancelar na comparação tensão×corrente, com o valor justificado
+  nos resultados.
+- **Apagados** o parágrafo da atenuação em Nyquist (−9,9 → −22,5 dB, −0,37 dB
+  em 12 kHz, −63,1 dB na 28ª) e a **`fig:alias_corrente`** inteira.
+- O parágrafo das duas correntes perdeu os números que dependiam de $C$ (os
+  \SI{183}{\micro\ampere} de pico e o total de
+  \SI{364}{\micro\ampere}); ficou o critério: os
+  \SI{181}{\micro\ampere} do divisor mais o pico do capacitor têm de somar
+  menos que a corrente de saída mínima de catálogo, \SI{1}{\milli\ampere}.
+- A frase do polo do sensor (\SI{56}{\kilo\hertz}) não aponta mais para
+  `sec:condicionamento` (que perdeu a discussão de polos com a saída do
+  LM358); aponta para `sec:resultado_fc`, dizendo que esse polo se soma ao do
+  filtro na escolha do corte.
+
+O que **ficou** na metodologia: topologia dos dois divisores, valores de
+$R_1$ e $R_2$, atenuação, fundo de escala, resolução por LSB, resistência
+equivalente contra o limite da tabela do ADC, erro de ganho de amostragem e
+consumo do divisor.
+
+### Precisa de revisão do autor
+
+- Duas figuras a menos na lista de figuras. Se alguma delas fosse citada em
+  banca como parte do dimensionamento, o conteúdo está no
+  `bancada_espectros` e no `bancada_restricoes_fc` do Capítulo 4.
+- A equação de $f_c$ (`eq:cond_fc`) **continua** na metodologia, sem valor
+  numérico associado — é ela que liga $C$ ao corte definido nos resultados.
+
+---
+
+## ✅ Bloco do ensaio do sensor Hall quebrado em parágrafos + diagrama
+
+`Textuais/Metodologia/08_SAME.tex`, seção do sensor de corrente com núcleo
+toroidal. Era um parágrafo único e enorme descrevendo objetivo, artifício das
+$N$ espiras, três configurações, instrumentação, faixa varrida e tratamento da
+deriva. Ficou assim:
+
+1. **Objetivo e artifício** — levantar $V_{out}(B)$ e o porquê das $N$
+   espiras (a instrumentação não gera corrente da ordem da aplicação).
+2. **Montagem e configurações** — remete à figura nova; fonte Minipa em
+   limitação de corrente, multímetros de corrente e de tensão, e as três
+   configurações ($N = 1$ pelo furo, $N = 4$ e $N = 8$ externas).
+3. **Faixa varrida** — 0 a \SI{5,33}{\ampere}, \SI{516}{\gauss} na
+   configuração de oito espiras.
+4. **Deriva e $\Delta V$** — por que se adota
+   $\Delta V = V_{out} - V_O$, com remissão ao Apêndice A.
+
+### Figura nova: `fig:ensaio_hall_setup`
+
+Desenhada em TikZ, sem imagem externa. Duas partes:
+
+- **Cadeia de medida** em blocos: fonte Minipa $\to$ multímetro de corrente
+  $\to$ conjunto núcleo--sensor $\to$ multímetro de tensão, com a
+  alimentação de \SI{5}{\volt} entrando por cima no conjunto.
+- **Três toróides** lado a lado: $N = 1$ com o condutor representado pelo
+  símbolo de corrente saindo do plano no furo central, $N = 4$ e $N = 8$ com
+  as espiras desenhadas cruzando o anel. Em todos, o elemento Hall aparece
+  como retângulo cinza no entreferro. Nota abaixo lembrando que o campo é
+  proporcional a $N\,I$.
+
+Citada no corpo do texto, com caption acima e fonte abaixo, no padrão do
+capítulo. Conferida na página renderizada.
+
+### Precisa de revisão do autor
+
+- O desenho dos toróides é esquemático: as espiras aparecem como traços
+  cruzando o anel, e o número de traços é o $N$ de cada configuração. Se o
+  autor preferir uma foto real da montagem no lugar do desenho, é trocar o
+  bloco TikZ por `\includegraphics`.
+
+---
+
+## ✅ Duas fotos de ensaio entraram; dois espaços reservados saíram
+
+`Textuais/Conclusao.tex`. Compilado e conferido nas páginas renderizadas.
+
+**Fotos que entraram** (as duas que o autor adicionou em
+`Textuais/Imgs/Resultados/`):
+
+| figura | arquivo | onde |
+|---|---|---|
+| `fig:setup_picoscope_fisico` | `ensaio_motor_vazio.jpg` | substituiu a caixa tracejada da montagem física do ensaio com o motor, em `sec:resultado_setup_scope` |
+| `fig:ensaio_hall_foto` | `ensaio_sensor_corrente.jpg` | figura **nova** em `sec:resultado_sensor_corrente`, citada no parágrafo de abertura da seção, antes do gráfico $V_{out}(I)$ |
+
+A foto do sensor é retrato, então entrou com `width=0.5\linewidth`; a do
+motor é paisagem, com `0.85\linewidth`. Caption acima e fonte abaixo, no
+padrão do capítulo.
+
+**Espaços reservados apagados** (não há foto e não se fala mais neles):
+
+- `fig:setup_kelvin` — montagem do ensaio de resistência por quatro
+  terminais. A frase da subseção Resistência perdeu o trecho "na montagem da
+  \autoref{...}"; o método continua descrito em texto.
+- `fig:setup_ressonancia` — montagem do ensaio de ressonância. Mesma coisa na
+  subseção Indutância.
+
+Nenhuma remissão órfã sobrou.
+
+**Captura de tela do PicoScope**: entrou logo em seguida, com
+`picoscope_software.png`, substituindo a última caixa tracejada dessa seção
+(`fig:setup_picoscope_sw`, `width=0.9\linewidth`). A seção
+`sec:resultado_setup_scope` está agora sem nenhum espaço reservado.

@@ -87,6 +87,98 @@ Textual/
 Compilar com `pdflatex` (2x) + `bibtex` + `pdflatex` (2x), todos a partir
 desta pasta — ver `README.md` para o passo a passo completo.
 
+## Ensaios de bancada do motor — material pronto, falta escrever
+
+Os ensaios de bancada com o motor girando já foram adquiridos e processados.
+O pipeline vive em `Dados TCC - Analise/analise/` (fora deste diretório) e
+tem `README.md` próprio com o detalhe completo. **O que falta é a redação do
+Capítulo 4.**
+
+### O que existe
+
+- **14 figuras** já em `Textuais/Imgs/Resultados/`, prefixo `bancada_`.
+- **6 tabelas** em `PosTextuais/Apendice_Bancada.tex`, já incluído em
+  `Apendices.tex`. Arquivo **gerado** por `p4_apendice.py` — se algum número
+  mudar, rodar o script de novo em vez de editar à mão.
+- Dados de origem: \num{743} registros de osciloscópio (duas tensões de fase,
+  duas correntes por sensor de efeito Hall, comando do gerador de pulsos e
+  tacômetro óptico), dos quais 378 passaram na triagem.
+
+### Achados que precisam entrar no texto
+
+1. **Perdas a vazio (equação do torque de perdas).** Regressão sobre 19
+   patamares de rotação, de \SI{130}{\radian\per\second} a
+   \SI{705}{\radian\per\second}: atrito viscoso $B = (32{,}4 \pm 4{,}4)
+   \times 10^{-6}$ \si{\newton\meter\second\per\radian}, atrito seco
+   $\tau_c = (15{,}5 \pm 2{,}4)$ \si{\milli\newton\meter}, $R^2 = 0{,}925$.
+   O torque foi medido pelo balanço de potência por fase, que dispensa
+   conhecer a forma de onda, a constante de FEM e o ângulo do rotor.
+2. **O $\tau_c$ grande tem causa física.** Torque constante significa perda
+   proporcional à rotação, que é a assinatura da histerese no ferro. O termo
+   de atrito seco da equação agrega atrito mecânico \emph{mais} histerese; o
+   viscoso agrega atrito viscoso, ventilação e corrente parasita. Vale dizer
+   isso no texto — não é resíduo inexplicado.
+3. **O tacômetro fecha com a frequência elétrica em
+   $-7{,}9\times10^{-4}\,\%\ \pm\ 3{,}7\times10^{-2}\,\%$** sobre 267
+   registros. Confirma um pulso por volta e sete pares de polos.
+4. **A constante de FEM medida implica \SI{310}{rpm\per\volt}**, contra os
+   \SI{310}{rpm\per\volt} de placa. Ou seja: a caracterização fecha com o
+   catálogo do motor.
+5. **Erro encontrado na simulação.** O script de autotuning dos ganhos usa
+   uma constante de FEM \textbf{três vezes maior} que a medida — a conversão
+   partiu do $K_v$ de placa (que é de linha) tratando-o como se fosse de
+   fase. Isso escala todo o torque estimado pelo mesmo fator. Precisa ser
+   dito no texto e o valor corrigido é o da bancada.
+6. **Projeto das frequências de corte.** O ruído do sensor de corrente sem
+   filtro é \SI{719}{\milli\ampere} rms, quinze vezes o degrau do conversor.
+   A varredura mostra que o observador é **insensível** à frequência de corte
+   de \SI{3}{\kilo\hertz} para cima — porque o próprio observador já é um
+   passa-baixas (o estimador de força contraeletromotriz tem polo em
+   \SI{1,06}{\kilo\hertz} e a malha de sincronismo em \SI{150}{\hertz}).
+   Logo a escolha não se justifica por desempenho do observador, e sim pelo
+   que ele não consegue desfazer: rebatimento no conversor e faixa dinâmica.
+   Projeto: \SI{20}{\kilo\hertz}, um polo, **iguais** nos dois ramos.
+7. **Observador nos dados reais.** Velocidade com \SI{0,092}{\percent} de
+   erro médio; ângulo elétrico dentro de \SI{0,3}{\degree} de média contra a
+   integral dos pulsos do tacômetro, em toda a faixa; torque com
+   \SI{-7,2}{\percent} usando a corrente medida projetada no ângulo
+   estimado. Usando a corrente do modelo o erro vai a \SI{+71}{\percent} —
+   conclusão prática: projetar a corrente **medida**, não a do modelo.
+8. **Limite de baixa rotação.** A malha de sincronismo tem frequência natural
+   de \SI{150}{\hertz}; abaixo de cerca de \num{1930} rpm o ângulo deixa de
+   travar. A velocidade ainda sai, o torque não.
+
+### Figuras disponíveis
+
+| arquivo em `Textuais/Imgs/Resultados/` | conteúdo |
+|---|---|
+| `bancada_te_omega.png` | torque de perdas contra rotação, com a reta ajustada — **a figura principal** |
+| `bancada_te_residuo.png` | resíduos da regressão |
+| `bancada_ke.png` | constante de FEM contra rotação |
+| `bancada_tacometro.png` | validação do tacômetro (distribuição do erro em cima, correlação embaixo) |
+| `bancada_te_vs_fc.png` | robustez do torque medido à banda de medida |
+| `bancada_comando_rpm.png` | característica comando do gerador de pulsos $\to$ rotação |
+| `bancada_espectros.png` | espectros de corrente e tensão com as bandas marcadas |
+| `bancada_restricoes_fc.png` | as três restrições sobre a frequência de corte num gráfico |
+| `bancada_smo_vs_fc.png` | qualidade do observador contra a frequência de corte |
+| `bancada_smo_rpm_torque.png` | rotação e torque, observador contra medida, ao longo dos patamares |
+| `bancada_smo_rpm.png` | só a rotação, patamar a patamar |
+| `bancada_smo_alfabeta.png` | correntes, tensões e força contraeletromotriz no referencial estacionário |
+| `bancada_smo_angulo_patamares.png` | ângulo elétrico e rotação, patamar a patamar, com o erro por rotação |
+| `bancada_smo_angulo_tacometro.png` | ângulo contra a integral dos pulsos, num registro de \SI{0,5}{\second} |
+
+### O que escrever
+
+Montar as seções de resultado **passo a passo**, uma por vez, na ordem:
+levantamento das perdas mecânicas $\to$ projeto das frequências de corte
+$\to$ observador aplicado aos dados reais. Para cada seção: o que o ensaio
+produziu, a figura, o número, e o que o número significa. Nada de repetir
+procedimento — isso é do Capítulo 3.
+
+Perguntar ao autor qual seção atacar antes de começar, e seguir as regras de
+1 a 8 acima (em especial: toda figura citada no corpo, caption e fonte, e
+`human.md` atualizado **depois** de escrever).
+
 ## Contexto do plano de escrita
 
 O plano original (16 "Ações", Capítulos 3 e 4) foi recebido do autor e está

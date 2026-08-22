@@ -275,18 +275,6 @@ Para extrair os coeficientes de atrito ($B$ e $\tau_c$) \footnote{O atrito de Co
 
 Os parâmetros $B$ e $\tau_c$ são obtidos através de uma regressão linear sobre os pontos experimentais médios $(\omega_{m,k}, T_{e,k})$ para cada patamar de rotação, o $\omega_{m,k}$ é medido através de um tacômetro digital para validação.
 
-\subsubsection{Momento de Inércia}
-\label{sec:momento_inercia}
-
-Com o atrito estabelecido, o momento de inércia ($J$) é estimado pelo ensaio de desaceleração livre (\textit{coast-down}). Ao atingir a rotação nominal máxima, a aceleração via ESC é cortada. Sem excitação externa, as correntes caem a zero ($I_q = 0$), zerando o torque motriz. A dinâmica de parada é descrita por:
-
-\begin{equation}
-    J \frac{d\omega_m}{dt} = - B\omega_m - \tau_c
-    \label{eq:coast_down_iq}
-\end{equation}
-
-O sensor óptico registra a curva de desaceleração $\omega_m(t)$. Isolando $J$ e calculando a derivada $\frac{d\omega_m}{dt}$ a partir dos dados adquiridos na região de decaimento, extrai-se o momento de inércia do conjunto rotativo.
-
 \subsection{Identificação dos Coeficientes Aerodinâmicos da Hélice em Bancada}
 \label{sec:coef_aero_bancada}
 
