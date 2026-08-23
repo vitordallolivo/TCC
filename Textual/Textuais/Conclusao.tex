@@ -83,175 +83,6 @@ $L_{Y} = L_{LL}/2 = 6{,}95 \pm 0{,}07\ \mu\text{H}$.
 \end{table}
 
 
-\subsection{Instrumentação dos Ensaios com o Motor em Rotação}
-\label{sec:resultado_setup_scope}
-
-Os ensaios com o motor girando foram conduzidos com um osciloscópio
-PicoScope da Série 5000, disponível no laboratório do PET, operado pelo
-programa de aquisição do próprio fabricante
-(\autoref{fig:setup_picoscope_sw}). O equipamento oferece quatro canais
-analógicos e dois canais digitais, e essa disponibilidade definiu a
-divisão das grandezas registradas: duas tensões de fase e duas correntes
-de fase nos canais analógicos; o comando enviado ao gerador de pulsos e o
-sinal do tacômetro óptico nos canais digitais. As correntes vêm dos
-sensores de efeito Hall da própria placa de medição, cuja saída em tensão
-é lida diretamente pelo osciloscópio. A terceira tensão e a terceira
-corrente não são medidas: com o enrolamento equilibrado e sem caminho de
-retorno pelo neutro, ambas são reconstruídas na análise a partir das duas
-registradas, já que as três somam zero a cada instante.
-
-
-\begin{figure}[H]
-    \centering
-    \caption{Tela do PicoScope}
-    \label{fig:setup_picoscope_sw}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/picoscope_software.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-A alimentação do conjunto foi feita por bateria, e não pela fonte de
-rede. Com isso o barramento fica flutuante em relação ao terra da
-instalação, o que evita laço de terra entre a alimentação do motor e a
-referência das pontas de prova do osciloscópio, e elimina a ondulação
-residual da retificação, que apareceria somada às tensões de fase
-medidas.
-
-O motor tem os enrolamentos ligados em estrela e não traz o ponto neutro
-acessível externamente: só os três terminais de fase saem da carcaça.
-Como as tensões de fase precisam ser medidas em relação ao neutro, ele foi
-reconstruído por fora com três resistores de mesmo valor, um por fase,
-unidos em um nó comum. Sendo iguais as resistências e equilibrado o
-sistema, esse nó reproduz o potencial do neutro do enrolamento e serve de
-referência para as pontas de prova, técnica corrente na medição de
-máquinas em estrela com neutro inacessível \cite{nidec_neutral_point}. O
-valor dos resistores é alto frente à impedância de fase, de modo que a
-corrente desviada pelo divisor é desprezível diante da corrente do motor.
-A \autoref{fig:setup_picoscope_fisico} mostra a montagem física do ensaio.
-
-
-\begin{figure}[H]
-    \centering
-    \caption{Montagem física do ensaio: motor, bateria, neutro virtual e osciloscópio}
-    \label{fig:setup_picoscope_fisico}
-    \includegraphics[width=0.85\linewidth]{Textuais/Imgs/Resultados/ensaio_motor_vazio.jpg}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\subsection{Coeficientes Mecânicos}
-\label{sec:resultado_coef_mec}
-
-O levantamento das perdas mecânicas foi feito com o motor girando em vazio,
-na montagem improvisada descrita na \autoref{sec:resultado_setup_scope}.
-Foram registrados \num{19} patamares de rotação, de
-\SI{130}{\radian\per\second} a \SI{705}{\radian\per\second}. Sem carga no
-eixo, todo o torque desenvolvido é gasto nas perdas, de modo que o torque
-medido em regime permanente é o próprio torque de perdas. Como a montagem
-não dispõe de transdutor de torque, ele foi obtido pelo balanço de potência
-por fase: a potência elétrica que entra no enrolamento, descontada a
-dissipação resistiva, dividida pela velocidade mecânica. Esse caminho de
-cálculo não exige conhecer a forma de onda da força contraeletromotriz, a
-constante de FEM nem o ângulo do rotor, e é portanto independente do
-observador avaliado na \autoref{sec:resultado_smo_bancada}. Os pontos
-experimentais estão tabelados no \autoref{apendice:bancada}
-(\autoref{tab:bancada_patamares}).
-
-A \autoref{fig:bancada_te_omega} apresenta os pares
-$(\omega_{m,k},\ T_{e,k})$ e a reta ajustada pela
-Equação~\eqref{eq:ensaio_vazio_iq}. A regressão fornece
-
-\begin{equation}
-    B = (32{,}4 \pm 4{,}4)\times 10^{-6}~\si{\newton\meter\second\per\radian},
-    \qquad
-    \tau_c = (15{,}5 \pm 2{,}4)~\si{\milli\newton\meter},
-    \label{eq:resultado_b_tauc}
-\end{equation}
-
-com coeficiente de determinação $R^2 = \num{0,925}$. As incertezas são os
-erros padrão dos coeficientes da regressão.
-
-\begin{figure}[H]
-    \centering
-    \caption{Torque de perdas em função da rotação e reta ajustada}
-    \label{fig:bancada_te_omega}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_te_omega.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Os resíduos da regressão (\autoref{fig:bancada_te_residuo}) distribuem-se em
-torno de zero sem tendência com a rotação, o que confirma que o modelo de
-duas parcelas descreve os dados em toda a faixa ensaiada, e que o
-espalhamento remanescente é dispersão de medida entre patamares, não erro de
-forma do modelo.
-
-\begin{figure}[H]
-    \centering
-    \caption{Resíduos da regressão do torque de perdas}
-    \label{fig:bancada_te_residuo}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_te_residuo.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Chama a atenção o valor de $\tau_c$, alto para um motor deste porte se
-interpretado apenas como atrito de Coulomb dos rolamentos. A explicação é que
-um torque constante com a rotação corresponde a uma perda proporcional à
-rotação, que é justamente a assinatura da histerese no ferro do estator.
-Assim, os dois coeficientes da regressão não são grandezas puramente
-mecânicas: $\tau_c$ agrega o atrito seco dos rolamentos \emph{e} a perda por
-histerese, enquanto $B$ agrega o atrito viscoso, a ventilação e a perda por
-corrente parasita. Para o uso pretendido --- prever o torque de perdas a ser
-descontado na estimação --- essa agregação é adequada, já que o modelo
-reproduz a soma de todas as perdas independentes de carga.
-
-A medida de rotação, da qual todo o levantamento depende, foi conferida
-contra a frequência elétrica extraída das tensões de fase. Sobre \num{267}
-registros, o desvio médio entre as duas leituras é
-$-7{,}9\times10^{-4}\,\%$, com desvio padrão de $3{,}7\times10^{-2}\,\%$
-(\autoref{fig:bancada_tacometro}). O resultado confirma que o disco do
-tacômetro gera um pulso por volta e que o motor tem sete pares de polos,
-pressupostos usados na conversão entre velocidade elétrica e mecânica em
-todo o trabalho. Esse e os demais valores consolidados do ensaio estão
-reunidos na \autoref{tab:bancada_parametros}, no \autoref{apendice:bancada}.
-
-\begin{figure}[H]
-    \centering
-    \caption{Validação do tacômetro óptico contra a frequência elétrica das tensões de fase}
-    \label{fig:bancada_tacometro}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_tacometro.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-A constante de força contraeletromotriz foi extraída dos mesmos registros,
-pela razão entre a amplitude da FEM e a velocidade elétrica, patamar a
-patamar (\autoref{fig:bancada_ke}). O valor obtido é estável ao longo da
-faixa e equivale a \num{310}~RPM/V, coincidente com a especificação de placa
-do motor, o que fecha a caracterização elétrica com o catálogo do
-fabricante.
-
-\begin{figure}[H]
-    \centering
-    \caption{Constante de força contraeletromotriz em função da rotação}
-    \label{fig:bancada_ke}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_ke.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-A comparação com a bancada revelou um erro na parametrização usada na
-simulação: o procedimento de \textit{autotuning} da
-\autoref{sec:autotuning} partiu do $K_v$ de placa, que é declarado em
-grandeza de linha, e o tratou como se fosse de fase. A constante de FEM
-adotada na simulação ficou, por isso, três vezes maior que a medida, e todo
-o torque ali estimado está escalado por esse mesmo fator. Os ganhos do
-observador não são invalidados, porque a otimização é feita sobre o erro de
-seguimento e não sobre a escala absoluta de torque, mas o valor correto da
-constante para uso no \textit{firmware} é o levantado em bancada.
-
-
 \section{Modelagem do SMO}
 
 Durante a modelagem do controle \textit{sensorless}, a implementação da
@@ -291,7 +122,7 @@ descrito na \autoref{sec:autotuning}.
         Indutância de fase      & $L_s$    & \num{7} \si{\micro\henry} \\
         Polos                   & $P$      & \num{14} \\
         Pares de polos          & $p$      & \num{7} \\
-        Constante de velocidade & $K_v$    & $\frac{310}{\sqrt{3}}$ \si{RPM/V} \\
+        Constante de velocidade & $K_v$    & \num{310} \si{RPM/V} \\
         Momento de inércia      & $J$      & \num{0,0001} \si{kg.m^2} \\
         Coef. de carga da hélice\footnotemark
                                 & $k_{Q}$  & \num{2e-5} \si{N.m/(rad/s)^2} \\
@@ -620,11 +451,14 @@ sincronismo é apresentado na \autoref{fig:PLL_fig_desenvolvimento}.
 \label{sec:autotuning}
 
 Aplicado o procedimento de \textit{autotuning} formulado na
-\autoref{sec:param_smo}, a \autoref{fig:otim_convergencia} apresenta a
-convergência da busca, em que o custo agregado decresce de $J \approx \num{1,47}$
-no ponto inicial para $J \approx \num{0,32}$ até estabilizar. A dispersão entre
-avaliações sucessivas reflete a natureza não-convexa da função-custo já
-antecipada na metodologia. O \autoref{alg:autotuning} formaliza o procedimento.
+\autoref{sec:param_smo}, a \autoref{fig:otim_convergencia} traz o custo de
+cada avaliação e o melhor custo acumulado ao longo da busca. O custo parte de
+$J = \num{1,99}$ no ponto inicial e cai para $J = \num{1,16}$ nas primeiras
+dezenas de avaliações, permanecendo nesse patamar até o fim das \num{1278}
+avaliações. Os picos de três a quatro ordens de grandeza acima do patamar
+correspondem a combinações de ganhos em que o observador diverge, visitadas
+pela evolução diferencial durante a exploração do espaço de busca. O
+\autoref{alg:autotuning} formaliza o procedimento.
 
 
 \begin{figure}[H]
@@ -636,20 +470,24 @@ antecipada na metodologia. O \autoref{alg:autotuning} formaliza o procedimento.
     Fonte: Autor (2026)
 \end{figure}
 
-O procedimento convergiu para os ganhos discretizados $\Gamma_{s1}=\num{28,72}$,
-$\Gamma_{s2}=\num{-8,43}$ e $\Gamma_{t}=\num{0,0264}$, que correspondem, ao passo
-de simulação $T_s=\SI{10}{\micro\second}$, a $K_{s1}=\num{2,87e6}$,
-$K_{s2}=\num{-8,43e5}$ e $K_t=\num{2,64e3}$. A validade da parametrização sobre
-$\Gamma$ foi confirmada repetindo-se a otimização para
-$T_s \in \{2,\ 10,\ 20\}\,\si{\micro\second}$: os valores ótimos de $\Gamma$
-mantiveram-se invariantes, atestando o desacoplamento entre o resultado e o passo
-de integração e, por conseguinte, a transferibilidade direta ao \textit{firmware}.
+A busca resultou nos ganhos $\Gamma_{s1}=\num{31,06}$,
+$\Gamma_{s2}=\num{-5,94}$ e $\Gamma_{t}=\num{0,574}$, na forma invariante ao
+passo, que correspondem, ao passo de simulação
+$T_s=\SI{10}{\micro\second}$, a $K_{s1}=\num{3,11e6}$,
+$K_{s2}=\num{-5,94e5}$ e $K_t=\num{5,74e4}$. A otimização é conduzida sobre
+$\Gamma = K\,T_s$ para que o resultado não fique preso ao passo de
+integração: o \textit{firmware} recupera seus próprios ganhos dividindo os
+mesmos $\Gamma$ pelo período de amostragem em que roda.
 
-A \autoref{fig:otim_sensibilidade} apresenta a análise de sensibilidade da
-função-custo, obtida pela varredura unidimensional de cada ganho em torno do
-ótimo, mantendo os demais fixos. Cada parâmetro exibe um mínimo bem definido,
-confirmando que o ponto encontrado constitui um mínimo local em todas as direções
-de busca, e não um platô onde a escolha seria arbitrária.
+A \autoref{fig:otim_sensibilidade} apresenta a varredura unidimensional de
+cada ganho em torno do ótimo, mantendo os demais fixos. O perfil se repete nos
+três: um trecho aproximadamente plano à esquerda, em que o custo pouco varia,
+e uma subida abrupta à direita, de várias ordens de grandeza, onde a
+estimação deixa de acompanhar a planta. O ponto encontrado fica ao final do
+trecho plano, pouco antes dessa subida, o que sugere que a busca não devolve
+um mínimo pontual, e sim o maior ganho ainda dentro da região de operação
+estável. Reduzir os ganhos abaixo desse ponto custa pouco em desempenho;
+aumentá-los degrada a estimação rapidamente.
 
 \begin{figure}[H]
     \centering
@@ -660,16 +498,24 @@ de busca, e não um platô onde a escolha seria arbitrária.
     Fonte: Autor (2026)
 \end{figure}
 
-Em conjunto, os resultados demonstram a eficácia do ajuste automático: partindo
-de um ponto inicial deliberadamente distante, o procedimento reduziu o custo de
-seguimento em mais de uma ordem de grandeza e recuperou ganhos com mínimos bem
-definidos, sem qualquer intervenção manual, consolidando o \textit{autotuning}
-como ferramenta reaplicável a novos conjuntos motopropulsores caracterizados pela
-bancada.
+Em conjunto, a busca automática partiu de um ponto inicial arbitrário e chegou
+a um conjunto de ganhos utilizável sem intervenção manual, com custo cerca de
+\SI{40}{\percent} menor que o do ponto de partida. Como o procedimento depende
+apenas da resistência, da indutância e do perfil de velocidade adotado, pode
+ser repetido para outro conjunto motopropulsor caracterizado na bancada.
 % =====================================================================
 % RESULTADOS MECÂNICOS E CONCLUSÃO
 % =====================================================================
 
+Com esses ganhos, a \autoref{fig:desempenho_mecanico} compara a rotação e o
+torque estimados com os da planta ao longo do perfil de velocidade simulado. A
+rotação estimada acompanha os patamares, com atraso perceptível nas
+transições; o torque estimado reproduz o nível médio de cada patamar,
+sobreposto a uma ondulação da ordem da excursão do próprio torque real,
+herdada do acionamento em seis passos. A \autoref{fig:eixos_estaticos} mostra,
+em janela ampliada, as correntes e a força contraeletromotriz nos eixos
+$\alpha$ e $\beta$: as grandezas estimadas seguem as reais, com o
+\textit{chattering} característico do modo deslizante em torno delas.
 
 \begin{figure}[H]
     \centering
@@ -694,143 +540,9 @@ híbrida adotada para a estimação de estados. A integração do PLL com a
 reconstrução analítica da força contraeletromotriz mostrou-se eficaz para
 mitigar o \textit{chattering} intrínseco ao SMO e para evitar os atrasos
 temporais de filtros passa-baixas convencionais, reduzindo o erro de fase a
-poucos graus ao longo de todo o envelope de velocidade. Esta
-validação computacional encerra a prova de conceito do controle
-\textit{sensorless}, indicando que a modelagem está apta a ser traduzida para
-a linguagem C e embarcada no \textit{firmware} do sistema SAME. As duas
-subseções seguintes tratam da etapa experimental: o projeto das frequências
-de corte do condicionamento e a aplicação do observador aos registros de
-bancada.
-
-\newpage
-
-\subsection{Projeto das Frequências de Corte do Condicionamento}
-\label{sec:resultado_fc}
-
-Os registros de bancada permitiram fixar por medida, e não por estimativa, a
-frequência de corte dos filtros que antecedem o conversor analógico-digital.
-Sem filtragem, o ruído medido na saída do sensor de corrente é de
-\SI{719}{\milli\ampere} rms (\autoref{tab:bancada_parametros}), cerca de quinze vezes o degrau de quantização do
-conversor: o ruído sozinho ocupa quatro bits da palavra convertida, de modo
-que a filtragem não é um refinamento, e sim condição para que a medida tenha
-resolução útil.
-
-A \autoref{fig:bancada_espectros} mostra os espectros de corrente e de tensão
-com as faixas de interesse assinaladas: a fundamental elétrica, as raias de
-chaveamento do inversor e o patamar de ruído de banda larga que se estende
-muito acima delas. É esse patamar, e não o conteúdo útil, que define onde o
-corte precisa ficar.
-
-\begin{figure}[H]
-    \centering
-    \caption{Espectros de corrente e de tensão de fase com as faixas de interesse assinaladas}
-    \label{fig:bancada_espectros}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_espectros.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Uma varredura da frequência de corte, com o observador reprocessando os mesmos
-registros a cada valor, mostrou que a qualidade da estimação é insensível ao
-corte de \SI{3}{\kilo\hertz} para cima.
-O motivo é que o próprio observador já é um passa-baixas: o estimador de força
-contraeletromotriz tem polo em \SI{1,06}{\kilo\hertz} e a malha de sincronismo
-responde a \SI{150}{\hertz}. Tudo o que estiver acima disso é rejeitado pelo
-algoritmo, com ou sem filtro analógico. A escolha do corte, portanto, não pode
-ser justificada por desempenho do observador --- ela se decide pelo que o
-observador não tem como desfazer.
-
-São duas as restrições que sobram. A primeira é o rebatimento: componentes
-acima de metade da taxa de amostragem retornam à banda de interesse já dentro
-da palavra digitalizada, indistinguíveis do sinal, e nenhum processamento
-posterior as separa. A segunda é a faixa dinâmica, pelo motivo já exposto: o
-ruído que passa pelo filtro consome bits do conversor. As duas restrições
-empurram o corte para baixo, enquanto a preservação das raias de chaveamento
-o empurra para cima; a \autoref{fig:bancada_restricoes_fc} reúne as três num
-mesmo gráfico e delimita a faixa admissível.
-
-\begin{figure}[H]
-    \centering
-    \caption{Restrições sobre a frequência de corte do condicionamento}
-    \label{fig:bancada_restricoes_fc}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_restricoes_fc.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Adotou-se um filtro de um polo com corte em \SI{20}{\kilo\hertz}, idêntico nos
-ramos de tensão e de corrente. A ordem baixa é suficiente porque o observador
-complementa a atenuação em alta frequência, e a igualdade entre os dois ramos
-é a exigência mais importante do projeto: como o observador extrai a posição
-da coerência de fase entre tensão e corrente
-(\autoref{sec:condicionamento}), filtros iguais introduzem o mesmo atraso nos
-dois caminhos, e o erro de fase entre eles se cancela.
-
-\subsection{Observador Aplicado aos Registros de Bancada}
-\label{sec:resultado_smo_bancada}
-
-A última etapa de validação executou o observador sobre os registros da
-bancada, alimentando-o com as tensões e correntes medidas no lugar dos sinais
-gerados pela simulação. O ensaio é o mesmo dos patamares de rotação em vazio,
-de modo que a rotação do tacômetro e o torque do balanço de potência servem de
-referência independente para o que o observador estima. A constante de FEM
-empregada é a levantada em bancada.
-
-A \autoref{fig:bancada_smo_alfabeta} mostra as correntes, as tensões e a força
-contraeletromotriz estimada no referencial estacionário. As componentes
-$\alpha$ e $\beta$ da FEM aparecem em quadratura e com amplitude proporcional
-à rotação, que é a condição para o sincronismo funcionar.
-
-\begin{figure}[H]
-    \centering
-    \caption{Correntes, tensões e força contraeletromotriz estimada no referencial estacionário}
-    \label{fig:bancada_smo_alfabeta}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_alfabeta.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-A \autoref{fig:bancada_smo_rpm_torque} compara rotação e torque estimados com
-os medidos ao longo dos patamares. A velocidade estimada acompanha o tacômetro
-com erro médio de \SI{0,092}{\percent}. O torque estimado fica
-\SI{-7,2}{\percent} abaixo do medido, resultado obtido projetando a corrente
-\emph{medida} sobre o ângulo estimado. Os valores patamar a patamar constam
-da \autoref{tab:bancada_smo}, no \autoref{apendice:bancada}.
-
-\begin{figure}[H]
-    \centering
-    \caption{Rotação e torque, estimados pelo observador e medidos, ao longo dos patamares}
-    \label{fig:bancada_smo_rpm_torque}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_rpm_torque.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-O ângulo elétrico foi conferido contra a integral dos pulsos do tacômetro, que
-fornece uma referência de posição independente da estimação. A
-\autoref{fig:bancada_smo_angulo_tacometro} traz a comparação em um registro de
-\SI{0,5}{\second}: as duas curvas permanecem dentro de \SI{0,3}{\degree} de
-diferença média, e o comportamento se mantém em toda a faixa de rotação
-ensaiada.
-
-\begin{figure}[H]
-    \centering
-    \caption{Ângulo elétrico estimado contra a integral dos pulsos do tacômetro}
-    \label{fig:bancada_smo_angulo_tacometro}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_angulo_tacometro.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Há um limite inferior de operação. A malha de sincronismo responde a
-\SI{150}{\hertz}, e abaixo de aproximadamente \num{1930}~RPM o ângulo deixa de
-travar na posição do rotor, porque a amplitude da força contraeletromotriz cai
-com a rotação e o detector de fase perde referência. A velocidade estimada
-continua disponível nessa condição, mas o torque não, já que sua reconstrução
-depende da projeção da corrente sobre o ângulo. Na aplicação pretendida ---
-caracterização de conjuntos motopropulsores em regime de tração --- a faixa de
-interesse está acima desse limite, mas ele precisa ser respeitado na partida e
-nas transições de rotação baixa.
+poucos graus dentro do envelope de velocidade simulado. Encerrada a etapa
+computacional, a modelagem foi traduzida para C e submetida aos registros de
+bancada, tratados na \autoref{sec:ensaios_bancada}.
 
 \newpage
 
@@ -950,6 +662,306 @@ hélice montada, ainda não realizado.}
 
     Fonte: Autor (2026)
 \end{figure}
+
+\section{Ensaios de Bancada com o Motor}
+\label{sec:ensaios_bancada}
+
+\subsection{Instrumentação dos Ensaios com o Motor em Rotação}
+\label{sec:resultado_setup_scope}
+
+Os ensaios com o motor girando foram conduzidos com um osciloscópio
+PicoScope da Série 5000, disponível no laboratório do PET, operado pelo
+programa de aquisição do próprio fabricante
+(\autoref{fig:setup_picoscope_sw}). O equipamento oferece quatro canais
+analógicos e dois canais digitais, e essa disponibilidade definiu a
+divisão das grandezas registradas: duas tensões de fase e duas correntes
+de fase nos canais analógicos; o comando enviado ao gerador de pulsos e o
+sinal do tacômetro óptico nos canais digitais. As correntes vêm dos
+sensores de efeito Hall da própria placa de medição, cuja saída em tensão
+é lida diretamente pelo osciloscópio. A terceira tensão e a terceira
+corrente não são medidas: com o enrolamento equilibrado e sem caminho de
+retorno pelo neutro, ambas são reconstruídas na análise a partir das duas
+registradas, já que as três somam zero a cada instante.
+
+
+\begin{figure}[H]
+    \centering
+    \caption{Tela do PicoScope}
+    \label{fig:setup_picoscope_sw}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/picoscope_software.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A alimentação do conjunto foi feita por bateria, e não pela fonte de
+rede. Com isso o barramento fica flutuante em relação ao terra da
+instalação, o que evita laço de terra entre a alimentação do motor e a
+referência das pontas de prova do osciloscópio, e elimina a ondulação
+residual da retificação, que apareceria somada às tensões de fase
+medidas. O acionamento coube a dois controladores eletrônicos de
+velocidade distintos, empregados em sessões diferentes de ensaio: um Castle
+Talon de \SI{90}{\ampere} e um Flycolor de \SI{150}{\ampere}.
+
+O motor tem os enrolamentos ligados em estrela e não traz o ponto neutro
+acessível externamente: só os três terminais de fase saem da carcaça.
+Como as tensões de fase precisam ser medidas em relação ao neutro, ele foi
+reconstruído por fora com três resistores de mesmo valor, um por fase,
+unidos em um nó comum. Sendo iguais as resistências e equilibrado o
+sistema, esse nó reproduz o potencial do neutro do enrolamento e serve de
+referência para as pontas de prova, técnica corrente na medição de
+máquinas em estrela com neutro inacessível \cite{nidec_neutral_point}. O
+valor dos resistores é alto frente à impedância de fase, de modo que a
+corrente desviada pelo divisor é desprezível diante da corrente do motor.
+A \autoref{fig:setup_picoscope_fisico} mostra a montagem física do ensaio.
+
+
+\begin{figure}[H]
+    \centering
+    \caption{Montagem física do ensaio: motor, bateria, neutro virtual e osciloscópio}
+    \label{fig:setup_picoscope_fisico}
+    \includegraphics[width=0.85\linewidth]{Textuais/Imgs/Resultados/ensaio_motor_vazio.jpg}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\subsection{Coeficientes Mecânicos}
+\label{sec:resultado_coef_mec}
+
+O levantamento das perdas mecânicas foi feito com o motor girando em vazio,
+na montagem improvisada descrita na \autoref{sec:resultado_setup_scope}.
+Foram registrados \num{19} patamares de rotação, de
+\SI{130}{\radian\per\second} a \SI{705}{\radian\per\second}. Sem carga no
+eixo, todo o torque desenvolvido é gasto nas perdas, de modo que o torque
+medido em regime permanente é o próprio torque de perdas. Como a montagem
+não dispõe de transdutor de torque, ele foi obtido pelo balanço de potência
+por fase: a potência elétrica que entra no enrolamento, descontada a
+dissipação resistiva, dividida pela velocidade mecânica. Esse caminho de
+cálculo não exige conhecer a forma de onda da força contraeletromotriz, a
+constante de FEM nem o ângulo do rotor, e é portanto independente do
+observador avaliado na \autoref{sec:resultado_smo_bancada}. Os pontos
+experimentais estão tabelados no \autoref{apendice:bancada}
+(\autoref{tab:bancada_patamares}).
+
+A \autoref{fig:bancada_te_omega} apresenta os pares
+$(\omega_{m,k},\ T_{e,k})$ e a reta ajustada pela
+Equação~\eqref{eq:ensaio_vazio_iq}. A regressão fornece
+
+\begin{equation}
+    B = (32{,}4 \pm 4{,}4)\times 10^{-6}~\si{\newton\meter\second\per\radian},
+    \qquad
+    \tau_c = (15{,}5 \pm 2{,}4)~\si{\milli\newton\meter},
+    \label{eq:resultado_b_tauc}
+\end{equation}
+
+com coeficiente de determinação $R^2 = \num{0,925}$. As incertezas são os
+erros padrão dos coeficientes da regressão.
+
+\begin{figure}[H]
+    \centering
+    \caption{Torque de perdas em função da rotação e reta ajustada}
+    \label{fig:bancada_te_omega}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_te_omega.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Os resíduos da regressão (\autoref{fig:bancada_te_residuo}) distribuem-se em
+torno de zero sem tendência aparente com a rotação, o que sugere que o
+modelo de duas parcelas acompanha os dados na faixa ensaiada; o espalhamento
+remanescente é da ordem da dispersão entre patamares.
+
+\begin{figure}[H]
+    \centering
+    \caption{Resíduos da regressão do torque de perdas}
+    \label{fig:bancada_te_residuo}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_te_residuo.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Chama a atenção o valor de $\tau_c$, alto para um motor deste porte se
+interpretado apenas como atrito de Coulomb dos rolamentos. Uma explicação
+plausível é a perda por histerese no ferro do estator: ela cresce
+proporcionalmente à rotação e, portanto, aparece na regressão como um torque
+constante, somando-se ao atrito seco. Sob essa leitura, os dois coeficientes
+não seriam grandezas puramente mecânicas --- $\tau_c$ reuniria o atrito seco
+dos rolamentos e a histerese, e $B$ reuniria o atrito viscoso, a ventilação e
+a perda por corrente parasita. Para o uso pretendido, que é prever o torque de
+perdas a ser descontado na estimação, o modelo agregado atende, pois o que
+interessa é a soma das perdas independentes de carga.
+
+A medida de rotação, da qual todo o levantamento depende, foi conferida
+contra a frequência elétrica extraída das tensões de fase. Sobre \num{267}
+registros, o desvio médio entre as duas leituras é
+$-7{,}9\times10^{-4}\,\%$, com desvio padrão de $3{,}7\times10^{-2}\,\%$
+(\autoref{fig:bancada_tacometro}). O resultado é compatível com um pulso por
+volta no disco do tacômetro e sete pares de polos no rotor, pressupostos
+usados na conversão entre velocidade elétrica e mecânica ao longo do
+trabalho. Esse e os demais valores consolidados do ensaio estão
+reunidos na \autoref{tab:bancada_parametros}, no \autoref{apendice:bancada}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Validação do tacômetro óptico contra a frequência elétrica das tensões de fase}
+    \label{fig:bancada_tacometro}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_tacometro.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A constante de força contraeletromotriz foi extraída dos mesmos registros,
+pela razão entre a amplitude da FEM e a velocidade elétrica, patamar a
+patamar (\autoref{fig:bancada_ke}). O valor obtido é estável ao longo da
+faixa e equivale a \num{310}~RPM/V, valor próximo da especificação de placa
+do motor.
+
+\begin{figure}[H]
+    \centering
+    \caption{Constante de força contraeletromotriz em função da rotação}
+    \label{fig:bancada_ke}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_ke.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A conferência com a bancada também esclareceu a convenção do $K_v$ de placa.
+O valor de \num{310}~RPM/V é declarado em grandeza de linha, e a simulação
+inicialmente o convertia dividindo-o por $\sqrt{3}$, como se fosse de fase.
+A medida indica que a divisão não se aplica: o $K_v$ de catálogo já
+corresponde à grandeza de linha usada no modelo. A simulação da
+\autoref{sec:autotuning} foi refeita com a conversão corrigida, e é essa
+versão que consta neste texto.
+
+
+\subsection{Projeto das Frequências de Corte do Condicionamento}
+\label{sec:resultado_fc}
+
+Os registros de bancada permitiram fixar por medida, e não por estimativa, a
+frequência de corte dos filtros que antecedem o conversor analógico-digital.
+Sem filtragem, o ruído medido na saída do sensor de corrente é de
+\SI{719}{\milli\ampere} rms (\autoref{tab:bancada_parametros}), cerca de quinze vezes o degrau de quantização do
+conversor: o ruído sozinho ocupa quatro bits da palavra convertida, de modo
+que a filtragem não é um refinamento, e sim condição para que a medida tenha
+resolução útil.
+
+A \autoref{fig:bancada_espectros} mostra os espectros de corrente e de tensão
+com as faixas de interesse assinaladas: a fundamental elétrica, as raias de
+chaveamento do inversor e o patamar de ruído de banda larga que se estende
+muito acima delas. É esse patamar, mais do que o conteúdo útil, que orienta
+a escolha do corte.
+
+\begin{figure}[H]
+    \centering
+    \caption{Espectros de corrente e de tensão de fase com as faixas de interesse assinaladas}
+    \label{fig:bancada_espectros}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_espectros.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Uma varredura da frequência de corte, com o observador reprocessando os mesmos
+registros a cada valor, mostrou que a qualidade da estimação é insensível ao
+corte de \SI{3}{\kilo\hertz} para cima.
+O motivo é que o próprio observador já é um passa-baixas: o estimador de força
+contraeletromotriz tem polo em \SI{1,06}{\kilo\hertz} e a malha de sincronismo
+responde a \SI{150}{\hertz}. Tudo o que estiver acima disso é rejeitado pelo
+algoritmo, com ou sem filtro analógico. Nessa faixa, portanto, o desempenho
+do observador não serve de critério para escolher o corte, que passa a ser
+decidido pelo que o observador não tem como desfazer.
+
+São duas as restrições que sobram. A primeira é o rebatimento: componentes
+acima de metade da taxa de amostragem retornam à banda de interesse já dentro
+da palavra digitalizada, indistinguíveis do sinal, e nenhum processamento
+posterior as separa. A segunda é a faixa dinâmica, pelo motivo já exposto: o
+ruído que passa pelo filtro consome bits do conversor. As duas restrições
+empurram o corte para baixo, enquanto a preservação das raias de chaveamento
+o empurra para cima; a \autoref{fig:bancada_restricoes_fc} reúne as três num
+mesmo gráfico e delimita a faixa admissível.
+
+\begin{figure}[H]
+    \centering
+    \caption{Restrições sobre a frequência de corte do condicionamento}
+    \label{fig:bancada_restricoes_fc}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_restricoes_fc.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Adotou-se um filtro de um polo com corte em \SI{20}{\kilo\hertz}, idêntico nos
+ramos de tensão e de corrente. A ordem baixa é suficiente porque o observador
+complementa a atenuação em alta frequência, e a igualdade entre os dois ramos
+é o ponto de atenção do projeto: como o observador extrai a posição da
+coerência de fase entre tensão e corrente
+(\autoref{sec:condicionamento}), filtros iguais introduzem o mesmo atraso nos
+dois caminhos, e o erro de fase entre eles se cancela.
+
+\subsection{Observador Aplicado aos Registros de Bancada}
+\label{sec:resultado_smo_bancada}
+
+A última etapa de validação executou o observador sobre os registros da
+bancada, alimentando-o com as tensões e correntes medidas no lugar dos sinais
+gerados pela simulação. O ensaio é o mesmo dos patamares de rotação em vazio,
+de modo que a rotação do tacômetro e o torque do balanço de potência servem de
+referência independente para o que o observador estima. A constante de FEM
+empregada é a levantada em bancada.
+
+A \autoref{fig:bancada_smo_alfabeta} mostra as correntes, as tensões e a força
+contraeletromotriz estimada no referencial estacionário. As componentes
+$\alpha$ e $\beta$ da FEM aparecem em quadratura e com amplitude que cresce
+com a rotação, comportamento esperado para o sincronismo da malha.
+
+\begin{figure}[H]
+    \centering
+    \caption{Correntes, tensões e força contraeletromotriz estimada no referencial estacionário}
+    \label{fig:bancada_smo_alfabeta}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_alfabeta.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+A \autoref{fig:bancada_smo_rpm_torque} compara rotação e torque estimados com
+os medidos ao longo dos patamares. A velocidade estimada acompanha o tacômetro
+com erro médio de \SI{0,092}{\percent}. O torque estimado fica
+\SI{-7,2}{\percent} abaixo do medido, resultado obtido projetando a corrente
+\emph{medida} sobre o ângulo estimado. Os valores patamar a patamar constam
+da \autoref{tab:bancada_smo}, no \autoref{apendice:bancada}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Rotação e torque, estimados pelo observador e medidos, ao longo dos patamares}
+    \label{fig:bancada_smo_rpm_torque}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_rpm_torque.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O ângulo elétrico foi conferido contra a integral dos pulsos do tacômetro, que
+fornece uma referência de posição independente da estimação. A
+\autoref{fig:bancada_smo_angulo_tacometro} traz a comparação em um registro de
+\SI{0,5}{\second}: as duas curvas permanecem dentro de \SI{0,3}{\degree} de
+diferença média, com comportamento semelhante nos demais patamares
+ensaiados.
+
+\begin{figure}[H]
+    \centering
+    \caption{Ângulo elétrico estimado contra a integral dos pulsos do tacômetro}
+    \label{fig:bancada_smo_angulo_tacometro}
+    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_smo_angulo_tacometro.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+Há um limite inferior de operação. A malha de sincronismo responde a
+\SI{150}{\hertz}, e abaixo de aproximadamente \num{1930}~RPM o ângulo deixa de
+travar na posição do rotor, porque a amplitude da força contraeletromotriz cai
+com a rotação e o detector de fase perde referência. A velocidade estimada
+continua disponível nessa condição, mas o torque não, já que sua reconstrução
+depende da projeção da corrente sobre o ângulo. Na aplicação pretendida ---
+caracterização de conjuntos motopropulsores em regime de tração --- a faixa de
+interesse está acima desse limite, mas ele precisa ser respeitado na partida e
+nas transições de rotação baixa.
+
+\newpage
 
 \section{Modelagem Física}
 

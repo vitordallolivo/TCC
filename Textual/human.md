@@ -1502,3 +1502,104 @@ Nenhuma remissão órfã sobrou.
 `picoscope_software.png`, substituindo a última caixa tracejada dessa seção
 (`fig:setup_picoscope_sw`, `width=0.9\linewidth`). A seção
 `sec:resultado_setup_scope` está agora sem nenhum espaço reservado.
+
+---
+
+## ✅ Correção do $K_v$, simulação refeita e reordenação do capítulo
+
+Rodada de correção lógica pedida pelo autor. Compilado limpo (pdflatex +
+bibtex + 2× pdflatex): zero referência ou citação indefinida.
+
+### 1. Ordem das seções — simulação antes do ensaio
+
+Criada a `\section{Ensaios de Bancada com o Motor}` (`sec:ensaios_bancada`),
+posicionada **depois** de toda a simulação do SMO e antes de "Modelagem
+Física". Para lá foram movidas as quatro subseções de bancada:
+instrumentação, coeficientes mecânicos, frequências de corte e observador nos
+registros. Assim some a remissão para a frente que existia (a seção de
+coeficientes mecânicos citava o autotuning, que vinha depois).
+
+### 2. $K_v$ — 310 RPM/V já é de linha
+
+Correção do autor: **não** se divide por $\sqrt{3}$.
+
+- `Scripts/test_coeff_auto.py` (em `Codigos/Aplicacao_Pi/Scripts/`): a linha
+  `Kv = 310.0/math.sqrt(3)` virou `Kv = 310.0`. **Foi a única linha alterada
+  no código.**
+- **Tabela 9** (parâmetros da simulação, `tab:parametros_simulacao`):
+  $K_v = \frac{310}{\sqrt{3}}$ → $K_v = 310$ RPM/V.
+- O parágrafo que acusava "erro na simulação, constante de FEM 3× maior que a
+  medida" foi substituído por outro que registra a convenção correta e diz que
+  a simulação foi refeita.
+- Varri o resto do documento: as outras menções a 310 são o nome do motor e o
+  $K_v$ implícito do apêndice, ambas coerentes. Nenhuma outra conversão por
+  $\sqrt{3}$ ligada a $K_e/K_v$ no texto.
+
+### 3. Autotuning rodado de novo e figuras trocadas
+
+`autotune_cost.py --plot`, evolução diferencial, 1278 avaliações. Resultado:
+
+| grandeza | antes (texto) | agora |
+|---|---|---|
+| custo inicial | 1,47 | **1,99** |
+| custo final | 0,32 | **1,16** |
+| $\Gamma_{s1}$ | 28,72 | **31,06** |
+| $\Gamma_{s2}$ | −8,43 | **−5,94** |
+| $\Gamma_t$ | 0,0264 | **0,574** |
+| $K_t$ @ 10 µs | 2,64·10³ | **5,74·10⁴** |
+
+Figuras substituídas em `Textuais/Imgs/Desenvolvimento/`:
+`Otim_convergencia.png`, `Otim_sensibilidade.png`, `Torque_rpm.png`,
+`Eixo_alpha_beta.png`, `PLL_angulos.png`, `PI_controle_Inversor.png` e
+`FFT_comparacao.png` (esta última ainda não é usada em nenhum
+`\includegraphics`).
+
+O texto do autotuning foi reescrito **porque as figuras novas contam outra
+história**:
+
+- A convergência não cai "mais de uma ordem de grandeza": cai de 1,99 para
+  1,16 nas primeiras dezenas de avaliações e fica no patamar. O texto agora
+  diz isso, e explica os picos de 10³–10⁴ como combinações divergentes
+  visitadas pela busca.
+- A sensibilidade **não mostra mínimo bem definido** em nenhum dos três
+  ganhos: mostra um platô à esquerda e uma parede à direita, com o ótimo no
+  fim do platô. O texto passou a descrever isso — a busca devolve o maior
+  ganho ainda estável, não um mínimo pontual.
+- Saiu a afirmação de que a otimização foi repetida para
+  $T_s \in \{2, 10, 20\}\,\mu$s (não foi refeita nesta rodada); ficou só a
+  justificativa estrutural de otimizar sobre $\Gamma = K T_s$.
+
+### 4. Duas figuras estavam sem citação no corpo
+
+`fig:desempenho_mecanico` (Torque_rpm) e `fig:eixos_estaticos`
+(Eixo_alpha_beta) apareciam sem nenhuma menção no texto, contra a regra 3.
+Foi escrito um parágrafo que cita as duas e comenta o que se vê: rotação com
+atraso nas transições, torque estimado no nível médio com ondulação grande, e
+o \textit{chattering} em torno das grandezas reais.
+
+### 5. Dois ESCs no texto do setup
+
+Acrescentado que o acionamento coube a dois controladores em sessões
+diferentes: **Castle Talon 90 A** e **Flycolor 150 A** (são as colunas ESC
+A/B do apêndice).
+
+### 6. Afirmações fortes removidas
+
+Oito trechos suavizados nos resultados de bancada: "confirma" → "é compatível
+com"; "a explicação é" → "uma explicação plausível"; "é a exigência mais
+importante" → "é o ponto de atenção"; "que define onde o corte precisa ficar"
+→ "que orienta a escolha do corte"; e afins. Mesma régua aplicada ao texto
+novo do autotuning.
+
+### Precisa de revisão do autor
+
+- **O custo final piorou** em relação ao número que estava no texto (1,16
+  contra 0,32). Os dois não são comparáveis diretamente: o valor antigo vinha
+  de uma configuração anterior da função-custo, e o $K_v$ mudou. Vale decidir
+  se quer que eu investigue ou se o número atual serve.
+- $K_t$ subiu de 2,64·10³ para 5,74·10⁴ — vinte vezes. É o polo do estimador;
+  conferir se faz sentido para o firmware.
+- `FFT_comparacao.png` foi regerada mas não é usada em nenhuma figura do
+  documento. Se for para entrar, falta escrever a seção.
+- O ADC_amostragem/ADC_ideal_vs_amostrado **não** foram regerados (só saem
+  rodando `test_coeff_auto.py` direto, não pelo autotune).

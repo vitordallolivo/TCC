@@ -314,3 +314,12 @@ probe(id)` / `.probe_all()`.
   do SMO (Γ1/Γ2/Γt) — R/L do motor vêm de medição de bancada (ensaio de
   rotor bloqueado, ver `../SAME/CLAUDE.md`) e são digitados manualmente no
   `SAMEConfigDialog`/`EstimationDialog`, não estimados pela GUI.
+- **$K_v$ de placa é de linha**: os 310 RPM/V do motor já são grandeza de
+  linha-linha — **não** dividir por √3 ao converter para a constante de FEM.
+  `Scripts/test_coeff_auto.py` fazia `Kv = 310.0/math.sqrt(3)`; corrigido em
+  22/08/2026 para `310.0`, com o autotuning rodado de novo e as figuras da
+  monografia regeradas. Qualquer anotação que fale em "constante de FEM da
+  simulação 3× maior que a medida" é anterior a essa correção.
+- **Arquivos de `Scripts/` são CRLF**: preservar as quebras de linha ao
+  editar (abrir/gravar em binário ou com `newline=''`), senão o diff acusa o
+  arquivo inteiro alterado.

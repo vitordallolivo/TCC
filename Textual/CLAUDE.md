@@ -87,97 +87,128 @@ Textual/
 Compilar com `pdflatex` (2x) + `bibtex` + `pdflatex` (2x), todos a partir
 desta pasta — ver `README.md` para o passo a passo completo.
 
-## Ensaios de bancada do motor — material pronto, falta escrever
+## Ensaios de bancada do motor — já escritos, em fase de revisão
 
-Os ensaios de bancada com o motor girando já foram adquiridos e processados.
-O pipeline vive em `Dados TCC - Analise/analise/` (fora deste diretório) e
-tem `README.md` próprio com o detalhe completo. **O que falta é a redação do
-Capítulo 4.**
+Os ensaios de bancada com o motor girando foram adquiridos, processados e
+redigidos. O pipeline de análise vive em `Dados TCC - Analise/analise/` (fora
+deste diretório) e tem `README.md` próprio com o detalhe completo. Os dados de
+origem são \num{743} registros de osciloscópio, dos quais 378 passaram na
+triagem.
 
-### O que existe
+### Estado atual — as seções já estão escritas
 
-- **14 figuras** já em `Textuais/Imgs/Resultados/`, prefixo `bancada_`.
-- **6 tabelas** em `PosTextuais/Apendice_Bancada.tex`, já incluído em
-  `Apendices.tex`. Arquivo **gerado** por `p4_apendice.py` — se algum número
-  mudar, rodar o script de novo em vez de editar à mão.
-- Dados de origem: \num{743} registros de osciloscópio (duas tensões de fase,
-  duas correntes por sensor de efeito Hall, comando do gerador de pulsos e
-  tacômetro óptico), dos quais 378 passaram na triagem.
+As seções de resultado de bancada estão redigidas em `Textuais/Conclusao.tex`,
+dentro de `\section{Ensaios de Bancada com o Motor}` (`sec:ensaios_bancada`),
+que vem **depois** da simulação do SMO — ordem fixada pelo autor: simulação
+antes do ensaio. São quatro subseções: `sec:resultado_setup_scope`
+(instrumentação), `sec:resultado_coef_mec` (coeficientes mecânicos),
+`sec:resultado_fc` (frequências de corte) e `sec:resultado_smo_bancada`
+(observador nos registros). O que o autor pedir daqui em diante é revisão
+desse texto, não redação do zero.
 
-### Achados que precisam entrar no texto
+Regra de tom acertada com o autor: **nada de afirmação forte em resultado**.
+Escrever "é compatível com", "sugere", "aponta para"; não "confirma",
+"comprova", "atesta", "demonstra a eficácia".
 
-1. **Perdas a vazio (equação do torque de perdas).** Regressão sobre 19
-   patamares de rotação, de \SI{130}{\radian\per\second} a
-   \SI{705}{\radian\per\second}: atrito viscoso $B = (32{,}4 \pm 4{,}4)
-   \times 10^{-6}$ \si{\newton\meter\second\per\radian}, atrito seco
-   $\tau_c = (15{,}5 \pm 2{,}4)$ \si{\milli\newton\meter}, $R^2 = 0{,}925$.
-   O torque foi medido pelo balanço de potência por fase, que dispensa
-   conhecer a forma de onda, a constante de FEM e o ângulo do rotor.
-2. **O $\tau_c$ grande tem causa física.** Torque constante significa perda
-   proporcional à rotação, que é a assinatura da histerese no ferro. O termo
-   de atrito seco da equação agrega atrito mecânico \emph{mais} histerese; o
-   viscoso agrega atrito viscoso, ventilação e corrente parasita. Vale dizer
-   isso no texto — não é resíduo inexplicado.
-3. **O tacômetro fecha com a frequência elétrica em
-   $-7{,}9\times10^{-4}\,\%\ \pm\ 3{,}7\times10^{-2}\,\%$** sobre 267
-   registros. Confirma um pulso por volta e sete pares de polos.
-4. **A constante de FEM medida implica \SI{310}{rpm\per\volt}**, contra os
-   \SI{310}{rpm\per\volt} de placa. Ou seja: a caracterização fecha com o
-   catálogo do motor.
-5. **Erro encontrado na simulação.** O script de autotuning dos ganhos usa
-   uma constante de FEM \textbf{três vezes maior} que a medida — a conversão
-   partiu do $K_v$ de placa (que é de linha) tratando-o como se fosse de
-   fase. Isso escala todo o torque estimado pelo mesmo fator. Precisa ser
-   dito no texto e o valor corrigido é o da bancada.
-6. **Projeto das frequências de corte.** O ruído do sensor de corrente sem
-   filtro é \SI{719}{\milli\ampere} rms, quinze vezes o degrau do conversor.
-   A varredura mostra que o observador é **insensível** à frequência de corte
-   de \SI{3}{\kilo\hertz} para cima — porque o próprio observador já é um
-   passa-baixas (o estimador de força contraeletromotriz tem polo em
-   \SI{1,06}{\kilo\hertz} e a malha de sincronismo em \SI{150}{\hertz}).
-   Logo a escolha não se justifica por desempenho do observador, e sim pelo
-   que ele não consegue desfazer: rebatimento no conversor e faixa dinâmica.
-   Projeto: \SI{20}{\kilo\hertz}, um polo, **iguais** nos dois ramos.
-7. **Observador nos dados reais.** Velocidade com \SI{0,092}{\percent} de
-   erro médio; ângulo elétrico dentro de \SI{0,3}{\degree} de média contra a
-   integral dos pulsos do tacômetro, em toda a faixa; torque com
-   \SI{-7,2}{\percent} usando a corrente medida projetada no ângulo
-   estimado. Usando a corrente do modelo o erro vai a \SI{+71}{\percent} —
-   conclusão prática: projetar a corrente **medida**, não a do modelo.
-8. **Limite de baixa rotação.** A malha de sincronismo tem frequência natural
-   de \SI{150}{\hertz}; abaixo de cerca de \num{1930} rpm o ângulo deixa de
-   travar. A velocidade ainda sai, o torque não.
+### A montagem (ensaio improvisado)
 
-### Figuras disponíveis
+- Osciloscópio **PicoScope Série 5000** do laboratório do PET, com o programa
+  do próprio fabricante. **4 canais analógicos + 2 digitais** — é essa
+  contagem que define o que foi medido: duas tensões de fase e duas correntes
+  de fase no analógico; comando do gerador de pulsos e tacômetro óptico no
+  digital.
+- Correntes lidas pela saída em tensão dos sensores de efeito Hall da própria
+  placa.
+- Terceira tensão e terceira corrente **não são medidas** — reconstruídas na
+  análise pela soma nula das três.
+- Alimentação por **bateria** (barramento flutuante, sem laço de terra e sem
+  ondulação de retificação).
+- **Dois ESCs** ao longo das sessões: **Castle Talon 90 A** e **Flycolor
+  150 A** (colunas "ESC A/B" do apêndice).
+- **Neutro virtual**: motor em estrela sem neutro acessível, refeito com três
+  resistores iguais unidos num nó comum. Citação: `nidec_neutral_point`.
+
+### Números levantados
+
+1. **Perdas a vazio.** Regressão sobre 19 patamares, de
+   \SI{130}{\radian\per\second} a \SI{705}{\radian\per\second}: $B = (32{,}4
+   \pm 4{,}4)\times 10^{-6}$ \si{\newton\meter\second\per\radian}, $\tau_c =
+   (15{,}5 \pm 2{,}4)$ \si{\milli\newton\meter}, $R^2 = 0{,}925$. Torque pelo
+   balanço de potência por fase — dispensa forma de onda, constante de FEM e
+   ângulo do rotor.
+2. **$\tau_c$ alto tem leitura física.** Torque constante = perda
+   proporcional à rotação = assinatura de histerese no ferro. O termo de
+   atrito seco agrega mecânico + histerese; o viscoso agrega viscoso,
+   ventilação e corrente parasita. No texto isso aparece como hipótese
+   plausível, não como conclusão.
+3. **Tacômetro contra frequência elétrica:** $-7{,}9\times10^{-4}\,\%\ \pm\
+   3{,}7\times10^{-2}\,\%$ sobre 267 registros — compatível com um pulso por
+   volta e sete pares de polos.
+4. **Constante de FEM medida** equivale a 310 RPM/V, próximo da placa.
+5. **Frequências de corte.** Ruído do sensor sem filtro:
+   \SI{719}{\milli\ampere} rms, ~15× o degrau do conversor (~4 bits). O
+   observador é insensível ao corte de \SI{3}{\kilo\hertz} para cima, porque
+   ele próprio é passa-baixas (estimador de FEM com polo em
+   \SI{1,06}{\kilo\hertz}, sincronismo em \SI{150}{\hertz}). O que decide é
+   rebatimento no conversor e faixa dinâmica. Projeto: \SI{20}{\kilo\hertz},
+   um polo, **iguais** nos dois ramos.
+6. **Observador nos dados reais.** Velocidade com \SI{0,092}{\percent} de
+   erro médio; ângulo dentro de \SI{0,3}{\degree} de média contra a integral
+   dos pulsos; torque \SI{-7,2}{\percent} com a corrente **medida** projetada
+   no ângulo estimado.
+7. **Limite de baixa rotação.** Sincronismo a \SI{150}{\hertz}; abaixo de
+   ~\num{1930} RPM o ângulo não trava. Velocidade continua saindo, torque
+   não.
+
+### Convenção do $K_v$ — corrigida em 22/08/2026
+
+O $K_v$ de placa (310 RPM/V) **já é grandeza de linha**: não se divide por
+$\sqrt{3}$. O `test_coeff_auto.py` fazia `Kv = 310.0/math.sqrt(3)`; foi
+corrigido para `310.0`, o autotuning foi rodado de novo e as figuras da
+simulação foram regeradas. **Não existe mais** o achado antigo de "constante
+de FEM da simulação 3× maior que a medida" — se aparecer em algum texto ou
+anotação, está desatualizado.
+
+### Onde vive o código da simulação
+
+`/home/vitor/Documentos/Facul/TCC/Codigos/Aplicacao_Pi/Scripts/`, com a venv
+em `Aplicacao_Pi/.venv` (Python 3.13). `autotune_cost.py --plot` roda o
+autotuning (differential evolution sobre $\Gamma = K T_s$), grava
+`smo_gains.json` e gera `Otim_convergencia.png`, `Otim_sensibilidade.png` e
+`FFT_comparacao.png`, depois chama `plot_pi.py`, que gera `PLL_angulos.png`,
+`Torque_rpm.png`, `Eixo_alpha_beta.png` e `PI_controle_Inversor.png`. Os
+parâmetros do motor ficam no topo de `test_coeff_auto.py`. **Os arquivos são
+CRLF** — preservar as quebras de linha ao editar (gravar em modo binário ou
+com `newline=''`), senão o diff vira o arquivo inteiro.
+
+### Figuras de bancada existentes
 
 | arquivo em `Textuais/Imgs/Resultados/` | conteúdo |
 |---|---|
-| `bancada_te_omega.png` | torque de perdas contra rotação, com a reta ajustada — **a figura principal** |
+| `bancada_te_omega.png` | torque de perdas contra rotação, com a reta ajustada |
 | `bancada_te_residuo.png` | resíduos da regressão |
 | `bancada_ke.png` | constante de FEM contra rotação |
-| `bancada_tacometro.png` | validação do tacômetro (distribuição do erro em cima, correlação embaixo) |
-| `bancada_te_vs_fc.png` | robustez do torque medido à banda de medida |
-| `bancada_comando_rpm.png` | característica comando do gerador de pulsos $\to$ rotação |
+| `bancada_tacometro.png` | validação do tacômetro |
 | `bancada_espectros.png` | espectros de corrente e tensão com as bandas marcadas |
-| `bancada_restricoes_fc.png` | as três restrições sobre a frequência de corte num gráfico |
-| `bancada_smo_vs_fc.png` | qualidade do observador contra a frequência de corte |
-| `bancada_smo_rpm_torque.png` | rotação e torque, observador contra medida, ao longo dos patamares |
-| `bancada_smo_rpm.png` | só a rotação, patamar a patamar |
-| `bancada_smo_alfabeta.png` | correntes, tensões e força contraeletromotriz no referencial estacionário |
-| `bancada_smo_angulo_patamares.png` | ângulo elétrico e rotação, patamar a patamar, com o erro por rotação |
-| `bancada_smo_angulo_tacometro.png` | ângulo contra a integral dos pulsos, num registro de \SI{0,5}{\second} |
+| `bancada_restricoes_fc.png` | as três restrições sobre a frequência de corte |
+| `bancada_smo_rpm_torque.png` | rotação e torque, observador contra medida |
+| `bancada_smo_alfabeta.png` | correntes, tensões e FEM no referencial estacionário |
+| `bancada_smo_angulo_tacometro.png` | ângulo contra a integral dos pulsos |
+| `picoscope_software.png` | tela do programa do PicoScope |
+| `ensaio_motor_vazio.jpg` | foto da montagem física |
 
-### O que escrever
+O autor apagou as figuras que achou inúteis (`bancada_te_vs_fc`,
+`bancada_comando_rpm`, `bancada_smo_vs_fc`, `bancada_smo_rpm`,
+`bancada_smo_angulo_patamares`). Regra que ele deu: **figura que não existe
+mais leva junto o texto que vinha com ela**.
 
-Montar as seções de resultado **passo a passo**, uma por vez, na ordem:
-levantamento das perdas mecânicas $\to$ projeto das frequências de corte
-$\to$ observador aplicado aos dados reais. Para cada seção: o que o ensaio
-produziu, a figura, o número, e o que o número significa. Nada de repetir
-procedimento — isso é do Capítulo 3.
+### Apêndice da bancada
 
-Perguntar ao autor qual seção atacar antes de começar, e seguir as regras de
-1 a 8 acima (em especial: toda figura citada no corpo, caption e fonte, e
-`human.md` atualizado **depois** de escrever).
+`PosTextuais/Apendice_Bancada.tex`, gerado por `p4_apendice.py` (script não
+está nesta máquina). Tinha 6 tabelas; a de inventário das sessões foi
+removida a pedido do autor, restam 5. Se algum número mudar, rodar o script
+de novo — mas as alterações de formatação feitas à mão (cabeçalho da tabela
+de restrições em duas linhas) precisam ser reproduzidas no script.
 
 ## Contexto do plano de escrita
 
