@@ -908,10 +908,6 @@ inventado. Local = onde está o `\label` da figura ou da nota `Pendente`.
 | `fig:bancada_provisoria` | `02_MotorBLDC.tex` | Foto da montagem provisória |
 | `fig:native_sim` | `04_Ferramentas.tex` | Captura de tela: supervisão + native_sim |
 | `fig:sniffer_pacote` | `04_Ferramentas.tex` | Captura de tela: pacote de rede |
-| `fig:precarga_osc` | `06_Bancada.tex` | Captura de osciloscópio |
-| `fig:cad_caixa` | `06_Bancada.tex` | Render do CAD da caixa |
-| `fig:montagem_interna` | `06_Bancada.tex` | Foto da caixa aberta |
-| `fig:painel_externo` | `06_Bancada.tex` | Foto do painel externo |
 | `fig:pcb_siba` | `07_SIBA.tex` | Export KiCad: esquemático + roteamento |
 | `fig:pcb_same` | `08_SAME.tex` | Export KiCad: esquemático + roteamento |
 | `fig:setup_kelvin` | `Conclusao.tex` | Foto do ensaio de resistência (já desmontado, precisa remontar) |
@@ -1603,3 +1599,113 @@ novo do autotuning.
   documento. Se for para entrar, falta escrever a seção.
 - O ADC_amostragem/ADC_ideal_vs_amostrado **não** foram regerados (só saem
   rodando `test_coeff_auto.py` direto, não pelo autotune).
+
+---
+
+## ✅ Revisão crítica — cortes e condensações (08/09/2026)
+
+Aplicadas as mudanças não-ambíguas de uma revisão crítica do documento.
+Cinco arquivos alterados:
+
+### 1. `Conclusao.tex` — parágrafo histórico do $K_v$ removido
+
+O parágrafo que narrava o erro da simulação ("a simulação inicialmente
+convertia dividindo por $\sqrt{3}$...") foi removido por inteiro. O erro
+já foi corrigido e o texto publicado está correto; narrar o histórico de
+desenvolvimento não acrescenta resultado.
+
+### 2. `Revisao.tex` — seção UDP condensada + subseção ARP removida
+
+A seção "Protocolo de comunicação e telemetria" (antes ~1,5 páginas) foi
+condensada para um único parágrafo que retém os fatos técnicos essenciais:
+protocolo UDP, *overhead* de 8 bytes, MTU de 1500 bytes com payload
+$\leq 1472$, endereçamento estático. As duas figuras (encapsulamento e
+cabeçalho UDP) foram removidas junto com o texto que as comentava.
+A subseção "Resolução de Endereçamento e Camada Física" (ARP + fig:IP_to_AC)
+foi removida inteira — detalhe de camada 2/3 que não é procedimento de ensaio.
+
+### 3. `02_MotorBLDC.tex` — nota de rodapé do $\tau_c$ ampliada
+
+A nota que definia $\tau_c$ apenas como "atrito de Coulomb dos rolamentos"
+foi corrigida para: "O parâmetro $\tau_c$ agrega atrito seco dos rolamentos
+e perdas por histerese no ferro do estator; a regressão linear não os separa."
+Isso antecipa na metodologia o que o capítulo de resultados já discute sobre
+o valor alto de $\tau_c$.
+
+### 4. `06_Bancada.tex` — quatro blocos removidos
+
+Removidos por serem documentação de hardware, não procedimento de ensaio:
+- Parágrafo de referência + placeholder `fig:precarga_osc` (captura de
+  osciloscópio da pré-carga já documentada pelas equações da subseção)
+- `\subsection{Caixa de Instrumentação}` + `fig:cad_caixa`
+- `\subsection{Organização Interna}` + `fig:montagem_interna`
+- `\subsection{Conexões Externas}` + `fig:painel_externo`
+
+As quatro figuras também foram retiradas da tabela de pendências deste arquivo.
+
+### Decisões em aberto (ver listagem abaixo para detalhes)
+
+Seis itens da mesma revisão crítica têm OPÇÃO A/B ou precisam de confirmação
+do autor antes de implementar. Ainda não aplicados.
+
+---
+
+## ✅ Sessão 2026-09-08 — decisões aplicadas + modularização dos capítulos
+
+### Decisões 1-A, 2-A, 5, 6 — implementadas
+
+**Decisão 1-A: Curva Característica de Torque removida**
+Subseção inteira (`sec:motor_curvas`, `fig:tik_motor_bldc_ideal`) retirada de
+`Revisao/00_MotorBLDC.tex`. Referência em `sec:helice_acoplamento` corrigida
+(removido o trecho parentético "seu envelope..."). Referência em
+`02_TrabFuturos.tex` corrigida (removido `\autoref{sec:motor_curvas}`).
+
+**Decisão 2-A: Wheatstone condensado**
+Figura `fig:ponte_wheatstone_paralelo` (circuitikz da ponte) removida de
+`Revisao/02_Instrumentacao.tex`. Parágrafo que referenciava a figura
+substituído por versão condensada de 3 linhas; equações `eq:gauge_factor_simples`
+e `eq:wheatstone_simples` preservadas.
+
+**Decisão 5: parágrafo de pipeline em Modelagem do SMO**
+Adicionado após o cabeçalho da seção `\section{Modelagem do SMO}` em
+`Resultados/01_ModelagemSMO.tex`. Descreve a sequência simulação → autotuning
+→ bancada como motivação da seção.
+
+**Decisão 6: valores de J removidos do autotuning**
+Em `Resultados/01_ModelagemSMO.tex`, o trecho "O custo parte de J=1,99 no
+ponto inicial e cai para J=1,16 nas primeiras dezenas de avaliações" foi
+substituído por formulação qualitativa sem números absolutos do custo.
+
+### Modularização: Revisao.tex e Conclusao.tex
+
+Ambos os arquivos foram divididos no padrão de `Metodologia/` (um arquivo por
+`\section`). Os arquivos-pai passaram a ser apenas capítulo + `\input`s.
+
+**`Textuais/Revisao.tex`** → `\input` de:
+- `Revisao/00_MotorBLDC.tex`
+- `Revisao/01_Helice.tex`
+- `Revisao/02_Instrumentacao.tex`
+- `Revisao/03_UDP.tex`
+- `Revisao/04_Zephyr.tex`
+
+**`Textuais/Conclusao.tex`** → dois capítulos com `\input` de:
+- `Resultados/00_MedicaoParametros.tex`
+- `Resultados/01_ModelagemSMO.tex`
+- `Resultados/02_EnsaiosBancada.tex`
+- `Resultados/03_ModelagemFisica.tex`
+- `Resultados/04_SIBA.tex`
+- `Resultados/05_SAME.tex`
+- `Conclusao/00_Conclusao.tex`
+- `Conclusao/01_Limitacoes.tex`
+- `Conclusao/02_TrabFuturos.tex`
+
+Compilação final: **120 páginas, sem erros, sem referências indefinidas** para
+as seções tocadas.
+
+### Decisão 3 — deixada como está
+Seção de Zephyr mantida sem corte, conforme instrução do autor.
+
+### Decisão 4 — pendente
+Condensação adicional de `sec:same_tensao` em `08_SAME.tex` (remoção das
+equações de física magnética). Autor confirmou condensar "mais", mas a instrução
+foi cortada antes de especificar até onde. Aguardando retomada.

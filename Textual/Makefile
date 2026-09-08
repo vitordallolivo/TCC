@@ -43,6 +43,11 @@ pdf: $(DOC).pdf
 ifneq ($(IMG_NEWER),)
 $(DOC).pdf: FORCE
 endif
+
+ifeq ($(wildcard $(DOC).aux),)
+$(DOC).pdf: FORCE
+endif
+
 FORCE:
 
 $(DOC).pdf: $(SOURCES)

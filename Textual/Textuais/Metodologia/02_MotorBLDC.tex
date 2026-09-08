@@ -266,7 +266,7 @@ acionamento.
 \subsubsection{Coeficiente de Atrito Viscoso}
 \label{sec:atrito_viscoso}
 
-Para extrair os coeficientes de atrito ($B$ e $\tau_c$) \footnote{O atrito de Coulomb ($\tau_c$) representa uma parcela de torque constante necessária para vencer a fricção estática e cinética dos rolamentos}, estabiliza-se a rotação do motor a vazio em múltiplos patamares. Em regime permanente ($\frac{d\omega_m}{dt} = 0$), o torque eletromagnético anula exatamente as perdas mecânicas:
+Para extrair os coeficientes de atrito ($B$ e $\tau_c$) \footnote{O parâmetro $\tau_c$ agrega atrito seco dos rolamentos e perdas por histerese no ferro do estator; a regressão linear não os separa.}, estabiliza-se a rotação do motor a vazio em múltiplos patamares. Em regime permanente ($\frac{d\omega_m}{dt} = 0$), o torque eletromagnético anula exatamente as perdas mecânicas:
 
 \begin{equation}
     T_{e,k}= B\omega_{m,k} + \tau_c

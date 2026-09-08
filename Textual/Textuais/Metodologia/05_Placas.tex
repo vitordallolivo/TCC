@@ -94,7 +94,7 @@ barramento OSSI para qualquer interação com as camadas inferiores.
 A alternativa mais direta ao problema de várias fontes de evento concorrentes
 --- uma \textit{thread} própria por sensor, cada uma alterando diretamente as
 variáveis compartilhadas --- foi descartada por expor o sistema a condições de
-corrida e à necessidade de um mutex por variável compartilhada, com o
+corrida e à necessidade de um \textit{mutex} por variável compartilhada, com o
 consequente risco de \textit{deadlock} entre travas tomadas em ordens
 diferentes por \textit{threads} diferentes. Adotou-se, em seu lugar, o padrão
 de \textit{thread} única de processamento ilustrado na
@@ -106,7 +106,7 @@ uma fila de dados (\texttt{k\_msgq}) e delegam todo o processamento de lógica
 --- atualização de telemetria, verificação de segurança, despacho de comando
 --- à fila de trabalho única (\texttt{k\_work\_q}), que executa sempre na
 mesma \textit{thread}. Por construção, dois gerenciadores de domínio nunca
-executam simultaneamente disputando o mesmo estado, o que dispensa mutex entre
+executam simultaneamente disputando o mesmo estado, o que dispensa \textit{mutex} entre
 eles.
 
 \begin{figure}[H]

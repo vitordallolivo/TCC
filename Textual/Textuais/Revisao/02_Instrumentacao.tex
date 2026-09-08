@@ -1,0 +1,55 @@
+\section{Instrumentação para Bancadas Propulsivas}
+
+\subsection{Células de Carga e Extensometria}
+
+A medição de tração em ensaios propulsivos é realizada majoritariamente por células de carga, que atuam como transdutores de força baseados no princípio da extensometria (\textit{strain gauges}). O funcionamento desses sensores fundamenta-se na variação da resistência elétrica ($R$) de um condutor metálico quando submetido a uma deformação mecânica ($\epsilon$). A sensibilidade do sensor é definida pelo \textit{Gauge Factor} ($K$), que correlaciona a variação relativa de resistência com a deformação unitária aplicada, conforme \eqref{eq:gauge_factor_simples} \cite{Figliola2019}:
+
+\begin{equation}
+    K = \frac{\Delta R / R}{\epsilon}
+    \label{eq:gauge_factor_simples}
+\end{equation}
+
+Na configuração de ponte completa de Wheatstone, os quatro ramos variam com a deformação ($\Delta R = K \cdot R \cdot \epsilon$), com injeção de corrente constante ($i_{in}$). A tensão de saída é proporcional à deformação e à excitação, compensando efeitos térmicos \cite{Costa2021}. A expressão simplificada para ponte balanceada é \eqref{eq:wheatstone_simples}:
+
+\begin{equation}
+    V_{out} = V_{ex} \cdot \frac{K \epsilon}{4}
+    \label{eq:wheatstone_simples}
+\end{equation}
+
+
+\subsection{Velocidade e Densidade do Ar}
+\label{sec:velocidade_densidade_ar}
+
+A determinação da velocidade de escoamento ($v_\infty$) em regime incompressível baseia-se na aplicação da Equação de Bernoulli a um sistema de medição pneumático composto por um tubo de Pitot-estático. O transdutor capta a pressão de estagnação ($P_t$) na tomada de impacto e a pressão estática local ($P_s$), permitindo o cálculo da velocidade a partir da pressão dinâmica, conforme \eqref{eq:bernoulli_v} \cite{Anderson2016}:
+
+\begin{equation}
+    v_\infty = \sqrt{\frac{2(P_t - P_s)}{\rho}}
+    \label{eq:bernoulli_v}
+\end{equation}
+
+Onde $\rho$ representa a densidade do ar. Visto que a densidade é sensível a variações de altitude e temperatura, sua quantificação fundamenta-se na Lei dos Gases Ideais. De acordo com \cite{Moran2018}, a densidade pode ser expressa em função da pressão absoluta ($P_{atm}$) e da temperatura absoluta ($T$) conforme \eqref{eq:densidade_calculo}:
+
+\begin{equation}
+    \rho = \frac{P_{atm}}{R_{ar} \cdot T}
+    \label{eq:densidade_calculo}
+\end{equation}
+
+Sendo $R_{ar}$ a constante específica do ar ($287,05\,\mathrm{J/(kg \cdot K)}$). A instrumentação requer, portanto, a integração de transdutores de pressão diferencial e sensores barométricos para a normalização dos dados aerodinâmicos sob diferentes condições atmosféricas.
+
+\subsection{Medição da Velocidade Angular}
+\label{sec:medicao_rpm}
+
+A medição de velocidade angular ($\omega$) em máquinas rotativas fundamenta-se na detecção de pulsos gerados por transdutores ópticos ou magnéticos \footnote{Embora o escopo principal do sistema propulsivo foque na estimação uso de sensores, via observadores de estado, a instrumentação da bancada com um sensor óptico ou tacômetro externo faz-se estritamente necessária para fornecer uma medição de referência. Essa leitura direta é o que permite a validação experimental e o cálculo de erro do algoritmo de estimação proposto neste trabalho.}. O método predominante para a conversão desses pulsos em grandezas de frequência utiliza a funcionalidade de captura de entrada (\textit{Input Capture}) disponível em temporizadores de microcontroladores modernos \cite{Tocci2017}.
+
+
+
+O recurso de \textit{Input Capture} consiste no registro automático do valor corrente de um contador de \textit{hardware} no instante exato em que ocorre uma transição lógica (borda de subida ou descida) no pino de entrada do sensor. Ao armazenar os instantes $t_n$ e $t_{n+1}$ de pulsos sucessivos, define-se o período ($T$) do sinal. A rotação por minuto (RPM) é então calculada pela relação entre a frequência do sinal e o número de eventos por volta ($N_{pulsos}$), conforme \eqref{eq:input_capture_rpm} \cite{Northrup2018}:
+
+\begin{equation}
+    RPM = \frac{60}{(t_{n+1} - t_n) \cdot N_{pulsos}}
+    \label{eq:input_capture_rpm}
+\end{equation}
+
+Esta técnica apresenta resolução superior à contagem de pulsos em janelas de tempo fixas, uma vez que a precisão da medição depende estritamente da frequência de \textit{clock} do temporizador interno e não da duração da janela de observação. Para mitigar o efeito de ruídos eletromagnéticos e transientes mecânicos na detecção das bordas, a literatura recomenda a implementação de circuitos comparadores com \textit{Trigger} de Schmitt, que estabelecem patamares de comutação definidos e evitam disparos falsos no sistema de captura \cite{Tocci2017}.
+
+\newpage

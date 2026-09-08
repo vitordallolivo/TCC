@@ -1,0 +1,3 @@
+\section{Protocolo de comunicação e telemetria}
+
+A comunicação entre as placas e o PC usa UDP (\textit{User Datagram Protocol}) sobre Ethernet, escolhido por baixa latência e \textit{overhead} mínimo de 8~bytes de cabeçalho. Cada datagrama de telemetria respeita o MTU de 1500~bytes (payload $\leq 1472$~bytes) para evitar fragmentação na rede \cite{shichao_udp}. O endereçamento é estático por IP, eliminando \textit{handshake} e conferência de entrega típicos do TCP \cite{pinheiro2004}.

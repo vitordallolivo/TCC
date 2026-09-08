@@ -1,0 +1,415 @@
+\section{Motor BLDC e Estratégias de Estimação}
+
+Os motores de corrente contínua sem escovas (\textit{Brushless Direct Current} --- BLDC) são amplamente utilizados em aplicações que exigem alta eficiência e elevada densidade de potência, características essenciais para sistemas de propulsão elétrica embarcados \cite{Krishnan2017}. Diferentemente dos motores CC convencionais com escovas, a comutação nos motores BLDC é realizada eletronicamente por meio de um inversor de potência, o que elimina o desgaste mecânico das escovas e reduz significativamente a interferência eletromagnética gerada durante a operação \cite{Fitzgerald2014}.
+
+O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é descrito por um circuito RL associado a uma força contraeletromotriz (FEM) de perfil idealmente trapezoidal \cite{Krishnan2017}, conforme ilustrado na \autoref{fig:bldc_equivalente}. Para uma fase genérica $k \in \{a, b, c\}$, a tensão aplicada aos terminais é expressa por \eqref{eq:bldc_eletrica}:
+\begin{equation}
+    \begin{cases}
+    v_k(t) = R i_k + L \frac{di_k}{dt} + e_k \\ 
+    \sum_{k=a}^c i_k(t) = 0
+    \end{cases}
+    \label{eq:bldc_eletrica}
+\end{equation}
+
+\begin{figure}[ht]
+    \centering
+    \caption{Circuito Equivalente de um Motor BLDC em Configuração Estrela}
+    
+    \begin{circuitikz}[american, scale=1.2]
+        
+        % Fase A
+        \draw (0,2) node[left] {$v_a(t)$} to[short, o-] (0.5,2)
+              to[L, l=$L$, i=$i_a$] (2.5,2)
+              to[R, l=$R$] (4.5,2)
+              to[V, l=$e_1(t)$,invert] (6.5,2) coordinate (Na);
+              
+        % Fase B
+        \draw (0,0) node[left] {$v_b(t)$} to[short, o-] (0.5,0)
+              to[L, l=$L$, i=$i_b$] (2.5,0)
+              to[R, l=$R$] (4.5,0)
+              to[V, l=$e_2(t)$,invert] (6.5,0) coordinate (Nb);
+              
+        % Fase C
+        \draw (0,-2) node[left] {$v_c(t)$} to[short, o-] (0.5,-2)
+              to[L, l=$L$, i=$i_c$] (2.5,-2)
+              to[R, l=$R$] (4.5,-2)
+              to[V, l=$e_3(t)$,invert] (6.5,-2) coordinate (Nc);
+              
+        % Fechamento do Ponto Neutro (Conexão Estrela)
+        \draw (Na) -- (Nc); % Linha vertical conectando os três ramos
+        \filldraw (Nb) circle (1.5pt) node[right=4pt] {$n$}; % Nó central (Neutro)
+        
+    \end{circuitikz}
+    
+    \label{fig:bldc_equivalente}
+    \vspace{0.2cm} % Espaçamento para a fonte
+    \small Fonte: Autor (2026).
+\end{figure}
+
+onde $v_k$ é a tensão de fase, $R$ a resistência do enrolamento, $L$ a indutância própria da fase, $i_k$ a corrente e $e_k$ a força contraeletromotriz induzida. A magnitude da FEM $e_k$ é proporcional à velocidade angular mecânica do rotor ($\omega_m$) e à constante de força contraeletromotriz ($k_e$) \cite{Krishnan2017}, conforme a \eqref{eq:bldc_fem}:
+\begin{equation}
+    e_k = k_e \, \omega_m \, f_k(\theta_e)
+    \label{eq:bldc_fem}
+\end{equation}
+
+O perfil trapezoidal da função de forma para a fase $A$ é definido por \eqref{eq:funcao_trapezoidal}:
+\begin{equation}
+    f_a(\theta_e) = 
+    \begin{cases} 
+        \frac{6}{\pi} \theta_e, & 0 \leq \theta_e < \frac{\pi}{6} \\ 
+        1, & \frac{\pi}{6} \leq \theta_e < \frac{5\pi}{6} \\ 
+        -\frac{6}{\pi}(\theta_e - \pi), & \frac{5\pi}{6} \leq \theta_e < \frac{7\pi}{6} \\ 
+        -1, & \frac{7\pi}{6} \leq \theta_e < \frac{11\pi}{6} \\ 
+        \frac{6}{\pi}(\theta_e - 2\pi), & \frac{11\pi}{6} \leq \theta_e < 2\pi 
+    \end{cases}
+    \label{eq:funcao_trapezoidal}
+\end{equation}
+
+As funções das fases $B$ e $C$ seguem o mesmo perfil, porém defasadas em $\frac{2\pi}{3}$ e $\frac{4\pi}{3}$ radianos elétricos, respectivamente. O alinhamento perfeito entre as rampas e os platôs da FEM com a injeção retangular de corrente pelas fases é o princípio fundamental para a geração de torque constante. A \autoref{fig:bldc_waveforms} ilustra o sincronismo entre a posição elétrica do rotor, o perfil trapezoidal da FEM gerada em cada fase e as correntes comutadas.
+
+
+\begin{figure}[H]
+    \centering
+    \caption{Formas de onda detalhadas por fase: Forças contraeletromotrizes e correntes de excitação sincronizadas com a posição do rotor.}
+    \vspace{0.4cm}
+    
+    \begin{tikzpicture}[x=0.035cm, y=0.6cm, >=stealth, font=\small]
+
+        % Cores para as fases
+        \colorlet{colorA}{blue}
+        \colorlet{colorB}{red}
+        \colorlet{colorC}{green!60!black}
+
+        % --- Linhas Verticais de Comutação (Sincronismo) ---
+        % Ajustado para -30 no eixo Y para cruzar todos os subgráficos
+        \foreach \x in {30, 90, 150, 210, 270, 330} {
+            \draw[dashed, gray!60, thin] (\x, 1.5) -- (\x, -30);
+        }
+
+        % ==========================================
+        % GRUPO 1: FORÇAS CONTRAELETROMOTRIZES (FEM)
+        % ==========================================
+
+        % --- Fase A (e_a) ---
+        \begin{scope}[yshift=0cm]
+            \draw[->] (0,0) -- (390,0);
+            \node[left] at (0,1) {$E$}; \node[left] at (0,-1) {$-E$};
+            \node[left=0.8cm] at (0,0) {\textbf{$e_a$}};
+            \draw[colorA, thick] (0,0) -- (30,1) -- (150,1) -- (210,-1) -- (330,-1) -- (360,0);
+        \end{scope}
+
+        % --- Fase B (e_b) ---
+        \begin{scope}[yshift=-3cm]
+            \draw[->] (0,0) -- (390,0);
+            \node[left] at (0,1) {$E$}; \node[left] at (0,-1) {$-E$};
+            \node[left=0.8cm] at (0,0) {\textbf{$e_b$}};
+            \draw[colorB, thick] (0,-1) -- (90,-1) -- (150,1) -- (270,1) -- (330,-1) -- (360,-1);
+        \end{scope}
+
+        % --- Fase C (e_c) ---
+        \begin{scope}[yshift=-6cm]
+            \draw[->] (0,0) -- (390,0);
+            \node[left] at (0,1) {$E$}; \node[left] at (0,-1) {$-E$};
+            \node[left=0.8cm] at (0,0) {\textbf{$e_c$}};
+            \draw[colorC, thick] (0,1) -- (30,1) -- (90,-1) -- (210,-1) -- (270,1) -- (360,1);
+        \end{scope}
+
+        % ==========================================
+        % GRUPO 2: CORRENTES DE FASE
+        % ==========================================
+
+        % --- Fase A (i_a) ---
+        \begin{scope}[yshift=-10.5cm] % Espaço um pouco maior para separar Tensão e Corrente
+            \draw[->] (0,0) -- (390,0);
+            \node[left] at (0,1) {$I$}; \node[left] at (0,-1) {$-I$};
+            \node[left=0.8cm] at (0,0) {\textbf{$i_a$}};
+            \draw[colorA, thick] (0,0) -- (30,0) -- (30,1) -- (150,1) -- (150,0) -- (210,0) -- (210,-1) -- (330,-1) -- (330,0) -- (360,0);
+        \end{scope}
+
+        % --- Fase B (i_b) ---
+        \begin{scope}[yshift=-13.5cm]
+            \draw[->] (0,0) -- (390,0);
+            \node[left] at (0,1) {$I$}; \node[left] at (0,-1) {$-I$};
+            \node[left=0.8cm] at (0,0) {\textbf{$i_b$}};
+            \draw[colorB, thick] (0,-1) -- (90,-1) -- (90,0) -- (150,0) -- (150,1) -- (270,1) -- (270,0) -- (330,0) -- (330,-1) -- (360,-1);
+        \end{scope}
+
+        % --- Fase C (i_c) ---
+        \begin{scope}[yshift=-16.5cm]
+            \draw[->] (0,0) -- (390,0) node[right] {$\theta_e (^\circ)$};
+            \node[left] at (0,1) {$I$}; \node[left] at (0,-1) {$-I$};
+            \node[left=0.8cm] at (0,0) {\textbf{$i_c$}};
+            \draw[colorC, thick] (0,1) -- (30,1) -- (30,0) -- (90,0) -- (90,-1) -- (210,-1) -- (210,0) -- (270,0) -- (270,1) -- (360,1);
+
+            % Eixo X: Rótulos dos ângulos inseridos apenas no último gráfico para não poluir
+            \foreach \x in {0, 30, 90, 150, 210, 270, 330, 360} {
+                \draw (\x,0.1) -- (\x,-0.1) node[below] {\x};
+            }
+        \end{scope}
+
+    \end{tikzpicture}
+    
+    \label{fig:bldc_waveforms}
+    \vspace{0.2cm}
+    
+     Fonte: Autor (2026).
+\end{figure}
+
+A dinâmica mecânica do rotor, essencial para a estimação de torque e velocidade, é governada pela equação do movimento rotacional \cite{Fitzgerald2014}:
+\begin{equation}
+    J \frac{d\omega_m}{dt} = T_e - B\omega_m - T_L
+    \label{eq:bldc_mecanica}
+\end{equation}
+onde $J$ é o momento de inércia do rotor, $B$ o coeficiente de atrito viscoso, $T_e$ o torque eletromagnético desenvolvido e $T_L$ o torque de carga imposto ao eixo. 
+
+O torque eletromagnético total ($T_e$) advém do princípio da conservação de energia, onde a potência elétrica convertida no entreferro iguala-se à potência mecânica no eixo ($P_{mec} = T_e \cdot \omega_m$). Assim, o torque instantâneo pode ser obtido pelo somatório das contribuições das três fases \cite{Krishnan2017}, conforme \eqref{eq:bldc_torque_mec}:
+\begin{equation}
+    T_e = \frac{e_a i_a + e_b i_b + e_c i_c}{\omega_m}
+    \label{eq:bldc_torque_mec}
+\end{equation}
+
+\subsection{Transformada de Clarke e Observador}
+
+Para viabilizar a estimação de estados em tempo real, o sistema trifásico natural ($abc$) é frequentemente mapeado para um referencial estacionário bidimensional ortogonal ($\alpha\beta$) utilizando a Transformada de Clarke \cite{Clarke1943}:
+\begin{equation}
+    \begin{bmatrix} x_\alpha \\ x_\beta \end{bmatrix}
+    = \frac{2}{3}
+    \begin{bmatrix} 1 & -\frac{1}{2} & -\frac{1}{2} \\
+    0 & \frac{\sqrt{3}}{2} & -\frac{\sqrt{3}}{2} \end{bmatrix}
+    \begin{bmatrix} x_a \\ x_b \\ x_c \end{bmatrix}
+    \label{eq:clarke}
+\end{equation}
+
+Aplicando a transformação matricial definida em \eqref{eq:clarke} diretamente às grandezas elétricas do motor, obtêm-se as componentes de tensão ($v_\alpha$, $v_\beta$) no referencial estacionário a partir das tensões de fase medidas ou inferidas pelos ciclos de trabalho do inversor, conforme \eqref{eq:tensao_alphabeta}:
+\begin{equation}
+    \begin{cases}
+        v_\alpha = \frac{2}{3} v_a - \frac{1}{3} v_b - \frac{1}{3} v_c \\
+        v_\beta = \frac{\sqrt{3}}{3} v_b - \frac{\sqrt{3}}{3} v_c
+    \end{cases}
+    \label{eq:tensao_alphabeta}
+\end{equation}
+
+De forma análoga, a transformação é aplicada às correntes. Contudo, como o motor BLDC em configuração estrela isolada caracteriza um sistema onde a soma das correntes de fase é nula ($i_a + i_b + i_c = 0$), as componentes ortogonais de corrente ($i_\alpha$, $i_\beta$) podem ser computacionalmente simplificadas — exigindo a medição de apenas duas fases (frequentemente $i_a$ e $i_b$) —, conforme \eqref{eq:corrente_alphabeta}, reduzindo o esforço de processamento do algoritmo de estimação:
+\begin{equation}
+    \begin{cases}
+        i_\alpha = i_a \\
+        i_\beta = \frac{1}{\sqrt{3}} (i_a + 2i_b)
+    \end{cases}
+    \label{eq:corrente_alphabeta}
+\end{equation}
+
+Considerando o modelo da máquina neste referencial estacionário $\alpha\beta$, e adotando a aproximação pela componente fundamental (desprezando as harmônicas superiores da FEM trapezoidal para fins de estimação linear), as tensões terminais são expressas por \eqref{eq:modelo_alphabeta} \cite{ST_AN1078}:
+\begin{equation}
+    \begin{bmatrix} v_\alpha \\ v_\beta \end{bmatrix}
+    = R \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
+    + L_s \frac{d}{dt} \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
+    + \begin{bmatrix} e_\alpha \\ e_\beta \end{bmatrix}
+    \label{eq:modelo_alphabeta}
+\end{equation}
+
+Como dito anteriormente a FEM produzido é trapezoidal, por conta disso: 
+
+\begin{equation}
+    \begin{cases}
+    e_{\alpha} = K_e \omega_e f_{\alpha}(\theta_e) \\
+    e_{\beta} = K_e \omega_e f_{\beta}(\theta_e)
+    \end{cases}
+\end{equation}
+
+Supondo um sistema equilibrado $f_a + f_b + f_c = 0$, então via transformada de Clarke:
+
+\begin{equation}
+    \begin{cases}
+        f_{\alpha} (\theta_e) = f_{a} (\theta_e) \\
+        f_{\beta} (\theta_e)  = \frac{1}{\sqrt{3}} (f_b (\theta_e) - f_c (\theta_e))
+    \end{cases}
+\end{equation}
+
+As funções de forma e suas derivadas são detalhadas na Equações \eqref{eq:f_alpha}, \eqref{eq:df_alpha}, \eqref{eq:f_beta} e \eqref{eq:df_beta}:
+
+\begin{equation}
+    f_\alpha(\theta_e) = f_a(\theta_e) = 
+    \begin{cases} 
+        \frac{6}{\pi} \theta_e, & 0 \leq \theta_e < \frac{\pi}{6} \\ 
+        1, & \frac{\pi}{6} \leq \theta_e < \frac{5\pi}{6} \\ 
+        -\frac{6}{\pi}(\theta_e - \pi), & \frac{5\pi}{6} \leq \theta_e < \frac{7\pi}{6} \\ 
+        -1, & \frac{7\pi}{6} \leq \theta_e < \frac{11\pi}{6} \\ 
+        \frac{6}{\pi}(\theta_e - 2\pi), & \frac{11\pi}{6} \leq \theta_e < 2\pi 
+    \end{cases}
+    \label{eq:f_alpha}
+\end{equation}
+
+\begin{equation}
+    \frac{d f_\alpha}{d \theta_e} = \frac{d f_a}{d \theta_e} = 
+    \begin{cases} 
+        \frac{6}{\pi}, & 0 \leq \theta_e < \frac{\pi}{6} \\ 
+        0, & \frac{\pi}{6} \leq \theta_e < \frac{5\pi}{6} \\ 
+        -\frac{6}{\pi}, & \frac{5\pi}{6} \leq \theta_e < \frac{7\pi}{6} \\ 
+        0, & \frac{7\pi}{6} \leq \theta_e < \frac{11\pi}{6} \\ 
+        \frac{6}{\pi}, & \frac{11\pi}{6} \leq \theta_e < 2\pi 
+    \end{cases}
+    \label{eq:df_alpha}
+\end{equation}
+
+\begin{equation}
+    f_\beta(\theta_e) = \frac{1}{\sqrt{3}} \left[ f_a\left(\theta_e - \frac{2\pi}{3}\right) - f_a\left(\theta_e - \frac{4\pi}{3}\right) \right]
+    \label{eq:f_beta}
+\end{equation}
+
+\begin{equation}
+    \frac{d f_\beta}{d \theta_e} = \frac{1}{\sqrt{3}} \left[ \frac{d f_a}{d \theta_e}\left(\theta_e - \frac{2\pi}{3}\right) - \frac{d f_a}{d \theta_e}\left(\theta_e - \frac{4\pi}{3}\right) \right]
+    \label{eq:df_beta}
+\end{equation}
+
+Podemos então descrever o sistema completo como \eqref{eq:Eq_nao_linear}:
+
+\begin{equation}
+    \begin{bmatrix}
+        \dot{i_{\alpha}} \\ \dot{i_{\beta}}
+    \end{bmatrix} = -\frac{R}{L_s}
+    \begin{bmatrix}
+            {i_{\alpha}} \\ {i_{\beta}}
+    \end{bmatrix} - \frac{60 \cdot p }{2\pi K_v L_s} \cdot \omega_m \begin{bmatrix}
+        f_{\alpha}(\theta_e) \\ f_{\beta}(\theta_e)
+    \end{bmatrix} + \frac{1}{L_s} \begin{bmatrix}
+        {v_{\alpha}} \\ {v_{\beta}}
+    \end{bmatrix}
+    \label{eq:Eq_nao_linear}
+\end{equation}
+
+Conforme apresentado na \autoref{eq:Eq_nao_linear}, o sistema é descrito por equações dinâmicas não lineares, o que impõe desafios significativos à estimação de estados. Estruturas de observadores lineares clássicos, como o Observador de Luenberger ou o Regulador Linear Quadrático Gaussiano (LQG), podem não apresentar convergência satisfatória ou estabilidade em regimes transitórios e amplas faixas de operação, visto que negligenciam as não linearidades intrínsecas do modelo. Diante desse cenário, a literatura especializada destaca com frequência duas abordagens robustas: o Observador por Modos Deslizantes (SMO - Sliding Mode Observer) e o Filtro de Kalman Estendido, porém o EKF não será abordado neste trabalho, devido ao maior custo computacional e maior complexidade a solução adotada neste trabalho.
+
+\subsubsection{Observador por Modos Deslizantes (SMO)}
+\label{sec:SMO_revbib}
+O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fundamenta-se na teoria de sistemas de estrutura variável, sendo amplamente reconhecido por sua robustez intrínseca contra variações paramétricas e rejeição a distúrbios externos \cite{AbKaf2024}. Diferente de observadores lineares, o SMO utiliza uma lei de controle descontínua para forçar os erros de estado a convergirem para uma superfície de deslizamento em tempo finito.
+
+A estrutura do observador para o motor BLDC no referencial estacionário $\alpha\beta$ é projetada para estimar as correntes estatóricas e as forças contraeletromotrizes (BEMF). A dinâmica das correntes estimadas ($\hat{i}$) é definida por \eqref{eq:smo_modelo}:
+
+\begin{equation}
+    \begin{bmatrix}
+        \dot{\hat{i}}_{\alpha} \\ \dot{\hat{i}}_{\beta}
+    \end{bmatrix} =
+    -\frac{R_s}{L_s} \begin{bmatrix} \hat{i}_{\alpha} \\ \hat{i}_{\beta} \end{bmatrix}
+    + \frac{1}{L_s} \begin{bmatrix} v_{\alpha} \\ v_{\beta} \end{bmatrix}
+    - \frac{1}{L_s} \begin{bmatrix} \hat{e}_{\alpha} \\ \hat{e}_{\beta} \end{bmatrix}
+    + K_{s1} \begin{bmatrix} \text{Sat}(\tilde{i}_{\alpha}) \\ \text{Sat}(\tilde{i}_{\beta}) \end{bmatrix}
+    \label{eq:smo_modelo}
+\end{equation}
+
+onde $v_{\alpha,\beta}$ são as tensões aplicadas, $\hat{e}_{\alpha,\beta}$ são as BEMFs estimadas e $K_{s1}$ é o ganho de comutação. Para mitigar o fenômeno de \textit{chattering}, substitui-se a função sinal pela função de saturação ($\text{Sat}$), que suaviza a transição na camada limite.
+
+Definindo o erro de estimação de corrente como $\tilde{i}_{\alpha,\beta} = i_{\alpha,\beta} - \hat{i}_{\alpha,\beta}$ e o erro de BEMF como $\tilde{e}_{\alpha,\beta} = e_{\alpha,\beta} - \hat{e}_{\alpha,\beta}$, a dinâmica do erro é obtida subtraindo-se a \eqref{eq:smo_modelo} do modelo real da planta. De acordo com \cite{AbKaf2024}, essa relação resulta na dinâmica descrita pela \autoref{eq:eq18_error_dyn}:
+
+\begin{equation}
+    \begin{cases}
+        \dot{\tilde{i}}_{\alpha} = -\frac{R_s}{L_s}\tilde{i}_{\alpha} - \frac{\tilde{e}_{\alpha}}{L_s} - K_{11} \text{Sat}(\tilde{i}_{\alpha}) \\
+        \dot{\tilde{i}}_{\beta} = -\frac{R_s}{L_s}\tilde{i}_{\beta} - \frac{\tilde{e}_{\beta}}{L_s} - K_{22} \text{Sat}(\tilde{i}_{\beta}) \\
+        \dot{\hat{e}}_{\alpha} = K_{31} \text{Sat}(\tilde{i}_{\alpha}) \\
+        \dot{\hat{e}}_{\beta} = K_{42} \text{Sat}(\tilde{i}_{\alpha})
+    \end{cases}
+    \label{eq:eq18_error_dyn}
+\end{equation}
+
+O objetivo do observador é garantir que o sistema atinja a superfície de deslizamento $S$, definida pela \autoref{eq:eq19_sliding_surface} como o estado onde o erro de rastreamento é nulo:
+
+\begin{equation}
+    S = \begin{bmatrix} S_{\alpha} \\ S_{\beta} \end{bmatrix} = \begin{bmatrix} \tilde{i}_{\alpha} \\ \tilde{i}_{\beta}  \end{bmatrix} = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+    \label{eq:eq19_sliding_surface}
+\end{equation}
+
+Para verificar a estabilidade do observador e determinar o limite inferior do ganho $K_{s1}$, define-se a função candidata de Lyapunov positiva definida \autoref{eq:eq20_lyapunov}:
+
+\begin{equation}
+    V = \frac{1}{2} (\tilde{i}_{\alpha}^2 + \tilde{i}_{\beta}^2)
+    \label{eq:eq20_lyapunov}
+\end{equation}
+
+Para que a trajetória do erro seja atraída para a superfície $S$ em tempo finito, a derivada temporal de Lyapunov deve ser negativa ($\dot{V} < 0$) \cite{Ogata2010}. Utilizando a dedução algébrica via cálculo simbólico para a \autoref{eq:eq21_vdot}, obtém-se:
+
+\begin{equation}
+    \dot{V} = S^T \dot{S} = -\frac{R_s}{L_s}(\tilde{i}_{\alpha}^2 + \tilde{i}_{\beta}^2) - \frac{1}{L_s}(\tilde{e}_{\alpha}\tilde{i}_{\alpha} + \tilde{e}_{\beta}\tilde{i}_{\beta}) - K_{11} |\tilde{i}_{\alpha}| - K_{22} |\tilde{i}_{\beta}|
+    \label{eq:eq21_vdot}
+\end{equation}
+
+A análise da \eqref{eq:eq21_vdot} demonstra que a estabilidade é garantida se o termo de comutação $K_{s1}$ dominar as incertezas da BEMF. Assim, a condição de existência do modo deslizante exige que os ganhos satisfaçam,
+\begin{equation}
+    \begin{cases}
+        K_{11} > \frac{1}{L_s} | e_{\alpha}|_{max} \\
+        K_{22} > \frac{1}{L_s} | e_{\beta}|_{max} \\
+        \frac{K_{31}}{K_{11}} < 0 \\
+        \frac{K_{42}}{K_{22}} < 0 \\
+    \end{cases}
+\end{equation}
+
+
+Com isso $K_{s_1} = K_{11} = K_{22}$ e $K_{s_2} = K_{31} = K_{42}$, tem que,
+
+\begin{equation}
+    K_{s_{2}} <  K_{s_{1}}
+\end{equation}
+
+A partir das componentes estimadas $\hat{e}_{\alpha,\beta}$, a posição elétrica do rotor ($\theta_e$) é obtida por $\arctan(\hat{e}_{\alpha}/\hat{e}_{\beta})$, e o torque eletromagnético estimado ($\hat{T}_e$) segue a \autoref{eq:eq28_torque}:
+
+\begin{equation}
+    \hat{T}_e = \frac{3p}{4\omega_e} (\hat{e}_{\alpha} i_{\alpha} + \hat{e}_{\beta} i_{\beta})
+    \label{eq:eq28_torque}
+\end{equation}
+
+
+A implementação do observador por modos deslizantes em sistemas digitais fundamenta-se na discretização do modelo contínuo no referencial estacionário $\alpha\beta$. Para tal, aplica-se o método de Euler progressivo, aproximando as derivadas temporais pela razão incremental em um período de amostragem $T_s$. Esse processo permite transformar as equações diferenciais em um conjunto de equações de diferenças finitas adequadas para o processamento recursivo.
+
+Para simplificar o custo computacional e estruturar a dinâmica de estimação, definem-se coeficientes de discretização que agrupam os parâmetros físicos do motor e os ganhos de projeto do observador. O decaimento da corrente e a influência das entradas de tensão e força contraeletromotriz são regidos pelos seguintes parâmetros:
+
+\begin{equation}
+    \label{eq:discretizacao_coeff_smo}
+    \begin{cases}  
+    \Phi_{i} = 1 - \frac{R_{s} T_{s}}{L_{s}} \\
+    \Gamma_{v} = \frac{T_{s}}{L_{s}} \\ 
+    \Gamma_{s1} = K_{s_1} T_{s}\\ 
+    \Gamma_{s2} = K_{s_2} T_{s}
+    \end{cases}
+\end{equation}
+
+Com a aplicação desses coeficientes, o algoritmo de atualização das correntes estatóricas estimadas é definido para ambos os eixos ortogonais:
+
+\begin{equation}
+    \hat{i}_{\alpha,k+1} = \Phi_{i} \hat{i}_{\alpha,k} + \Gamma_{v} (v_{\alpha,k} - \hat{e}_{\alpha,k}) + \Gamma_{s1} \text{Sat}(i_{\alpha,k} - \hat{i}_{\alpha,k})
+\end{equation}
+
+\begin{equation}
+    \hat{i}_{\beta,k+1} = \Phi_{i} \hat{i}_{\beta,k} + \Gamma_{v} (v_{\beta,k} - \hat{e}_{\beta,k}) + \Gamma_{s1} \text{Sat}(i_{\beta,k} - \hat{i}_{\beta,k})
+\end{equation}
+
+A extração das componentes da força contraeletromotriz ocorre simultaneamente, utilizando o erro de estimação da corrente como sinal de controle para a superfície de deslizamento. A utilização da função de saturação em substituição à função sinal é adotada para atenuar o fenômeno de oscilações de alta frequência, resultando em:
+
+\begin{equation}
+    \hat{e}_{\alpha,k+1} = \hat{e}_{\alpha,k} + \Gamma_{s2} \text{Sat}(i_{\alpha,k} - \hat{i}_{\alpha,k})
+\end{equation}
+
+\begin{equation}
+    \hat{e}_{\beta,k+1} =  \hat{e}_{\beta,k} + \Gamma_{s2} \text{Sat}(i_{\beta,k} - \hat{i}_{\beta,k})
+\end{equation}
+
+Por fim, o torque eletromagnético estimado é calculado a partir da interação entre as correntes medidas e as forças contraeletromotrizes estimadas.
+
+\begin{equation}
+    \hat{T}_e = \frac{3 p (\hat{e}_{\alpha,k} \cdot i_{\alpha,k} + \hat{e}_{\beta,k} \cdot i_{\beta,k})}{4 \omega_{e}}
+\end{equation}
+
+A posição angular elétrica do rotor ($\theta_e$) é extraída diretamente das componentes estimadas da força contraeletromotriz no referencial estacionário, utilizando a função arco-tangente de dois argumentos:
+
+\begin{equation}
+    \hat{\theta}_e = \arctan \left( \frac{-\hat{e}_{\alpha,k}}{\hat{e}_{\beta,k}} \right)
+\end{equation}
+
+A partir da variação temporal da posição angular, obtém-se a velocidade angular elétrica ($\omega_e$). No domínio discreto, essa grandeza pode ser estimada pela diferença entre amostras consecutivas da posição, observando-se a necessidade de tratamento para as descontinuidades da função arco-tangente no intervalo $[-\pi, \pi]$:
+
+\begin{equation}
+    \hat{\omega}_e = \frac{\hat{\theta}_e(k) - \hat{\theta}_e(k-1)}{T_s}
+\end{equation}
+
+Para a obtenção da velocidade mecânica em rotações por minuto ($n_m$), utiliza-se a relação entre a frequência elétrica e o número de pares de polos ($p$) da máquina:
+
+\begin{equation}
+    n_m = \frac{60}{2\pi} \left( \frac{\hat{\omega}_e}{p} \right)
+\end{equation}

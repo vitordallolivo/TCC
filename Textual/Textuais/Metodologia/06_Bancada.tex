@@ -4,7 +4,7 @@ A arquitetura da bancada de aquisição foi organizada em uma estrutura funciona
 
 A energia provém de duas fontes intercambiáveis: uma bateria LiPo para operação em ensaios dinâmicos e uma fonte CA/CC de rede elétrica para operação em bancada estacionária. Ambas alimentam um barramento comum de 12V através de diodos em configuração OR lógica, garantindo que a bateria tenha prioridade automática quando conectada, sem necessidade de comutação manual. Deste barramento, dois estágios reguladores buck reduzem a tensão para 12V (alimentação de placas de controle e relés) e 5V (circuitos analógicos e sensores digitais).
 
-O controle da conexão ao motor é realizado por dois relés em sequência: o relé de pré-carga é acionado inicialmente, inserindo um resistor de 100$\,\Omega$ em série com o barramento de alimentação do ESC, limitando a corrente de inrush durante o carregamento dos capacitores internos. Após este período de estabilização, o relé de carga é acionado, efetuando um bypass do resistor de pré-carga e conectando o ESC diretamente ao barramento de potência. Durante esta sequência, um amperímetro registra a corrente total do sistema e um voltímetro monitora continuamente a tensão da bateria.
+O controle da conexão ao motor é realizado por dois relés em sequência: o relé de pré-carga é acionado inicialmente, inserindo um resistor de 100$\,\Omega$ em série com o barramento de alimentação do ESC, limitando a corrente de inrush durante o carregamento dos capacitores internos. Após este período de estabilização, o relé de carga é acionado, efetuando um \textit{bypass} do resistor de pré-carga e conectando o ESC diretamente ao barramento de potência. Durante esta sequência, um amperímetro registra a corrente total do sistema e um voltímetro monitora continuamente a tensão da bateria.
 
 O ESC comanda o motor BLDC, gerando três fases de corrente ($i_a$, $i_b$, $i_c$). A placa SAME captura os sinais analógicos de corrente, bem como sinais de tensão de linha para posterior reconstrução da componente de tensão neutra via transformação de Clarke.
 
@@ -179,107 +179,3 @@ resistor diminui. A dissipação instantânea de pico é
     \label{eq:ppico}
 \end{equation}
 
-A \autoref{fig:precarga_osc} traz a captura de osciloscópio da tensão de
-barramento do ESC durante a sequência de pré-carga, usada para validar em
-bancada o tempo de carregamento previsto pela Equação~\eqref{eq:tau_valor}.
-
-\begin{figure}[H]
-    \centering
-    \caption{Tensão no barramento do ESC durante a sequência de pré-carga (espaço reservado)}
-    \label{fig:precarga_osc}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
-              minimum height=5cm, text width=0.7\textwidth, font=\small]
-              {Captura de osciloscópio: subida da tensão de barramento do
-               ESC durante a pré-carga, a confrontar com $\tau \approx
-               \SI{0,2}{\second}$};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\subsection{Caixa de Instrumentação}
-
-A integração dos sistemas SAME e SIBA foi realizada em uma caixa de
-instrumentação fabricada por impressão 3D em filamento PLA, projetada para
-centralizar a alimentação, o processamento e as conexões de sinal em um único
-módulo físico. A escolha da impressão 3D permitiu a prototipagem rápida de uma
-geometria customizada às necessidades do projeto, com fixação interna dedicada
-para cada subsistema. Por se tratar de ensaios de curta duração, a limitação
-térmica do PLA não compromete a operação; ainda assim, previram-se aberturas
-para dissipação do calor gerado pelos componentes de potência. O modelo
-tridimensional da caixa está na \autoref{fig:cad_caixa}.
-
-\begin{figure}[H]
-    \centering
-    \caption{Modelo em CAD da caixa de instrumentação (espaço reservado)}
-    \label{fig:cad_caixa}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
-              minimum height=6cm, text width=0.7\textwidth, font=\small]
-              {Render do modelo CAD da caixa de instrumentação};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\subsection{Organização Interna}
-
-O \textit{layout} interno foi organizado de forma a separar fisicamente os
-componentes de potência dos circuitos de medição, minimizando o acoplamento
-eletromagnético entre eles. Tal separação é particularmente crítica neste
-projeto, uma vez que os sinais de interesse são de baixa amplitude — como a
-queda de tensão da ordem de milivolts sobre resistências de poucos
-miliohms e a saída dos sensores de efeito Hall —, sendo, portanto,
-suscetíveis a interferência. As placas SAME e SIBA foram fixadas nas
-extremidades da caixa por meio de parafusos, enquanto a placa de
-condicionamento de sinal do motor foi posicionada na região central,
-equidistante das duas placas principais. O ESC foi fixado internamente por
-abraçadeiras de náilon, garantindo imobilidade mecânica durante os ensaios
-sem danificar o encapsulamento do componente.
-
-O \textit{switch} Ethernet foi instalado internamente, com as portas RJ45
-acessíveis pelo painel externo da caixa, permitindo a conexão com a rede de
-aquisição sem necessidade de abertura do gabinete. A
-\autoref{fig:montagem_interna} mostra essa organização.
-
-\begin{figure}[H]
-    \centering
-    \caption{Organização interna da caixa de instrumentação (espaço reservado)}
-    \label{fig:montagem_interna}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.85\textwidth,
-              minimum height=6cm, text width=0.75\textwidth, font=\small]
-              {Fotografia da caixa aberta: placas SAME e SIBA, placa de
-               condicionamento, ESC e \textit{switch} Ethernet fixados
-               internamente};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\subsection{Conexões Externas}
-
-O painel externo da caixa concentra todas as interfaces com o ambiente de
-ensaio. O conector XT90 de entrada recebe a bateria LiPo, enquanto um segundo
-conector XT90 de saída alimenta o ESC. Os fios de fase do motor passam pelo
-interior da caixa através de conectores \textit{bullet} de \SI{6}{\milli\meter},
-permitindo a interposição dos núcleos de ferrite para a medição de corrente sem
-interrupção do cabo de potência. Uma entrada dedicada no painel permite a
-conexão dos fios da célula de carga utilizada para a medição de força de tração
-na bancada aerodinâmica. A \autoref{fig:painel_externo} mostra o painel
-montado.
-
-\begin{figure}[H]
-    \centering
-    \caption{Painel externo com as conexões de potência, de sinal e de rede (espaço reservado)}
-    \label{fig:painel_externo}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
-              minimum height=5cm, text width=0.7\textwidth, font=\small]
-              {Fotografia do painel externo: conectores XT90, saídas de
-               fase, entrada da célula de carga e portas RJ45};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
