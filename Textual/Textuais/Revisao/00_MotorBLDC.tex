@@ -180,6 +180,8 @@ Para viabilizar a estimação de estados em tempo real, o sistema trifásico nat
     \label{eq:clarke}
 \end{equation}
 
+O eixo $\alpha$ coincide com o eixo da fase $a$; o eixo $\beta$ é ortogonal a ele no mesmo plano. A transformada não altera o sistema físico: as três ondas defasadas de 120° continuam existindo no motor, mas passam a ser representadas por duas ondas defasadas de 90° — uma componente em cada eixo. Como a soma das correntes de fase é nula ($i_a + i_b + i_c = 0$), apenas duas são linearmente independentes, e a projeção em $\alpha\beta$ não perde informação. O referencial permanece estacionário, portanto as grandezas continuam oscilando em corrente alternada.
+
 Aplicando a transformação matricial definida em \eqref{eq:clarke} diretamente às grandezas elétricas do motor, obtêm-se as componentes de tensão ($v_\alpha$, $v_\beta$) no referencial estacionário a partir das tensões de fase medidas ou inferidas pelos ciclos de trabalho do inversor, conforme \eqref{eq:tensao_alphabeta}:
 \begin{equation}
     \begin{cases}
@@ -277,11 +279,86 @@ Podemos então descrever o sistema completo como \eqref{eq:Eq_nao_linear}:
     \label{eq:Eq_nao_linear}
 \end{equation}
 
+Para análise e controle, aplica-se ainda a Transformada de Park, que gira o referencial $\alpha\beta$ de um ângulo $\theta_e$ igual ao ângulo elétrico do rotor. O resultado é o referencial $dq$: o eixo $d$ (\textit{direto}) alinha-se com o fluxo do ímã permanente do rotor, e o eixo $q$ (\textit{em quadratura}) fica perpendicular a ele, adiantado de 90°. Como o referencial gira junto com o rotor, o vetor de corrente — que girava em $\alpha\beta$ — aparece parado em $dq$: as três senoides de fase tornam-se dois valores praticamente constantes. A componente $i_d$ magnetiza ou desmagnetiza a máquina; a componente $i_q$ é proporcional ao torque eletromagnético ($T_e = \tfrac{3}{2} p \lambda_m i_q$). Separar torque e fluxo em variáveis independentes é o principal benefício do referencial $dq$.
+
 Conforme apresentado na \autoref{eq:Eq_nao_linear}, o sistema é descrito por equações dinâmicas não lineares, o que impõe desafios significativos à estimação de estados. Estruturas de observadores lineares clássicos, como o Observador de Luenberger ou o Regulador Linear Quadrático Gaussiano (LQG), podem não apresentar convergência satisfatória ou estabilidade em regimes transitórios e amplas faixas de operação, visto que negligenciam as não linearidades intrínsecas do modelo. Diante desse cenário, a literatura especializada destaca com frequência duas abordagens robustas: o Observador por Modos Deslizantes (SMO - Sliding Mode Observer) e o Filtro de Kalman Estendido, porém o EKF não será abordado neste trabalho, devido ao maior custo computacional e maior complexidade a solução adotada neste trabalho.
 
 \subsubsection{Observador por Modos Deslizantes (SMO)}
 \label{sec:SMO_revbib}
-O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fundamenta-se na teoria de sistemas de estrutura variável, sendo amplamente reconhecido por sua robustez intrínseca contra variações paramétricas e rejeição a distúrbios externos \cite{AbKaf2024}. Diferente de observadores lineares, o SMO utiliza uma lei de controle descontínua para forçar os erros de estado a convergirem para uma superfície de deslizamento em tempo finito.
+O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fundamenta-se na teoria de sistemas de estrutura variável, sendo amplamente reconhecido por sua robustez intrínseca contra variações paramétricas e rejeição a distúrbios externos \cite{AbKaf2024}. Diferente de observadores lineares, o SMO utiliza uma lei de controle descontínua para forçar os erros de estado a convergirem para uma superfície de deslizamento em tempo finito. A \autoref{fig:smo_diagrama_bloco} ilustra a estrutura genérica do observador: o modelo estimado recebe a mesma entrada $u$ da planta real e corrige suas estimativas com base no erro de saída $y - \hat{y}$, processado por uma função não linear.
+
+\begin{figure}[H]
+    \centering
+    \caption{Estrutura genérica do Observador por Modos Deslizantes}
+    \label{fig:smo_diagrama_bloco}
+    \begin{tikzpicture}[>=latex, font=\small,
+        bloco/.style={draw, rectangle, rounded corners=2pt,
+                      minimum height=2.6em, align=center, inner sep=5pt},
+        soma/.style={draw, circle, inner sep=0pt, minimum size=1.6em}]
+
+        % ── Área sombreada (desenhada antes dos nós) ────────────────────
+        \fill[cyan!15, rounded corners=5pt] (0.3,-2.8) rectangle (12.8,2.2);
+        \draw[cyan!40, rounded corners=5pt] (0.3,-2.8) rectangle (12.8,2.2);
+        \node[font=\scriptsize, text=gray!70, anchor=north east] at (12.7,2.2)
+            {Observador Não Linear};
+
+        % ── Planta (topo, fora da área sombreada) ───────────────────────
+        \node[bloco, minimum width=9em, minimum height=3.8em] (planta) at (5.5,3.5)
+            {Planta\\[2pt]\footnotesize$\dot{x}=Ax+Bu$\\[-1pt]\footnotesize$y=Cx$};
+
+        % ── Somador (direita da área sombreada) ─────────────────────────
+        \node[soma] (sum) at (11.5,1.0) {};
+        \node[font=\tiny] at ($(sum)+(0,0.3)$) {$+$};
+        \node[font=\tiny] at ($(sum)+(0,-0.3)$) {$-$};
+
+        % ── Bloco sign ──────────────────────────────────────────────────
+        \node[bloco, minimum width=5em] (sign) at (7.5,1.0) {sign$(\cdot)$};
+
+        % ── Ganho L ─────────────────────────────────────────────────────
+        \node[bloco, minimum width=3em] (L) at (3.5,1.0) {$L$};
+
+        % ── Modelo estimado (base da área sombreada) ─────────────────────
+        \node[bloco, minimum width=11em, minimum height=3.8em] (obs) at (7,-1.5)
+            {\footnotesize$\dot{\hat{x}}=A\hat{x}+Bu+L\cdot\text{sign}(y-C\hat{x})$\\[2pt]
+             \footnotesize$\hat{y}=C\hat{x}$};
+        \node[font=\scriptsize, above=1pt of obs.north] {Modelo Estimado};
+
+        % ── Entrada u ────────────────────────────────────────────────────
+        \coordinate (u_jct) at (0.8,2.5);
+        \draw[->] (-1.5,2.5) -- node[above]{$u$} (u_jct);
+        \fill (u_jct) circle (1.8pt);
+        \draw[->] (u_jct) |- (planta.west);
+
+        % u desce pela coluna esquerda até junção com L
+        \coordinate (merge_jct) at (1.5,-1.5);
+        \draw (u_jct) -- (0.8,-1.5) -- (merge_jct);
+        \fill (merge_jct) circle (1.8pt);
+        \draw[->] (merge_jct) -- (obs.west);
+
+        % ── L → mesma junção ─────────────────────────────────────────────
+        \draw (L.west) -- (1.5,1.0) -- (merge_jct);
+
+        % ── Planta → y ───────────────────────────────────────────────────
+        \coordinate (y_fork) at (11.5,3.5);
+        \draw (planta.east) -- node[above]{$y$} (y_fork);
+        \fill (y_fork) circle (1.8pt);
+        \draw[->] (y_fork) -- (sum.north);
+        \draw[->] (y_fork) -- ++(1.5,0) node[right]{$y$};
+
+        % ── sum → sign → L ────────────────────────────────────────────────
+        \draw[->] (sum.west) -- node[above]{\footnotesize$y-C\hat{x}$} (sign.east);
+        \draw[->] (sign.west) -- (L.east);
+
+        % ── Modelo estimado → ŷ ───────────────────────────────────────────
+        \coordinate (yhat_fork) at (11.5,-1.5);
+        \draw (obs.east) -- node[above]{$\hat{y}$} (yhat_fork);
+        \fill (yhat_fork) circle (1.8pt);
+        \draw[->] (yhat_fork) -- (sum.south);
+        \draw[->] (yhat_fork) -- ++(1.5,0) node[right]{$\hat{y}$};
+
+    \end{tikzpicture}
+    \fonte{Adaptado de \cite{AbKaf2024}.}
+\end{figure}
 
 A estrutura do observador para o motor BLDC no referencial estacionário $\alpha\beta$ é projetada para estimar as correntes estatóricas e as forças contraeletromotrizes (BEMF). A dinâmica das correntes estimadas ($\hat{i}$) é definida por \eqref{eq:smo_modelo}:
 

@@ -142,7 +142,7 @@ propagam-se para $D_{prop}$ nas Equações~\eqref{eq:Prop_coeff1} e
 \eqref{eq:Prop_coeff2}, conforme a nomenclatura $D \times P$ da
 \autoref{sec:helice_aerodinamica}.
 
-Para a caracterização experimental, o motor BLDC é acionado utilizando um Controlador Eletrônico de Velocidade (ESC) comercial. Como o torque eletromagnético ($T_e$) em motores de ímã permanente é proporcional à corrente de eixo em quadratura ($I_q$), a bancada de testes irá ser instrumentada para adquirir as correntes instantâneas de fase do motor. O esquema de \textit{hardware} e as formas de onda esperadas estão ilustrados na Figura \ref{fig:circuito_esc_correntes}.
+Para a caracterização experimental, o motor BLDC é acionado por um Controlador Eletrônico de Velocidade (ESC) comercial. O torque eletromagnético ($T_e$) é proporcional à corrente de eixo em quadratura ($I_q$), e os ensaios foram conduzidos com as correntes e tensões de fase adquiridas diretamente por osciloscópio. O esquema de aquisição e as formas de onda resultantes estão ilustrados na Figura~\ref{fig:circuito_esc_correntes}.
 
 \begin{figure}[H]
     \centering
@@ -160,8 +160,8 @@ Para a caracterização experimental, o motor BLDC é acionado utilizando um Con
         % BLDC posicionado à direita
         \node [draw, rectangle, rounded corners=8pt, minimum height=8em, minimum width=5em, right=of esc, node distance=6.5cm] (motor) {BLDC};
 
-        % SAME/DAQ centralizado abaixo
-        \node [draw, rectangle, minimum height=4em, minimum width=10em, below=of esc, node distance=4.5cm, xshift=3.25cm] (daq) {SAME / DAQ};
+        % DAQ centralizado abaixo
+        \node [draw, rectangle, minimum height=4em, minimum width=10em, below=of esc, node distance=4.5cm, xshift=3.25cm] (daq) {Osciloscópio};
 
         % --- Conexões Bateria -> ESC ---
         \draw [thick] ([yshift=0.3cm]bat.east) -- node[above] {$V_{DC}$} ([yshift=0.3cm]esc.west);
@@ -255,13 +255,12 @@ Para a caracterização experimental, o motor BLDC é acionado utilizando um Con
     \small Fonte: Autor (2026)
 \end{figure}
 
-Através do Sistema de Aquisição do Motor Elétrico (SAME), lê-se as correntes de pelo menos duas fases (ex: $I_a$ e $I_b$). Considerando que não há conexão de neutro, a terceira corrente é obtida por $I_c = -(I_a + I_b)$. Sincronizando essas leituras com a posição angular elétrica do rotor ($\theta_e$) --- obtida indiretamente pela medição do sensor óptico --- aplica-se as transformadas de Clarke e Park (\textit{offline} ou \textit{online}) para mapear as grandezas do referencial trifásico estacionário ($abc$) para o referencial síncrono girante ($dq$) \footnote{Devido à natureza da comutação trapezoidal (6-step) do ESC utilizado, as correntes de fase apresentam harmônicos que resultam em oscilações (\textit{ripple}) nas componentes $I_d$ e $I_q$ após a transformada de Park. Para os cálculos de caracterização, utiliza-se o valor médio filtrado de $I_q$, que representa a componente fundamental do torque eletromagnético médio em regime permanente.}.
+Registram-se as correntes de pelo menos duas fases (ex.: $I_a$ e $I_b$); a terceira é reconstruída por $I_c = -(I_a + I_b)$, pois não há neutro acessível. Aplicam-se as transformadas de Clarke e Park para mapear as grandezas do referencial trifásico estacionário ($abc$) para o referencial síncrono girante ($dq$)\footnote{Devido à comutação trapezoidal (6-\textit{step}) do ESC, as correntes apresentam harmônicos que produzem \textit{ripple} nas componentes $I_d$ e $I_q$ após a transformada de Park. Utiliza-se o valor médio filtrado de $I_q$, representativo do torque eletromagnético médio em regime permanente.}.
 
 Os ensaios de atrito e de inércia descritos a seguir foram conduzidos numa
-montagem provisória, antes da fabricação e validação das placas definitivas
-(SIBA e SAME): o motor é acionado por um ESC comercial, com a rotação do
-eixo e as grandezas elétricas de fase medidas de forma independente do
-acionamento.
+montagem com osciloscópio de laboratório: o motor é acionado por um ESC
+comercial, com a rotação do eixo medida por tacômetro óptico e as grandezas
+elétricas de fase capturadas nos canais analógicos do osciloscópio.
 
 \subsubsection{Coeficiente de Atrito Viscoso}
 \label{sec:atrito_viscoso}
