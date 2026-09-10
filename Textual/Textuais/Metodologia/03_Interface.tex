@@ -221,31 +221,79 @@ YAML daquela placa.
     Fonte: Autor (2026)
 \end{figure}
 
-A \autoref{fig:telas_gui} reserva o espaço para capturas de tela de cada
-janela da aplicação, a serem inseridas a partir dos ensaios em bancada.
+As figuras a seguir apresentam capturas de tela das principais janelas e
+diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Telas e diálogos da interface de supervisão (espaços reservados para capturas de tela)}
+    \caption{Interface de supervisão --- tela principal}
     \label{fig:telas_gui}
-    \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-        font=\scriptsize,
-        slot/.style={draw, dashed, align=center, minimum width=4.4cm, minimum height=2.6cm, text width=4cm}
-    ]
-        \node[slot] (s1) at (0,0)     {Tela principal};
-        \node[slot] (s2) at (4.7,0)   {\textit{TinyTerminal}};
-        \node[slot] (s3) at (9.4,0)   {Gerenciador de Placas};
-        \node[slot] (s4) at (0,-2.9)  {Calibrar Célula de Carga};
-        \node[slot] (s5) at (4.7,-2.9){Configuração de Sensores};
-        \node[slot] (s6) at (9.4,-2.9){Painel de Erros e Alarmes};
-        \node[slot] (s7) at (0,-5.8)  {Estimar Ganhos do SMO};
-        \node[slot] (s8) at (4.7,-5.8){Estimar Coeficiente da Hélice};
-        \node[slot] (s9) at (9.4,-5.8){Motor --- Carregar/Criar};
-    \end{tikzpicture}%
-    }
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui tela principal.png}
+    \fonte{Autor (2026)}
+\end{figure}
 
-    Fonte: Autor (2026)
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- \textit{TinyTerminal}}
+    \label{fig:gui_tinyterminal}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui tiny terminal.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- gerenciador de placas}
+    \label{fig:gui_gerenciador_placas}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui gerenciador de placas.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- painel de erros e alarmes}
+    \label{fig:gui_erros_alarmes}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui painel erro e alarmes.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- configuração de ganho e \textit{offset} dos sensores}
+    \label{fig:gui_sensores}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui ganho e offset.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- calibração de célula de carga}
+    \label{fig:gui_calibrar_celula}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui calibrar celula de carga.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- estimação dos ganhos do SMO}
+    \label{fig:gui_ganho_smo}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui ganho_smo.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- cálculo do coeficiente de tração da hélice}
+    \label{fig:gui_helice}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui calculo coeficiente helice.png}
+    \fonte{Autor (2026)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Interface de supervisão --- criação de perfil de motor}
+    \label{fig:gui_criar_motor}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui criar motor.png}
+    \fonte{Autor (2026)}
 \end{figure}
 
 Para que essa parametrização interativa e o monitoramento operem com alta confiabilidade, mitigando erros de interpretação de dados entre diferentes plataformas, o sistema adota uma estratégia de padronização baseada na linguagem de serialização YAML (\textit{YAML Ain't Markup Language}). A implementação utiliza arquivos de descrição que definem as estruturas fundamentais de telemetria (\textit{logs}), comandos (\textit{CMD}) e configurações da interface.
