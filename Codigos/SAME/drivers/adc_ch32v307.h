@@ -32,7 +32,7 @@ extern "C" {
  *        possam bloquear (k_mutex_lock, k_sem_take, k_sleep, etc.).
  *        k_work_submit(), k_uptime_get_32() e operações atômicas são seguras.
  */
-typedef void (*adc_ch32v307_frame_cb_t)(const uint32_t *frame, uint8_t nch,
+typedef void (*adc_ch32v307_frame_cb_t)(const uint32_t *frame, uint16_t nch,
                                         int32_t cal_master, int32_t cal_slave,
                                         void *user);
 

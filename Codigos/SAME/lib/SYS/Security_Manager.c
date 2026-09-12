@@ -9,7 +9,21 @@
 #include "Observer_Manager.h"   /* getters de saúde do SMO/PLL */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
 #include <math.h>
+
+/* LEDs de status: verde=MCU pronto, vermelho=qualquer erro.
+ * Nós definidos em same_board.dts (PB4 e PA15). */
+static const struct gpio_dt_spec led_green =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(led_green), gpios);
+static const struct gpio_dt_spec led_red =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(led_red), gpios);
+
+/* Máscara dos bits que bloqueiam o "pronto": calibração pendente/falhada
+ * ou rede desconectada. Observer ainda sem lock não bloqueia (é esperado
+ * com motor parado). */
+#define MCU_READY_MASK \
+    ((uint32_t)(ERROR_CAL_IN_PROGRESS | ERROR_CAL_FAILED | ERROR_SYS_NET_DISCONNECTED))
 
 LOG_MODULE_REGISTER(security_mgr, LOG_LEVEL_WRN);
 
@@ -24,10 +38,18 @@ LOG_MODULE_REGISTER(security_mgr, LOG_LEVEL_WRN);
  * leitura/escrita atômica na plataforma; sem lock (mesmo modelo da SIBA). */
 static uint32_t error_code;
 
-/** @brief Zera o código de erro agregado. */
+/** @brief Zera o código de erro e inicializa os LEDs de status. */
 void Security_Manager_Init(void)
 {
     error_code = 0U;
+
+    if (gpio_is_ready_dt(&led_green)) {
+        gpio_pin_configure_dt(&led_green, GPIO_OUTPUT_INACTIVE);
+    }
+    if (gpio_is_ready_dt(&led_red)) {
+        gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_INACTIVE);
+    }
+
     LOG_INF("Security_Manager (SAME) inicializado");
 }
 
@@ -79,6 +101,12 @@ void Security_Manager_Error_Set(same_error_bit_t bit, bool cond)
 uint32_t Security_Manager_Get_Error_Code(void)
 {
     return error_code;
+}
+
+/** @brief true quando nenhum bit de MCU_READY_MASK está ativo (cal OK + rede OK). */
+bool Security_Manager_Is_MCU_Ready(void)
+{
+    return (error_code & MCU_READY_MASK) == 0U;
 }
 
 /**
@@ -141,4 +169,11 @@ void Security_Manager_Check_Observer(void)
         !Observer_Params_Physical_Valid());
     Security_Manager_Error_Set(ERROR_CFG_GAMMA_SIGN,
         !Observer_Gamma_Signs_Valid());
+
+    /* LEDs de status — atualizados a cada checagem (~100 Hz).
+     * Verde: calibração feita + rede online (MCU_READY_MASK == 0).
+     * Vermelho: qualquer bit de erro ativo (inclui observer/config). */
+    bool mcu_ready = (error_code & MCU_READY_MASK) == 0U;
+    gpio_pin_set_dt(&led_green, mcu_ready ? 1 : 0);
+    gpio_pin_set_dt(&led_red,   (error_code != 0U) ? 1 : 0);
 }

@@ -25,6 +25,7 @@ typedef enum {
     ERROR_SYS_ADC_FRAME_DROP = (1U << 25),  /* Sistema: Frames do ADC descartados — a ISR não acompanhou a taxa de conversão; as amostras do observador estão deslocadas no tempo */
     ERROR_CAL_IN_PROGRESS = (1U << 26),  /* Calibração: Calibração de offset em andamento (aguardando o sensor Hall estabilizar, com o ESC parado) — rotação e torque ainda não são válidos */
     ERROR_CAL_FAILED = (1U << 27),  /* Calibração: Calibração de offset falhou: ruído alto demais nas correntes com o ESC parado — ESC energizado durante a calibração, sensor mal alimentado ou terra aberto */
+    ERROR_SYS_NET_DISCONNECTED = (1U << 28),  /* Sistema: Rede desconectada — PHY sem link ou interface Ethernet não inicializada; telemetria não está chegando ao PC */
 } same_error_bit_t;
 
 #endif /* ERROR_CODES_H */

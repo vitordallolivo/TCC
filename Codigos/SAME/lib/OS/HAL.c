@@ -227,14 +227,15 @@ static struct {
 } hal_snap;
 
 /* Frames entre disparos de telemetria (~100 Hz com frame de 6,58 µs e
- * batch de 16 → ~105 µs por batch → 1520 / 16 ≈ 95 batches). */
+ * batch de 256 → ~1,7 ms por batch → 1520 / 256 ≈ 6 batches). */
 #define HAL_TELEM_FRAMES  1520U
 
 static uint32_t hal_frame_cnt;
 
 /* Número de frames por batch — deve bater com CH32_ADC_BATCH_FRAMES no driver.
+ * 256 frames × 6,58 µs = ~1,7 ms por batch → ISR a ~590 Hz durante boot ETH.
  * Canais por frame no ADC dual = HAL_ADC1_NUM_CH (3). */
-#define HAL_BATCH_FRAMES  16U
+#define HAL_BATCH_FRAMES  256U
 #define HAL_BATCH_WORDS   (HAL_BATCH_FRAMES * HAL_ADC1_NUM_CH)
 
 /* Double buffer: ISR escreve sempre no buffer "inativo" (1 - widx) e
@@ -320,11 +321,11 @@ static void hal_batch_work_fn(struct k_work *w)
 /**
  * @brief Callback de frame ADC — chamado diretamente pela ISR de DMA.
  *
- * nch = HAL_ADC1_NUM_CH × HAL_BATCH_FRAMES (ex: 3 × 16 = 48 words).
+ * nch = HAL_ADC1_NUM_CH × HAL_BATCH_FRAMES (ex: 3 × 256 = 768 words).
  * ISR copia o batch para o double buffer e submete o work na same_wq.
  * O processamento pesado (Clarke × N + Observer_Step × N) fica fora da ISR.
  */
-static void hal_adc_isr_frame(const uint32_t *frame, uint8_t nch,
+static void hal_adc_isr_frame(const uint32_t *frame, uint16_t nch,
                                int32_t cal_master, int32_t cal_slave,
                                void *unused)
 {

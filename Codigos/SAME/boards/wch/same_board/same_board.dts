@@ -27,6 +27,23 @@
     };
 
     /* ================================================================ *
+     * LEDs de status                                                    *
+     *   PB4  = LED verde  (mcu_ready: calibrado + rede online)         *
+     *   PA15 = LED vermelho (qualquer erro no error_code)               *
+     * ================================================================ */
+    leds {
+        compatible = "gpio-leds";
+        led_green: led_green {
+            gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
+            label = "LED Verde (MCU ready)";
+        };
+        led_red: led_red {
+            gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
+            label = "LED Vermelho (Erro)";
+        };
+    };
+
+    /* ================================================================ *
      * ADC1 — três TENSÕES de fase (V_a, V_b, V_c)                       *
      *   CH0 = PA0 = V_a   CH1 = PA1 = V_b   CH3 = PA3 = V_c             *
      * PA2 reservado para W25Q (SPI flash) — não usar aqui.              *

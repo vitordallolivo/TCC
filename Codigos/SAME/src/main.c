@@ -76,8 +76,8 @@ int main(void)
         LOG_ERR("HAL_Init falhou — sistema degradado");
     }
 
-    printk("[SAME] NCI_Set_Connection_Status...\n");
-    NCI_Set_Connection_Status(true);
+    /* NCI_Set_Connection_Status não é mais chamado aqui: NCI.c registra
+     * um callback net_mgmt que detecta o UP/DOWN do PHY automaticamente. */
 
     LOG_INF("=== SAME pronto ===");
     printk("[SAME] boot completo\n");

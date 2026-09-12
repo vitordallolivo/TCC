@@ -30,6 +30,10 @@ void Security_Manager_Error_Set(same_error_bit_t bit, bool cond);
 /* @brief Código de erro agregado atual — exposto em TELEMETRY_LOG.error_code. */
 uint32_t Security_Manager_Get_Error_Code(void);
 
+/* @brief true quando calibração feita + rede online (nenhum bit de MCU_READY_MASK ativo).
+ * Reflete o LED verde (PB4). */
+bool Security_Manager_Is_MCU_Ready(void);
+
 /*
  * @brief Checa a sanidade das medidas elétricas de fase (desequilíbrio de
  * corrente/tensão, sobrecorrente, faixa do sensor). Chamada no ritmo de

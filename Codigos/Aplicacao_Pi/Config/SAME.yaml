@@ -111,6 +111,7 @@ error_bits:
   # sequência zero na Clarke e BEMF espúria no SMO. Daí a medição no boot.
   - { name: ERROR_CAL_IN_PROGRESS, bit: 26, group: "Calibração", msg: "Calibração de offset em andamento (aguardando o sensor Hall estabilizar, com o ESC parado) — rotação e torque ainda não são válidos" }
   - { name: ERROR_CAL_FAILED,      bit: 27, group: "Calibração", msg: "Calibração de offset falhou: ruído alto demais nas correntes com o ESC parado — ESC energizado durante a calibração, sensor mal alimentado ou terra aberto" }
+  - { name: ERROR_SYS_NET_DISCONNECTED, bit: 28, group: "Sistema", msg: "Rede desconectada — PHY sem link ou interface Ethernet não inicializada; telemetria não está chegando ao PC" }
 
 # Limiares dos checadores do Security_Manager (SAME). FONTE ÚNICA: gera os
 # #defines em lib/SYS/Security_prm.h (via generate.py). Ajuste em bancada aqui —

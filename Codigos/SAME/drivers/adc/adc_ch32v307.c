@@ -215,7 +215,7 @@ static const uint16_t ch32_adc_smp_x10[8] = {
  * O processamento (Clarke + Observer_Step × N) acontece fora da ISR, na
  * work queue, dando tempo ao RTOS entre batches. */
 #ifndef CH32_ADC_BATCH_FRAMES
-#define CH32_ADC_BATCH_FRAMES  16
+#define CH32_ADC_BATCH_FRAMES  256
 #endif
 
 /* Par dual (mestre ADC1 + escravo ADC2), resolvido em runtime comparando
@@ -227,18 +227,18 @@ static const struct device *g_adc2_dev;
 /* Buffer do DMA combinado de 32 bits (só usado pelo mestre em modo dual):
  * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}.
  *
- * PING-PONG com BATCH: cada metade do buffer tem CH32_ADC_BATCH_FRAMES frames
- * completos. O DMA só dispara a ISR após preencher BATCH_FRAMES frames inteiros;
- * a ISR copia a metade estável (memcpy ~192 B) e retorna — o processamento
- * pesado (Clarke + Observer_Step × N) acontece na work queue, longe da ISR.
+ * PING-PONG com BATCH: cada metade tem CH32_ADC_BATCH_FRAMES frames completos
+ * (3 words/frame na SAME: fase A, B e C, cada uma com {i_x, V_x}).
  *
- *     half-transfer  → DMA escreve a 2ª metade, ISR copia a 1ª (estável)
- *     transfer-comp. → DMA escreve a 1ª metade, ISR copia a 2ª (estável)
+ *     half-transfer  → DMA escreve a 2ª metade, ISR lê a 1ª (estável)
+ *     transfer-comp. → DMA escreve a 1ª metade, ISR lê a 2ª (estável)
  *
- * Tamanho total: 2 × ch_count × BATCH_FRAMES × 4 B.
- * Com ch_count=3 e BATCH_FRAMES=16: 384 B. */
+ * Dimensionado para ch_count real (3 fases) — não CH32_ADC_MAX_CHANNELS (16),
+ * que com BATCH_FRAMES=256 geraria 32 KB desnecessários.
+ * Tamanho: 2 × 3 × 256 × 4 B = 6144 B. */
+#define CH32_ADC_DMA_PHASES  3U   /* V_a/V_b/V_c || i_a/i_b/i_c */
 static __attribute__((aligned(4)))
-uint32_t g_dual_dma_buf[2U * CH32_ADC_MAX_CHANNELS * CH32_ADC_BATCH_FRAMES];
+uint32_t g_dual_dma_buf[2U * CH32_ADC_DMA_PHASES * CH32_ADC_BATCH_FRAMES];
 
 /**
  * @brief Verifica se ADC1 e ADC2 estão ambos instanciados (par dual).
@@ -375,7 +375,7 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
          * total em words (ch_count × BATCH_FRAMES). O HAL copia esse bloco
          * para um buffer próprio e processa na work queue, sem bloquear a ISR. */
         if (data->frame_cb) {
-            data->frame_cb(frame, (uint8_t)half_len,
+            data->frame_cb(frame, half_len,
                            data->cal_offset, sdata->cal_offset,
                            data->frame_cb_user);
             return;
