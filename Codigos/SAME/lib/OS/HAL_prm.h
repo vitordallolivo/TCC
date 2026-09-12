@@ -24,12 +24,11 @@
 #define HAL_HALL_ZERO_MV   2238.0f       /* repouso NOMINAL do Hall no pino */
 #define HAL_VOLT_MV_PER_V    54.5455f    /* mV no pino por volt de fase */
 
-/* Calibração de offset do Hall no boot: a thread de aquisição espera o sensor
- * estabilizar, acumula N frames com o ESC PARADO e grava o offset medido.
- * Enquanto isso o observador fica bloqueado — ver HAL.c. Limiares em
- * Security_prm.h (SM_CAL_*, gerados do SAME.yaml). Desligar só para depurar. */
+/* Calibração automática de offset no boot desligada: ganho e offset dos
+ * sensores vêm exclusivamente do NVM (salvo pelo usuário via CMD pela rede).
+ * HAL_CALIBRATE_ON_BOOT=1 pode ser ativado para depuração se necessário. */
 #ifndef HAL_CALIBRATE_ON_BOOT
-#define HAL_CALIBRATE_ON_BOOT   1
+#define HAL_CALIBRATE_ON_BOOT   0
 #endif
 
 #ifndef HAL_DISABLE_ADC

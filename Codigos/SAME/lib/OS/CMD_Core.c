@@ -9,6 +9,7 @@
 #include "HAL.h"
 #include "Observer_Manager.h"
 #include "Log_Manager.h"
+#include "NVM.h"
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -98,6 +99,7 @@ static void handle_sensor_calib(int8_t tid, const CMD *cmd)
 {
     default_action act = (default_action)cmd->action_or_status;
     SENSORS *s = &sensor_cfg[tid];
+    bool save = false;
 
     switch (act) {
         case DEFAULT_ACTION_SENSE_MAX_VALID:
@@ -114,7 +116,9 @@ static void handle_sensor_calib(int8_t tid, const CMD *cmd)
             linear = cmd->value;
             apply_sensor_calib(tid, linear, offset);
             s->Linear_Coeff = linear; s->Offset_Coeff = offset;
+            NVM_Set_Sensor_Calib((uint8_t)tid, linear, offset);
             LOG_INF("SENSOR[%d]: linear=%.5f", tid, (double)cmd->value);
+            save = true;
             break;
         }
         case DEFAULT_ACTION_SENSE_OFFSET_COEF: {
@@ -123,17 +127,25 @@ static void handle_sensor_calib(int8_t tid, const CMD *cmd)
             offset = cmd->value;
             apply_sensor_calib(tid, linear, offset);
             s->Linear_Coeff = linear; s->Offset_Coeff = offset;
+            NVM_Set_Sensor_Calib((uint8_t)tid, linear, offset);
             LOG_INF("SENSOR[%d]: offset=%.5f", tid, (double)cmd->value);
+            save = true;
             break;
         }
         case DEFAULT_ACTION_SENSE_RESET_DEFAULT:
             s->Linear_Coeff = s->Linear_Coeff_Reset_Default;
             s->Offset_Coeff = s->Offset_Coeff_Reset_Default;
             apply_sensor_calib(tid, s->Linear_Coeff, s->Offset_Coeff);
+            NVM_Set_Sensor_Calib((uint8_t)tid, s->Linear_Coeff, s->Offset_Coeff);
             LOG_INF("SENSOR[%d]: reset default", tid);
+            save = true;
             break;
         default:
-            LOG_WRN("SENSOR[%d]: ação %d desconhecida", tid, act);
+            LOG_WRN("SENSOR[%d]: acao %d desconhecida", tid, act);
+    }
+
+    if (save) {
+        NVM_Save_Calibration();
     }
 }
 
@@ -156,7 +168,14 @@ static void handle_func_sensor(const CMD *cmd)
         } else { /* DEFAULT_ACTION_SET_VALUE (padrão da GUI) */
             ok = Observer_Set_Param((target_type)tid, cmd->value);
         }
-        if (!ok) LOG_WRN("Observer: target %d não tratado", tid);
+        if (ok) {
+            float v = 0.0f;
+            Observer_Get_Param((target_type)tid, &v);
+            NVM_Set_Observer_Param((target_type)tid, v);
+            NVM_Save_Observer();
+        } else {
+            LOG_WRN("Observer: target %d nao tratado", tid);
+        }
         return;
     }
 

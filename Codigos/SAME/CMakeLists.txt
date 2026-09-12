@@ -24,6 +24,7 @@ target_sources(app PRIVATE
     lib/SYS/Log_Manager.c
     lib/SYS/Observer_Manager.c
     lib/SYS/Security_Manager.c
+    lib/SYS/NVM.c
 )
 
 if(NOT CONFIG_ARCH_POSIX)

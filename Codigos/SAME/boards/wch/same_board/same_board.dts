@@ -3,6 +3,7 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/pinctrl/ch32v20x_30x-pinctrl.h>
 #include <zephyr/dt-bindings/clock/ch32v20x_30x-clocks.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
 
 /* O header de pinctrl não define grupos de remap para os ADCs (entrada
  * analógica não é multiplexada — o pino só entra em modo analógico). Como
@@ -11,6 +12,8 @@
  * ADC2_INn são o MESMO pino); o número do canal = número do pino. */
 #define CH32V20X_V30X_PINMUX_ADC1_RM 0
 #define CH32V20X_V30X_PINMUX_ADC2_RM 0
+/* I2C2 não tem remap no AFIO (pinos fixos PB10/PB11) — mesmo padrão do ADC */
+#define CH32V20X_V30X_PINMUX_I2C2_RM 0
 
 / {
     model = "SAME Board";
@@ -25,7 +28,8 @@
 
     /* ================================================================ *
      * ADC1 — três TENSÕES de fase (V_a, V_b, V_c)                       *
-     *   CH0 = PA0 = V_a   CH1 = PA1 = V_b   CH2 = PA2 = V_c             *
+     *   CH0 = PA0 = V_a   CH1 = PA1 = V_b   CH3 = PA3 = V_c             *
+     * PA2 reservado para W25Q (SPI flash) — não usar aqui.              *
      * DMA1 canal 1 (IRQ 27).                                            *
      * ================================================================ */
     adc1: adc@40012400 {
@@ -44,7 +48,7 @@
 
     /* ================================================================ *
      * ADC2 — três CORRENTES de fase (i_a, i_b, i_c) — ESCRAVO do ADC1  *
-     *   CH3 = PA3 = i_a   CH4 = PA4 = i_b   CH5 = PA5 = i_c             *
+     *   CH10 = PC0 = i_a   CH11 = PC1 = i_b   CH12 = PC2 = i_c          *
      *                                                                    *
      * SEM `dmas` de propósito: o manual de referência (Table 11-2,     *
      * "Peripheral mapping table of each DMA1 channel") confirma que só *
@@ -80,15 +84,15 @@
 &pinctrl {
 
     adc1_default: adc1_default {
-        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>; };  /* CH0 - V_a */
-        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>; };  /* CH1 - V_b */
-        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 2, ADC1, 0)>; };  /* CH2 - V_c */
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>; };  /* CH0  - V_a */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>; };  /* CH1  - V_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC1, 0)>; };  /* CH3  - V_c (PA2 = W25Q) */
     };
 
     adc2_default: adc2_default {
-        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC2, 0)>; };  /* CH3 - i_a */
-        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 4, ADC2, 0)>; };  /* CH4 - i_b */
-        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 5, ADC2, 0)>; };  /* CH5 - i_c */
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 0, ADC2, 0)>; };  /* CH10 - i_a */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 1, ADC2, 0)>; };  /* CH11 - i_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 2, ADC2, 0)>; };  /* CH12 - i_c */
     };
 
     usart1_default: usart1_default {
@@ -126,6 +130,29 @@
     mdio_default: mdio_default {
         /* PHY interno - sem pinos MDIO externos necessarios */
     };
+
+    /* ================================================================ *
+     * I2C2 — EEPROM FT24C32A-ETR-T (PB10=SCL, PB11=SDA)              *
+     * Pinos fixos, sem remap no AFIO. Open-drain com pull-up externo. *
+     * ================================================================ */
+    i2c2_default: i2c2_default {
+        group1 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 10, I2C2, 0)>;
+            output-high;
+            drive-open-drain;
+        };
+        group2 {
+            pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 11, I2C2, 0)>;
+            output-high;
+            drive-open-drain;
+        };
+    };
+
+    /* ================================================================ *
+     * SPI flash (chip não identificado) — PA2/PA5/PA6/PA7             *
+     * PA2 = ADC1_CH2 (V_c)  PA5 = ADC2_CH5 (i_c)                     *
+     * CONFLITO com ADC1/ADC2 — não pode ser usado na SAME. Ignorar.   *
+     * ================================================================ */
 };
 
 /* ==================================================================== *
@@ -179,6 +206,24 @@
 };
 
 &rng { status = "okay"; };
+
+/* EEPROM FT24C32A (I2C2, 4 KB) — A0=A1=A2=GND → endereço 0x50.
+ * FT24C32A é compatível com AT24C32 (endurance 1 M ciclos). */
+&i2c2 {
+    status = "okay";
+    pinctrl-0 = <&i2c2_default>;
+    pinctrl-names = "default";
+    clock-frequency = <100000>;
+
+    eeprom0: eeprom@50 {
+        compatible = "atmel,at24";
+        reg = <0x50>;
+        size = <4096>;
+        pagesize = <32>;
+        address-width = <16>;
+        timeout = <5>;
+    };
+};
 
 &sram0 { reg = <0x20000000 DT_SIZE_K(128)>; };
 &flash0 { reg = <0x08000000 DT_SIZE_K(198)>; };

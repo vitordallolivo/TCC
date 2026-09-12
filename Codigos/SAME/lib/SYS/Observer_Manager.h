@@ -61,6 +61,21 @@ void Observer_Apply_Pending(void);
  */
 void Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta);
 
+/*
+ * @brief Clarke 3-termos (amplitude-invariante) + Observer_Step.
+ * Entrada direta do HAL: recebe tensões e correntes de fase [V/A], computa αβ
+ * internamente e avança o observador. Armazena os αβ para os getters abaixo.
+ * @param Va,Vb,Vc tensões de fase [V]
+ * @param ia,ib,ic correntes de fase [A]
+ */
+void Observer_Step_ABC(float Va, float Vb, float Vc, float ia, float ib, float ic);
+
+/* Valores αβ do último Observer_Step_ABC (lidos na same_wq, sem lock). */
+float Observer_Get_V_Alpha(void);
+float Observer_Get_V_Beta(void);
+float Observer_Get_I_Alpha(void);
+float Observer_Get_I_Beta(void);
+
 /* @brief Saídas do último passo (lidas na mesma thread do ADC, sem lock). */
 float Observer_Get_Rpm(void);            /* rpm mecânico (→ rpm_same) */
 float Observer_Get_Te(void);             /* torque eletromagnético [N·m] */
@@ -77,5 +92,15 @@ bool  Observer_State_Is_Finite(void);
 bool  Observer_Params_Physical_Valid(void);
 /* @brief true se os sinais dos ganhos Γ estão corretos (Γ1>0, Γ2<0, Γt>0). */
 bool  Observer_Gamma_Signs_Valid(void);
+
+/*
+ * @brief Lê o valor atual de um parâmetro/ganho do observador.
+ * Lê de pending_params (última configuração desejada, incluindo CMDs pendentes).
+ * TARGET_TS_ADC é devolvido em µs, igual ao formato do CMD.
+ * @param target TARGET_* do parâmetro
+ * @param value  [out] valor atual
+ * @return true se o target pertence ao observador
+ */
+bool Observer_Get_Param(target_type target, float *value);
 
 #endif /* OBSERVER_MANAGER_H */

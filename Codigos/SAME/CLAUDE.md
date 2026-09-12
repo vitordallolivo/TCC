@@ -1106,13 +1106,7 @@ Codigos/
   defeitos de aquisição acima é detectável no `native_sim` como ele está.
   Fazer o caminho POSIX passar pelo `adc-emul` (via
   `adc_emul_const_value_set()`) faria o `native_sim` pegar pelo menos o
-  sequenciamento do `adc_read()` — que é onde está o bug de 2×.
-- ~~**Calibração na inicialização**~~ implementada (`HAL.c`, seção "Calibração
-  de offset do sensor Hall"): espera `SM_CAL_SETTLE_MS` (2 s), acumula
-  `SM_CAL_FRAMES` (4096) com o ESC parado, valida pelo desvio-padrão
-  (`SM_CAL_STD_MAX_MV`) e grava o offset por fase. `ERROR_CAL_IN_PROGRESS` e
-  `ERROR_CAL_FAILED` entraram no `error_bits`; o `Observer_Step` fica
-  **bloqueado** até concluir.
+
 
   > A média/variância usa **Welford em `float`**, não somatório+soma de
   > quadrados. Com 4096 amostras de ~2238 mV, Σx² chega a 2,05e10, onde o ulp
@@ -1145,21 +1139,3 @@ Os valores vivem no `sensor_defaults` do `SAME.yaml` (geram `CMD_Core_prm.h`);
 
 O SS49E é ratiométrico e repousa em Vcc/2 — por isso o divisor: ±60 A levaria a
 saída a 3,625 V, acima dos 3,3 V do conversor.
-
-> 🔴 **O repouso não é constante e é por isso que a calibração de boot existe.**
-> Nos três ensaios do Apêndice A o valor a 0 A caiu em 2,48570 / 2,48640 /
-> 2,49150 V — **5,8 mV de espalhamento**, que na cadeia valem **0,31 A de
-> corrente fantasma**. E o erro é comum às três fases, então **não se cancela
-> no Clarke de 3 termos**: entra como sequência zero e vira BEMF espúria no
-> SMO. Gravar offset de catálogo não resolve.
-- **Filtro antialiasing**: `f_c ≈ 5–8 kHz`, 2ª ordem, entre a fundamental
-  (`f_e ≈ 800 Hz` em 6S) e a portadora do ESC (~30 kHz). Confirmar a topologia
-  no esquemático do front-end.
-- **Forma de BEMF** (`f`): senoidal (default) vs. trapezoidal — casar com o motor
-  real (`DEF_BEMF_KIND` em `Observer_Manager.c`).
-- **`torque_helice`**: hoje espelha `Te` (em regime, carga da hélice = torque
-  eletromagnético). Subtrair atrito `(B·ω + τc)` quando `B/τc` (compartilhados
-  com a SPMM) forem embarcados.
-- ~~**Calibração de tensão**: o `SAME.yaml` só tem `VOLTAGE_AB/BC`...~~ resolvido:
-  `SAME.yaml` agora tem `TARGET_VOLTAGE_A/B/C` (3 alvos, um por fase, calibração
-  independente) — mesmo esquema das 3 correntes.

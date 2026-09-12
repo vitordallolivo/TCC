@@ -16,6 +16,11 @@
 #include "Log_Manager.h"
 #include "Observer_Manager.h"
 #include "Security_Manager.h"
+#include "NVM.h"
+
+#include <zephyr/drivers/i2c.h>
+
+#define NVM_I2C_ADDR  0x50U
 
 LOG_MODULE_REGISTER(same_main, LOG_LEVEL_INF);
 
@@ -26,35 +31,55 @@ LOG_MODULE_REGISTER(same_main, LOG_LEVEL_INF);
  */
 int main(void)
 {
-    LOG_INF("=== SAME Board — nó de aquisição elétrica do motor ===");
+    printk("[SAME] main() atingido\n");
 
-    /* 1. OSSI — arranca a same_wq (todo o despacho por eventos depende dela) */
-    OSSI_Init();
+    printk("[SAME] === SAME Board — no de aquisicao eletrica do motor ===\n");
 
-    /* 2. Observer — defaults do SMO/PLL antes de qualquer amostra */
+    printk("[SAME] Observer_Init...\n");
     Observer_Init();
 
-    /* 2b. Security_Manager — zera o código de erro agregado (diagnóstico) */
+    printk("[SAME] Security_Manager_Init...\n");
     Security_Manager_Init();
 
-    /* 3. Log_Manager — zera o log e arranca o timer de TX (10 Hz) */
+    printk("[SAME] Log_Manager_Init...\n");
     Log_Manager_Init();
 
-    /* 4. CMD_Core — tabela de calibração dos sensores (currents/voltages) */
+    printk("[SAME] CMD_Core_Init...\n");
     CMD_Core_Init();
 
-    /* 5. NCI — socket TX + thread RX (escuta CMD na porta 4444) */
+    /* 1. Defaults de calib no array interno do HAL (sem ligar ADC nem WQ). */
+    HAL_Calib_Init_Defaults();
+
+    /* 2. EEPROM primeiro, sem nenhuma thread/worker concorrente ainda.
+     *    Aplica calibracao e params do observador salvos antes de ligar
+     *    o ADC ou subir a work queue. */
+    printk("[SAME] NVM_Init...\n");
+    {
+        const struct device *nvm_i2c = DEVICE_DT_GET(DT_NODELABEL(i2c2));
+        if (NVM_Init(nvm_i2c, NVM_I2C_ADDR) != 0) {
+            LOG_WRN("NVM_Init falhou — calibracao/observador com defaults");
+        }
+    }
+
+    /* 3. Work queue sobe so depois do NVM: garante que o I2C do boot
+     *    nao compete com nenhum worker. */
+    printk("[SAME] OSSI_Init...\n");
+    OSSI_Init();
+
+    /* 4. Ethernet apos a WQ estar pronta (NCI thread chama OSSI_Submit_CMD). */
+    printk("[SAME] NCI_Init...\n");
     NCI_Init();
 
-    /* 6. HAL — configura os 2 ADCs e arranca a thread de aquisição, que roda
-     *    o observador colado ao evento de conversão e publica a telemetria */
+    /* 5. ADC por ultimo: so comeca a gerar dados quando tudo esta pronto. */
+    printk("[SAME] HAL_Init...\n");
     if (HAL_Init() != 0) {
         LOG_ERR("HAL_Init falhou — sistema degradado");
     }
 
-    /* Habilita o tráfego de rede (TX telemetria / RX CMD) */
+    printk("[SAME] NCI_Set_Connection_Status...\n");
     NCI_Set_Connection_Status(true);
 
     LOG_INF("=== SAME pronto ===");
+    printk("[SAME] boot completo\n");
     return 0;
 }

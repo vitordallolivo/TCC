@@ -10,6 +10,11 @@
 #include <zephyr/net/socket.h>
 #include <string.h>
 
+#if defined(CONFIG_SAME_NET_STATUS_UART)
+#include "Log_Manager.h"
+#include "Security_Manager.h"
+#endif
+
 LOG_MODULE_REGISTER(nci_core, LOG_LEVEL_DBG);
 
 /* Portas do protocolo SAME (fonte: Aplicacao_Pi/Config/SAME.yaml, bloco
@@ -99,6 +104,34 @@ static void nci_rx_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
+#if defined(CONFIG_SAME_NET_STATUS_UART)
+static void net_status_work_fn(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    TELEMETRY_LOG snap = Log_Manager_Get_Snapshot();
+    uint32_t err = Security_Manager_Get_Error_Code();
+
+    printk("--- SAME net status ---\n");
+    printk("  rede:    %s  (sock=%d)\n",
+           is_network_connected ? "ONLINE" : "OFFLINE", tx_sock);
+    printk("  IP:      %s\n", CONFIG_NET_CONFIG_MY_IPV4_ADDR);
+    printk("  rpm:     %.1f    torque: %.4f N.m\n",
+           (double)snap.rpm_same, (double)snap.torque_eletrico);
+    printk("  erros:   0x%08X\n", err);
+    printk("-----------------------\n");
+}
+
+static K_WORK_DEFINE(net_status_work, net_status_work_fn);
+
+static void net_status_timer_fn(struct k_timer *t)
+{
+    ARG_UNUSED(t);
+    k_work_submit_to_queue(&same_wq, &net_status_work);
+}
+
+static K_TIMER_DEFINE(net_status_timer, net_status_timer_fn, NULL);
+#endif /* CONFIG_SAME_NET_STATUS_UART */
+
 /** @brief Cria o socket TX e sobe a thread RX. Chamar em main() antes do HAL. */
 void NCI_Init(void)
 {
@@ -121,4 +154,9 @@ void NCI_Init(void)
     k_thread_name_set(&nci_rx_thread_data, "nci_rx");
 
     LOG_INF("NCI_Init: socket TX criado, thread RX arrancada");
+
+#if defined(CONFIG_SAME_NET_STATUS_UART)
+    k_timer_start(&net_status_timer, K_MSEC(5000), K_MSEC(5000));
+    LOG_INF("NCI: status UART habilitado (5000 ms)");
+#endif
 }

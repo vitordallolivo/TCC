@@ -16,6 +16,7 @@
 #include "Security_prm.h"          /* SM_CAL_* — limiares da calibração */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <string.h>
 #include <math.h>
 #ifndef CONFIG_ARCH_POSIX
 #include <zephyr/drivers/adc.h>
@@ -71,11 +72,21 @@ static void hal_adc_calib_init(void)
  * @param linear ganho
  * @param offset deslocamento
  */
+/* Flag atômico: quando != 0 o ISR de ADC retorna sem processar.
+ * Permite suspender o pipeline ADC→Clarke→Observer durante atualizações
+ * de calibração vindas do NCI, sem tocar no DMA. */
+static atomic_t hal_adc_paused = ATOMIC_INIT(0);
+
+void HAL_ADC_Pause(void)  { atomic_set(&hal_adc_paused, 1); }
+void HAL_ADC_Resume(void) { atomic_set(&hal_adc_paused, 0); }
+
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
 {
     if (sensor_id >= CMD_CORE_SENSOR_COUNT) return;
+    HAL_ADC_Pause();
     adc_calib[sensor_id].linear = linear;
     adc_calib[sensor_id].offset = offset;
+    HAL_ADC_Resume();
 }
 
 /**
@@ -111,52 +122,232 @@ static inline float apply_calib(int sensor_id, float mv)
  * (hal_acquire, abaixo) é uma única implementação para as duas. */
 #if HAL_ENABLE_ADC
 
+/* ======================================================================== *
+ * Calibração de offset do sensor Hall de corrente, no boot                 *
+ *
+ * Por que existe: o SS49E é ratiométrico e repousa em Vcc/2, mas o ponto
+ * exato deriva — nos três ensaios de bancada (Apêndice A da monografia) o
+ * repouso a 0 A caiu em 2,48570 / 2,48640 / 2,49150 V. São 5,8 mV de
+ * espalhamento que, na cadeia de 16,875 mV/A, valem 0,31 A de corrente
+ * FANTASMA. E como o erro é comum às três fases, ele não se cancela no
+ * Clarke de 3 termos: entra como componente de sequência zero e vira BEMF
+ * espúria no SMO. Gravar um offset de catálogo não resolve; tem de ser
+ * medido, com o ESC parado, a cada boot.
+ *
+ * O observador fica BLOQUEADO até isto concluir — senão a PLL trava num
+ * ângulo errado e nenhum ajuste de Γ conserta, porque o erro está na
+ * entrada, não nos ganhos.
+ * ======================================================================== */
+typedef enum {
+    HAL_CAL_SETTLING,   /* esperando o Hall estabilizar (SM_CAL_SETTLE_MS) */
+    HAL_CAL_SAMPLING,   /* acumulando SM_CAL_FRAMES com o ESC parado */
+    HAL_CAL_READY,      /* offset gravado — observador liberado */
+    HAL_CAL_FAILED,     /* ruído alto demais: não gravou */
+} hal_cal_phase_t;
+
+#if HAL_CALIBRATE_ON_BOOT
+static hal_cal_phase_t hal_cal_phase = HAL_CAL_SETTLING;
+#else
+static hal_cal_phase_t hal_cal_phase = HAL_CAL_READY;
+#endif
+
+static uint32_t hal_cal_t0;
+static uint32_t hal_cal_n;
+
+/* Média e variância por Welford, em float puro.
+ *
+ * A forma ingênua (somatório + somatório dos quadrados) NÃO serve aqui: com
+ * 4096 amostras de ~2238 mV, Σx² chega a 2,05e10, onde o ulp do float é 2048.
+ * A variância sairia da diferença E[x²] − E[x]² entre dois números de ~5e6
+ * cujo resultado esperado é da ordem de dezenas: cancelamento catastrófico,
+ * desvio-padrão puro ruído de arredondamento. Usar double resolveria a
+ * numérica e custaria ~10 kB de flash em soft-float, já que o CH32V307 só
+ * tem FPU de precisão simples. Welford é estável e cabe em float. */
+static float hal_cal_mean[3];
+static float hal_cal_m2[3];
+
+/* Funções definidas na seção comum abaixo (hal_calibration_step,
+ * hal_publish_telemetry) — protótipos visíveis a HW e POSIX. */
+static void hal_calibration_step(const float raw_i[3]);
+static void hal_publish_telemetry(float Va, float Vb, float Vc,
+                                  float ia, float ib, float ic,
+                                  float Val, float Vbe, float ial, float ibe);
+
 #ifndef CONFIG_ARCH_POSIX
-/* ---- Hardware real: 2 ADCs do CH32V307 ---- */
+/* ---- Hardware real: 2 ADCs do CH32V307 — caminho direto por ISR ---- *
+ *
+ * adc_ch32v307_set_frame_callback() registra hal_adc_isr_frame(), que roda
+ * diretamente na ISR de DMA (sem semáforo, sem context-switch). A sequência
+ * ADC → Clarke → Observer_Step ocorre inteira no nível de interrupção,
+ * maximizando o tempo disponível para computação entre frames (≈6,58 µs).
+ *
+ * Observer_Apply_Pending() usa k_mutex (não é ISR-safe): delegado ao
+ * hal_obs_work que roda no work-queue do sistema. */
+
+#include "../../drivers/adc_ch32v307.h"
 
 #define ADC1_NODE DT_NODELABEL(adc1)
 #define ADC2_NODE DT_NODELABEL(adc2)
 static const struct device *adc1_dev = DEVICE_DT_GET(ADC1_NODE);
 static const struct device *adc2_dev = DEVICE_DT_GET(ADC2_NODE);
 
-#define ADC_RESOLUTION  12
-
-/* ADC1 → tensões (canais 0,1,2) ; ADC2 → correntes (canais 3,4,5). */
-static uint16_t adc1_buf[HAL_ADC1_NUM_CH];
-static uint16_t adc2_buf[HAL_ADC2_NUM_CH];
-
+/* ADC1: PA0=CH0(V_a), PA1=CH1(V_b), PA3=CH3(V_c). PA2 reservado para W25Q. */
 static const struct adc_channel_cfg adc1_ch_cfg[HAL_ADC1_NUM_CH] = {
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 1 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 2 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0  },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 1  },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 3  },
 };
+/* ADC2: PC0=CH10(i_a), PC1=CH11(i_b), PC2=CH12(i_c). */
 static const struct adc_channel_cfg adc2_ch_cfg[HAL_ADC2_NUM_CH] = {
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 3 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 4 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 5 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 10 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 11 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 12 },
 };
 
-static struct adc_sequence adc1_seq = {
-    .channels = BIT(0) | BIT(1) | BIT(2),
-    .buffer = adc1_buf, .buffer_size = sizeof(adc1_buf), .resolution = ADC_RESOLUTION,
-};
-static struct adc_sequence adc2_seq = {
-    .channels = BIT(3) | BIT(4) | BIT(5),
-    .buffer = adc2_buf, .buffer_size = sizeof(adc2_buf), .resolution = ADC_RESOLUTION,
-};
-
-/**
- * @brief Converte contagem bruta do ADC (12 bits) para tensão no pino (mV).
- * @param raw contagem bruta (0..HAL_ADC_FULL_SCALE-1)
- * @return tensão em mV
- */
 static inline float raw_to_mv(uint16_t raw)
 {
     return (float)raw * (float)HAL_ADC_VREF_MV / (float)HAL_ADC_FULL_SCALE;
 }
 
+/* Replica local do adc_apply_cal do driver (que é static) — aplica o offset
+ * de calibração de HW ao código bruto de 12 bits, saturando em [0,4095]. */
+static inline uint16_t hal_adc_raw_cal(uint32_t raw12, int32_t off)
+{
+    if (raw12 == 0U || raw12 == 4095U) return (uint16_t)raw12;
+    int32_t v = (int32_t)raw12 + off;
+    if (v < 0)    return 0U;
+    if (v > 4095) return 4095U;
+    return (uint16_t)v;
+}
+
+/* Snapshot do último frame processado — escrito pelo batch_work, lido na
+ * publicação de telemetria (mesmo contexto: same_wq). */
+static struct {
+    float Va, Vb, Vc, ia, ib, ic;
+} hal_snap;
+
+/* Frames entre disparos de telemetria (~100 Hz com frame de 6,58 µs e
+ * batch de 16 → ~105 µs por batch → 1520 / 16 ≈ 95 batches). */
+#define HAL_TELEM_FRAMES  1520U
+
+static uint32_t hal_frame_cnt;
+
+/* Número de frames por batch — deve bater com CH32_ADC_BATCH_FRAMES no driver.
+ * Canais por frame no ADC dual = HAL_ADC1_NUM_CH (3). */
+#define HAL_BATCH_FRAMES  16U
+#define HAL_BATCH_WORDS   (HAL_BATCH_FRAMES * HAL_ADC1_NUM_CH)
+
+/* Double buffer: ISR escreve sempre no buffer "inativo" (1 - widx) e
+ * publica o novo índice; o work_fn lê sempre do índice publicado.
+ * Com um único core não há aliasing: ISR sempre escreve no oposto do que
+ * o work lê, mesmo que os dois se sobreponham no tempo. */
+static uint32_t    hal_batch_bufs[2][HAL_BATCH_WORDS];
+static atomic_t    hal_batch_widx = ATOMIC_INIT(0);
+static int32_t     hal_batch_cal_master;
+static int32_t     hal_batch_cal_slave;
+
+static struct k_work hal_batch_work;
+
 /**
- * @brief Inicializa e configura os canais de ADC1/ADC2 (hardware real).
+ * @brief Work que processa um batch de HAL_BATCH_FRAMES frames ADC.
+ *
+ * Roda na same_wq, não na ISR. Aplica calibração afim, executa o observador
+ * para cada frame do batch, depois Observer_Apply_Pending (que usa k_mutex)
+ * e publica telemetria a ~100 Hz.
+ */
+static void hal_batch_work_fn(struct k_work *w)
+{
+    ARG_UNUSED(w);
+
+    int ridx = atomic_get(&hal_batch_widx);
+    const uint32_t *buf = hal_batch_bufs[ridx];
+    int32_t cal_m = hal_batch_cal_master;
+    int32_t cal_s = hal_batch_cal_slave;
+
+    for (uint32_t f = 0; f < HAL_BATCH_FRAMES; f++) {
+        const uint32_t *fr = &buf[f * HAL_ADC1_NUM_CH];
+
+        float rVa = raw_to_mv(hal_adc_raw_cal(fr[0] & 0xFFFU,         cal_m));
+        float rVb = raw_to_mv(hal_adc_raw_cal(fr[1] & 0xFFFU,         cal_m));
+        float rVc = raw_to_mv(hal_adc_raw_cal(fr[2] & 0xFFFU,         cal_m));
+        float ria  = raw_to_mv(hal_adc_raw_cal((fr[0] >> 16) & 0xFFFU, cal_s));
+        float rib  = raw_to_mv(hal_adc_raw_cal((fr[1] >> 16) & 0xFFFU, cal_s));
+        float ric  = raw_to_mv(hal_adc_raw_cal((fr[2] >> 16) & 0xFFFU, cal_s));
+
+        if (hal_cal_phase != HAL_CAL_READY) {
+            if (hal_cal_phase != HAL_CAL_FAILED) {
+                float raw_i[3] = {ria, rib, ric};
+                hal_calibration_step(raw_i);
+            }
+            continue;
+        }
+
+        float Va = apply_calib(TARGET_VOLTAGE_A, rVa);
+        float Vb = apply_calib(TARGET_VOLTAGE_B, rVb);
+        float Vc = apply_calib(TARGET_VOLTAGE_C, rVc);
+        float ia = apply_calib(TARGET_CURRENT_A, ria);
+        float ib = apply_calib(TARGET_CURRENT_B, rib);
+        float ic = apply_calib(TARGET_CURRENT_C, ric);
+
+        /* Clarke + SMO ficam dentro do Observer_Manager. */
+        Observer_Step_ABC(Va, Vb, Vc, ia, ib, ic);
+
+        hal_snap.Va = Va;  hal_snap.Vb = Vb;  hal_snap.Vc = Vc;
+        hal_snap.ia = ia;  hal_snap.ib = ib;  hal_snap.ic = ic;
+    }
+
+    /* Observer_Apply_Pending uma vez por batch — usa k_mutex, seguro aqui. */
+    if (hal_cal_phase == HAL_CAL_READY) {
+        Observer_Apply_Pending();
+    }
+
+    /* Telemetria a ~100 Hz. */
+    hal_frame_cnt += HAL_BATCH_FRAMES;
+    if (hal_frame_cnt >= HAL_TELEM_FRAMES) {
+        hal_frame_cnt = 0;
+        float Va = hal_snap.Va, Vb = hal_snap.Vb, Vc = hal_snap.Vc;
+        float ia = hal_snap.ia, ib = hal_snap.ib, ic = hal_snap.ic;
+        Security_Manager_Check_Electrical(Va, Vb, Vc, ia, ib, ic);
+        Security_Manager_Check_Observer();
+        hal_publish_telemetry(Va, Vb, Vc, ia, ib, ic,
+                              Observer_Get_V_Alpha(), Observer_Get_V_Beta(),
+                              Observer_Get_I_Alpha(), Observer_Get_I_Beta());
+    }
+
+    HAL_ADC_Resume();
+}
+
+/**
+ * @brief Callback de frame ADC — chamado diretamente pela ISR de DMA.
+ *
+ * nch = HAL_ADC1_NUM_CH × HAL_BATCH_FRAMES (ex: 3 × 16 = 48 words).
+ * ISR copia o batch para o double buffer e submete o work na same_wq.
+ * O processamento pesado (Clarke × N + Observer_Step × N) fica fora da ISR.
+ */
+static void hal_adc_isr_frame(const uint32_t *frame, uint8_t nch,
+                               int32_t cal_master, int32_t cal_slave,
+                               void *unused)
+{
+    ARG_UNUSED(unused);
+
+    if (atomic_get(&hal_adc_paused)) return;
+
+    /* Escreve sempre no buffer oposto ao que o work está lendo. */
+    int widx = 1 - atomic_get(&hal_batch_widx);
+    memcpy(hal_batch_bufs[widx], frame, (size_t)nch * sizeof(uint32_t));
+    hal_batch_cal_master = cal_master;
+    hal_batch_cal_slave  = cal_slave;
+    atomic_set(&hal_batch_widx, widx);
+
+    HAL_ADC_Pause();
+    
+    /* Se o work já está enfileirado, este submit é no-op — o próximo batch
+     * será lido pelo índice publicado acima, então não perdemos dados críticos. */
+    k_work_submit_to_queue(&same_wq, &hal_batch_work);
+}
+
+/**
+ * @brief Inicializa ADC1/ADC2 e registra o callback de frame direto na ISR.
  * @return 0 em sucesso, ou -ENODEV/erro do adc_channel_setup
  */
 static int hal_adc_hw_init(void)
@@ -173,33 +364,14 @@ static int hal_adc_hw_init(void)
         int r = adc_channel_setup(adc2_dev, &adc2_ch_cfg[i]);
         if (r) { LOG_ERR("ADC2 setup ch%d: %d", i, r); return r; }
     }
-    LOG_INF("HAL: ADC1(3 tensões)+ADC2(3 correntes) configurados");
-    return 0;
-}
 
-/**
- * @brief Lê os 2 ADCs -> valores brutos em mV (calibração é em hal_acquire).
- *
- * As duas chamadas parecem sequenciais mas não são: o driver dispara ADC1+ADC2
- * em modo dual simultâneo (DUALMOD), então adc_read(adc2) só espera o
- * semáforo já sinalizado pela ISR do ADC1 (ADC2 não tem DMA próprio no
- * CH32V307 — ver driver).
- *
- * @param Va, Vb, Vc [out] tensões de fase brutas (mV)
- * @param ia, ib, ic [out] correntes de fase brutas (mV no shunt/sensor)
- * @return 0 em sucesso, -EIO se a leitura falhar
- */
-static int hal_read_raw(float *Va, float *Vb, float *Vc,
-                        float *ia, float *ib, float *ic)
-{
-    if (adc_read(adc1_dev, &adc1_seq) != 0) return -EIO;
-    if (adc_read(adc2_dev, &adc2_seq) != 0) return -EIO;
-    *Va = raw_to_mv(adc1_buf[0]);
-    *Vb = raw_to_mv(adc1_buf[1]);
-    *Vc = raw_to_mv(adc1_buf[2]);
-    *ia = raw_to_mv(adc2_buf[0]);
-    *ib = raw_to_mv(adc2_buf[1]);
-    *ic = raw_to_mv(adc2_buf[2]);
+    k_work_init(&hal_batch_work, hal_batch_work_fn);
+    adc_ch32v307_set_frame_callback(adc1_dev, hal_adc_isr_frame, NULL);
+
+    LOG_INF("HAL: ADC ISR copia batch de %u frames → same_wq, "
+            "telemetria a cada %u frames (~%u ms)",
+            (unsigned)HAL_BATCH_FRAMES, (unsigned)HAL_TELEM_FRAMES,
+            (unsigned)(HAL_TELEM_FRAMES * 7U / 1000U));
     return 0;
 }
 
@@ -285,18 +457,9 @@ static int hal_read_raw(float *Va, float *Vb, float *Vc,
     *ic = HAL_HALL_ZERO_MV + SIM_HALL_ZERO_ERR_MV + i_c * HAL_CURR_MV_PER_A;
     return 0;
 }
-#endif /* CONFIG_ARCH_POSIX */
 
-/**
- * @brief Lê a fonte bruta (real ou sintética) e aplica a calibração por
- * sensor — implementação única, compartilhada pelas duas plataformas.
- * @param Va, Vb, Vc [out] tensões de fase calibradas (V)
- * @param ia, ib, ic [out] correntes de fase calibradas (A)
- * @param raw_i [out] tensão bruta no pino dos 3 canais de corrente (mV),
- *        NULL se não interessa — usada pela calibração de offset do boot,
- *        que precisa do valor antes da reta de calibração.
- * @return 0 em sucesso, -EIO se hal_read_raw falhar
- */
+/* hal_acquire: wrapeia hal_read_raw + calibração afim — só usado no
+ * native_sim (no hardware o caminho é hal_adc_isr_frame via ISR). */
 static int hal_acquire(float *Va, float *Vb, float *Vc,
                        float *ia, float *ib, float *ic,
                        float raw_i[3])
@@ -312,6 +475,7 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
     *ic = apply_calib(TARGET_CURRENT_C, ric);
     return 0;
 }
+#endif /* CONFIG_ARCH_POSIX */
 
 #else  /* HAL_ENABLE_ADC == 0 */
 
@@ -331,59 +495,22 @@ static int hal_acquire(float *Va, float *Vb, float *Vc,
 }
 #endif
 
+/** @brief Expõe os defaults de calibração para main() chamar antes do NVM. */
+void HAL_Calib_Init_Defaults(void)
+{
+    hal_adc_calib_init();
+}
+
 /**
- * @brief Inicializa calibração e ADCs (ou stub, se HAL_ENABLE_ADC=0).
+ * @brief Inicializa ADCs (ou stub, se HAL_ENABLE_ADC=0).
+ * NÃO reseta adc_calib[] — main() deve chamar HAL_Calib_Init_Defaults()
+ * antes de NVM_Init() para que os valores do EEPROM sobrevivam ao HAL_ADC_Init.
  * @return 0 em sucesso, ou erro de hal_adc_hw_init
  */
 int HAL_ADC_Init(void)
 {
-    hal_adc_calib_init();   /* sempre roda, independe do hardware */
     return hal_adc_hw_init();
 }
-
-/* ======================================================================== *
- * Calibração de offset do sensor Hall de corrente, no boot                 *
- *
- * Por que existe: o SS49E é ratiométrico e repousa em Vcc/2, mas o ponto
- * exato deriva — nos três ensaios de bancada (Apêndice A da monografia) o
- * repouso a 0 A caiu em 2,48570 / 2,48640 / 2,49150 V. São 5,8 mV de
- * espalhamento que, na cadeia de 16,875 mV/A, valem 0,31 A de corrente
- * FANTASMA. E como o erro é comum às três fases, ele não se cancela no
- * Clarke de 3 termos: entra como componente de sequência zero e vira BEMF
- * espúria no SMO. Gravar um offset de catálogo não resolve; tem de ser
- * medido, com o ESC parado, a cada boot.
- *
- * O observador fica BLOQUEADO até isto concluir — senão a PLL trava num
- * ângulo errado e nenhum ajuste de Γ conserta, porque o erro está na
- * entrada, não nos ganhos.
- * ======================================================================== */
-typedef enum {
-    HAL_CAL_SETTLING,   /* esperando o Hall estabilizar (SM_CAL_SETTLE_MS) */
-    HAL_CAL_SAMPLING,   /* acumulando SM_CAL_FRAMES com o ESC parado */
-    HAL_CAL_READY,      /* offset gravado — observador liberado */
-    HAL_CAL_FAILED,     /* ruído alto demais: não gravou */
-} hal_cal_phase_t;
-
-#if HAL_CALIBRATE_ON_BOOT
-static hal_cal_phase_t hal_cal_phase = HAL_CAL_SETTLING;
-#else
-static hal_cal_phase_t hal_cal_phase = HAL_CAL_READY;
-#endif
-
-static uint32_t hal_cal_t0;
-static uint32_t hal_cal_n;
-
-/* Média e variância por Welford, em float puro.
- *
- * A forma ingênua (somatório + somatório dos quadrados) NÃO serve aqui: com
- * 4096 amostras de ~2238 mV, Σx² chega a 2,05e10, onde o ulp do float é 2048.
- * A variância sairia da diferença E[x²] − E[x]² entre dois números de ~5e6
- * cujo resultado esperado é da ordem de dezenas: cancelamento catastrófico,
- * desvio-padrão puro ruído de arredondamento. Usar double resolveria a
- * numérica e custaria ~10 kB de flash em soft-float, já que o CH32V307 só
- * tem FPU de precisão simples. Welford é estável e cabe em float. */
-static float    hal_cal_mean[3];
-static float    hal_cal_m2[3];
 
 static const uint8_t hal_cal_target[3] = {
     TARGET_CURRENT_A, TARGET_CURRENT_B, TARGET_CURRENT_C
@@ -579,9 +706,12 @@ static void hal_publish_telemetry(float Va, float Vb, float Vc,
     OSSI_Submit_Sensor(SENSOR_ID_TORQUE_HELICE,   Observer_Get_Torque_Helice());
 }
 
+/* A thread só existe no native_sim: no hardware o caminho crítico corre
+ * inteiro em ISR (hal_adc_isr_frame) sem nunca bloquear num semáforo. */
+#ifdef CONFIG_ARCH_POSIX
 /**
- * @brief Thread de aquisição: bloqueia na conversão do ADC, roda Clarke +
- * Observer_Step, e publica telemetria decimada no tempo. Nunca retorna.
+ * @brief Thread de aquisição (native_sim): chama hal_acquire em loop,
+ * roda Clarke + Observer_Step e publica telemetria decimada. Nunca retorna.
  * @param p1, p2, p3 não usados (assinatura exigida por k_thread_create)
  */
 static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
@@ -670,21 +800,34 @@ static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
 
 K_THREAD_STACK_DEFINE(hal_adc_stack, HAL_STACK_SIZE);
 static struct k_thread hal_adc_thread_data;
+#endif /* CONFIG_ARCH_POSIX */
 
 /**
- * @brief Inicializa os ADCs e sobe a thread de aquisição/observador.
+ * @brief Inicializa os ADCs e (só no native_sim) sobe a thread de aquisição.
+ *
+ * No hardware real o caminho ADC → Clarke → Observer roda direto na ISR de
+ * DMA via hal_adc_isr_frame — nenhuma thread é criada aqui.
  * @return 0 em sucesso, ou erro de HAL_ADC_Init
  */
 int HAL_Init(void)
 {
+#if HAL_CALIBRATE_ON_BOOT && !defined(CONFIG_ARCH_POSIX)
+    hal_cal_t0 = k_uptime_get_32();
+    Security_Manager_Error_Set(ERROR_CAL_IN_PROGRESS, true);
+    LOG_INF("Calibracao de offset: aguardando %u ms de estabilizacao do Hall "
+            "(MANTENHA O ESC PARADO)", (unsigned)SM_CAL_SETTLE_MS);
+#endif
+
     int r = HAL_ADC_Init();
     if (r) return r;
 
+#ifdef CONFIG_ARCH_POSIX
     k_thread_create(&hal_adc_thread_data, hal_adc_stack,
                     K_THREAD_STACK_SIZEOF(hal_adc_stack),
                     HAL_thread_ADC_fn, NULL, NULL, NULL,
                     HAL_ADC_PRIO, 0, K_NO_WAIT);
     k_thread_name_set(&hal_adc_thread_data, "hal_adc");
+#endif
 
     LOG_INF("HAL_Init concluído");
     return 0;

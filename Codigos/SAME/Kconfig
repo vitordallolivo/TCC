@@ -1,0 +1,15 @@
+mainmenu "SAME Firmware"
+
+source "Kconfig.zephyr"
+
+menu "SAME application"
+
+config SAME_NET_STATUS_UART
+	bool "Imprime status de rede e telemetria na UART a cada 500 ms"
+	default n
+	help
+	  Quando habilitado, um worker na same_wq imprime a cada 500 ms:
+	  status da conexão, IP configurado, fd do socket TX, RPM estimado,
+	  torque elétrico e error_code. Útil para bancada sem a GUI conectada.
+
+endmenu

@@ -12,8 +12,14 @@
 LOG_MODULE_REGISTER(ossi, LOG_LEVEL_WRN);
 
 /* same_wq: thread única de eventos (telemetria + CMDs), prioridade menor
- * que a thread do ADC (7) — o passo do SMO nunca espera a fila. */
-#define SAME_WQ_STACK_SIZE  2048
+ * que a thread do ADC (7) — o passo do SMO nunca espera a fila.
+ *
+ * Stack de 8192 B: hal_batch_work_fn (16 × Observer_Step + FPU_SHARING) usa
+ * ~500-600 B só de contexto FPU (32 fregs × 4 B × N interrupções aninhadas),
+ * mais Observer_Apply_Pending (k_mutex + Observer_Recompute), Security_Manager
+ * e LOG_INF. Com 2048 B o same_wq overflowava quando o link Ethernet subia e
+ * os DMA IRQs começavam a entrar durante o loop de Observer_Step. */
+#define SAME_WQ_STACK_SIZE  8192
 #define SAME_WQ_PRIORITY       5
 
 K_THREAD_STACK_DEFINE(same_wq_stack, SAME_WQ_STACK_SIZE);
@@ -51,9 +57,7 @@ static void sensor_dispatch_fn(struct k_work *w)
 void OSSI_Submit_Sensor(uint32_t sensor_id, float value)
 {
     sensor_item_t item = { sensor_id, value };
-    if (k_msgq_put(&sensor_queue, &item, K_NO_WAIT) != 0) {
-        LOG_WRN("sensor_queue cheia — sensor_id %u descartado", sensor_id);
-    }
+    k_msgq_put(&sensor_queue, &item, K_NO_WAIT);
     k_work_submit_to_queue(&same_wq, &sensor_dispatch_work);
 }
 

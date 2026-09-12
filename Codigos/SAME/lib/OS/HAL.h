@@ -25,12 +25,19 @@
 int  HAL_Init(void);
 /* @brief Inicializa só os ADCs (chamado por HAL_Init). @return 0 ou erro. */
 int  HAL_ADC_Init(void);
+/* @brief Aplica os defaults de calibração (SAME_SENSOR_TABLE) ao array interno.
+ * Chamar em main() ANTES de NVM_Init(), para que o NVM possa sobrescrever
+ * com valores salvos antes de HAL_ADC_Init() ligar o DMA. */
+void HAL_Calib_Init_Defaults(void);
 
 /* Calibração afim por sensor: y = linear·(mV no pino) + offset. */
 /* @param sensor_id índice (target_type) @param linear ganho @param offset deslocamento */
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset);
 /* @param sensor_id índice @param linear [out] ganho @param offset [out] deslocamento */
 void HAL_ADC_Get_Calib(uint8_t sensor_id, float *linear, float *offset);
+/* Pausa/retoma o callback de ISR do ADC — usar ao redor de mudanças de sensor. */
+void HAL_ADC_Pause(void);
+void HAL_ADC_Resume(void);
 
 /*
  * @brief true depois que o offset do sensor Hall de corrente foi levantado no

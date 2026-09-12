@@ -20,6 +20,7 @@
 #include <zephyr/sys/util.h>
 #include <stdint.h>
 #include "Observer_Manager.h"   /* OBS_TS_NS — Ts que o observador assume */
+#include "../adc_ch32v307.h"    /* adc_ch32v307_frame_cb_t (API pública) */
 
 LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 
@@ -91,12 +92,16 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 #define DMA_CFGR_MSIZE_16   BIT(10)  /* Memory size 16 bit */
 #define DMA_CFGR_PSIZE_32   BIT(9)   /* Peripheral size 32 bit */
 #define DMA_CFGR_MSIZE_32   BIT(11)  /* Memory size 32 bit */
-#define DMA_CFGR_PL_HIGH    BIT(12)  /* Priority level high */
+#define DMA_CFGR_PL_HIGH    BIT(13)  /* Priority level high (PL[13:12]=0b10) */
 
-/* ISR/IFCR: 4 bits por canal (GIFx, TCIFx, HTIFx, TEIFx) → canal N usa
- * TCIF no bit (4*(N-1) + 1) e HTIF no bit (4*(N-1) + 2) */
+/* ISR/IFCR: 4 bits por canal (GIFx, TCIFx, HTIFx, TEIFx) → canal N usa:
+ *   GIF  no bit (4*(N-1) + 0)
+ *   TCIF no bit (4*(N-1) + 1)
+ *   HTIF no bit (4*(N-1) + 2)
+ *   TEIF no bit (4*(N-1) + 3) */
 #define DMA1_TCIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 1U)
 #define DMA1_HTIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 2U)
+#define DMA1_TEIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 3U)
 
 /* RCC */
 #define RCC_BASE        0x40021000UL
@@ -204,6 +209,15 @@ static const uint16_t ch32_adc_smp_x10[8] = {
  * ========================================================= */
 #define CH32_ADC_MAX_CHANNELS  16
 
+/* Número de frames ADC acumulados por metade do buffer ping-pong.
+ * ISR dispara a cada BATCH_FRAMES frames; o callback recebe o ponteiro
+ * para a metade estável com ch_count * BATCH_FRAMES words de uma vez.
+ * O processamento (Clarke + Observer_Step × N) acontece fora da ISR, na
+ * work queue, dando tempo ao RTOS entre batches. */
+#ifndef CH32_ADC_BATCH_FRAMES
+#define CH32_ADC_BATCH_FRAMES  16
+#endif
+
 /* Par dual (mestre ADC1 + escravo ADC2), resolvido em runtime comparando
  * cfg->base no init() de cada instância. Na SIBA (só ADC1) fica {NULL,NULL}
  * e tudo cai no caminho independente normal. */
@@ -213,19 +227,18 @@ static const struct device *g_adc2_dev;
 /* Buffer do DMA combinado de 32 bits (só usado pelo mestre em modo dual):
  * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}.
  *
- * PING-PONG (2 frames): com um buffer de exatamente ch_count words o DMA
- * circular começa a sobrescrever a word 0 enquanto a ISR ainda lê o frame —
- * amostra misturada entre frames, intermitente e pior em rotação alta. Com
- * 2 frames e as DUAS interrupções, a metade que a ISR lê nunca é a que o DMA
- * escreve:
+ * PING-PONG com BATCH: cada metade do buffer tem CH32_ADC_BATCH_FRAMES frames
+ * completos. O DMA só dispara a ISR após preencher BATCH_FRAMES frames inteiros;
+ * a ISR copia a metade estável (memcpy ~192 B) e retorna — o processamento
+ * pesado (Clarke + Observer_Step × N) acontece na work queue, longe da ISR.
  *
- *     half-transfer      -> DMA escreve a 2ª metade, ISR processa a 1ª
- *     transfer-complete  -> DMA escreve a 1ª metade, ISR processa a 2ª
+ *     half-transfer  → DMA escreve a 2ª metade, ISR copia a 1ª (estável)
+ *     transfer-comp. → DMA escreve a 1ª metade, ISR copia a 2ª (estável)
  *
- * Custo: o dobro do buffer (128 B no pior caso). A coerência passa a ser
- * garantida por construção, não por sorte de timing. */
+ * Tamanho total: 2 × ch_count × BATCH_FRAMES × 4 B.
+ * Com ch_count=3 e BATCH_FRAMES=16: 384 B. */
 static __attribute__((aligned(4)))
-uint32_t g_dual_dma_buf[2 * CH32_ADC_MAX_CHANNELS];
+uint32_t g_dual_dma_buf[2U * CH32_ADC_MAX_CHANNELS * CH32_ADC_BATCH_FRAMES];
 
 /**
  * @brief Verifica se ADC1 e ADC2 estão ambos instanciados (par dual).
@@ -253,9 +266,14 @@ struct adc_ch32v307_data {
     uint16_t *user_buf;
     uint8_t   user_ch_count;
 
-    /* Sincronização */
+    /* Sincronização — usada apenas no caminho legado (sem callback) */
     struct k_sem            sem_sync;   /* para adc_read() síncrono */
     struct k_poll_signal   *async_sig;  /* para adc_read_async()     */
+
+    /* Callback direto de frame (ISR, sem overhead de kernel).
+     * Quando não-NULL, substitui por completo o caminho semáforo+user_buf. */
+    adc_ch32v307_frame_cb_t frame_cb;
+    void                   *frame_cb_user;
 
     /* Offset de calibração desta instância, em LSB, com sinal.
      * Somado a TODA amostra — ver adc_get_calibration_value(). */
@@ -322,35 +340,50 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
     bool full = (isr & tcif) != 0;
 
     if (!half && !full) {
+        /* Pode ser TEIF ou GIF espúrio (reset suave deixa TEIF ativo no DMA).
+         * Sem limpar, o PFIC re-despacha a ISR imediatamente ao retornar —
+         * tempestade de interrupções que trava o CPU antes de main(). */
+        DMA1_IFCR = DMA1_TCIF(cfg->dma_channel) | DMA1_HTIF(cfg->dma_channel)
+                  | DMA1_TEIF(cfg->dma_channel);
         return;
     }
     /* Limpa os flags atendidos */
     DMA1_IFCR = (half ? htif : 0U) | (full ? tcif : 0U);
 
     if (adc_dual_is_paired() && dev == g_adc1_dev) {
-        /* Mestre em modo dual: 1 word por passo da sequência — 16 bits
-         * baixos = ADC1 (este dev), 16 bits altos = ADC2 (escravo).
+        /* Mestre em modo dual: 1 word por canal da sequência —
+         *   bits [15: 0] = código bruto ADC1 (canal i)
+         *   bits [31:16] = código bruto ADC2 (canal i)
          *
-         * Ping-pong: half-transfer => a metade ESTÁVEL é a primeira
-         * (words 0..n-1); transfer-complete => é a segunda. Se as duas
-         * flags vierem juntas, a ISR atrasou um frame inteiro e o mais
-         * novo é o da segunda metade. */
+         * Ping-pong: half-transfer → metade estável = words 0..nch-1
+         *            transfer-complete → metade estável = words nch..2*nch-1
+         * Se as duas flags chegam juntas a ISR perdeu um frame (dado novo
+         * está na segunda metade). */
         struct adc_ch32v307_data *sdata = g_adc2_dev->data;
-        const uint32_t *frame = full ? &g_dual_dma_buf[data->ch_count]
+        /* Cada metade do ping-pong tem ch_count × BATCH_FRAMES words. */
+        uint16_t half_len = (uint16_t)(data->ch_count * CH32_ADC_BATCH_FRAMES);
+        const uint32_t *frame = full ? &g_dual_dma_buf[half_len]
                                      : &g_dual_dma_buf[0];
 
-        /* Não há flag de overrun nos canais regulares deste ADC: se a ISR
-         * estourar o orçamento, o dado é sobrescrito EM SILÊNCIO. As duas
-         * flags simultâneas são a única evidência disponível de que um
-         * frame foi perdido — contabilizar em vez de ignorar. */
         if (half && full) {
             data->dropped_frames++;
         }
         data->seq++;
 
-        /* {ADC2[31:16], ADC1[15:0]}, com o offset de calibração de cada um
-         * aplicado — a autocalibração de HW deixa resíduo (ver
-         * adc_get_calibration_value). */
+        /* ── Callback de frame ────────────────────────────────────────────
+         * Entregamos o ponteiro para o início da metade estável + tamanho
+         * total em words (ch_count × BATCH_FRAMES). O HAL copia esse bloco
+         * para um buffer próprio e processa na work queue, sem bloquear a ISR. */
+        if (data->frame_cb) {
+            data->frame_cb(frame, (uint8_t)half_len,
+                           data->cal_offset, sdata->cal_offset,
+                           data->frame_cb_user);
+            return;
+        }
+
+        /* ── Caminho legado (semáforo / adc_read bloqueante) ─────────────
+         * Mantido para compatibilidade com native_sim e testes unitários
+         * que usam a API padrão Zephyr (adc_read). */
         for (int i = 0; i < data->ch_count; i++) {
             uint32_t w = frame[i];
             if (data->user_buf) {
@@ -369,9 +402,6 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
         } else {
             k_sem_give(&data->sem_sync);
         }
-        /* O escravo NÃO recebe semáforo: em modo dual ele não espera nada
-         * (ver adc_ch32v307_read). Dar o semáforo aqui era o que fazia o
-         * HAL gastar DOIS transfer-complete por passo do observador. */
         return;
     }
 
@@ -460,9 +490,10 @@ static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16
 
     DMA_CH_REG(chb, DMA_CH_OFF_PADDR) = cfg->base + ADC_OFF_RDATAR;
     DMA_CH_REG(chb, DMA_CH_OFF_MADDR) = (uint32_t)buf;
-    /* 2*count: ping-pong de 2 frames. O half-transfer cai exatamente na
-     * fronteira entre eles, que é o que dá a metade estável à ISR. */
-    DMA_CH_REG(chb, DMA_CH_OFF_CNTR)  = (uint32_t)count * 2U;
+    /* 2 × count × BATCH_FRAMES: cada metade contém BATCH_FRAMES frames
+     * completos (ch_count words cada). ISR dispara a cada BATCH_FRAMES frames;
+     * a metade oposta é a estável que será copiada para o trabalho na fila. */
+    DMA_CH_REG(chb, DMA_CH_OFF_CNTR)  = (uint32_t)count * 2U * CH32_ADC_BATCH_FRAMES;
 
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) =
                     DMA_CFGR_TCIE       |
@@ -624,8 +655,18 @@ static void adc_arm_dual_master(void)
     const struct adc_ch32v307_cfg *mcfg = g_adc1_dev->config;
     const struct adc_ch32v307_cfg *scfg = g_adc2_dev->config;
     struct adc_ch32v307_data *mdata = g_adc1_dev->data;
-
     struct adc_ch32v307_data *sdata = g_adc2_dev->data;
+
+    /* O RM exige que ambos os ADCs tenham o mesmo número de canais na sequência
+     * em modo simultâneo (L igual nos RSQRx). Além disso, ch_count=0 causaria
+     * underflow em adc_set_sequence: (uint8_t)(0-1)=255 → L=15 → ADC2 tentaria
+     * 16 conversões de canal indefinido. Retorna aqui; o arme acontece
+     * automaticamente na última chamada de adc_channel_setup quando os dois
+     * lados tiverem a mesma contagem. */
+    if (mdata->ch_count == 0 || sdata->ch_count == 0 ||
+        mdata->ch_count != sdata->ch_count) {
+        return;
+    }
 
     /* Ordem seguida abaixo = a do exemplo oficial da WCH
      * (EVT/EXAM/ADC/DualADC_RegSimul): modo dual e bit de DMA primeiro,
@@ -681,9 +722,9 @@ static void adc_arm_dual_master(void)
     adc_busy_delay(2000);   /* tSTAB, com folga */
 
     /* --- 5. Calibração dos dois, ANTES de o canal de DMA subir -----------
-     * UMA vez por ADC: adc_hw_reconfigure() chama esta função a cada canal
-     * adicionado (6 vezes no boot da SAME), e a rotina da WCH faz 10 passadas
-     * de RSTCAL/CAL — repetir daria 120 calibrações sem ganho nenhum. */
+     * UMA vez por ADC: o guarda de contagem acima faz esta função só rodar
+     * quando ambos os lados têm o mesmo ch_count, o que acontece apenas na
+     * última chamada de adc_channel_setup — portanto uma calibração no boot. */
     if (!mdata->calibrated) {
         mdata->cal_offset = adc_get_calibration_value(mcfg->base);
         mdata->calibrated = true;
@@ -992,8 +1033,13 @@ static int adc_ch32v307_init(const struct device *dev)
     }
 
     /* Habilita a IRQ do canal DMA1, só se esta instância tiver DMA própria
-     * (o escravo ADC2 recebe o resultado via ISR do mestre). */
+     * (o escravo ADC2 recebe o resultado via ISR do mestre).
+     * Limpa flags residuais ANTES de habilitar: após reset suave o canal pode
+     * ter TEIF pendente; sem esse clear o PFIC dispararia a ISR imediatamente
+     * ao sair de irq_enable e travaria em tempestade antes de main(). */
     if (cfg->has_dma) {
+        DMA1_IFCR = DMA1_TCIF(cfg->dma_channel) | DMA1_HTIF(cfg->dma_channel)
+                  | DMA1_TEIF(cfg->dma_channel);
         cfg->irq_config_func(dev);
     }
 
@@ -1064,3 +1110,28 @@ static const struct adc_driver_api adc_ch32v307_api = {
         &adc_ch32v307_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ADC_CH32V307_INIT)
+
+/**
+ * @brief Registra (ou remove) callback direto de frame para o ADC mestre.
+ *
+ * Quando @p cb != NULL, a ISR de DMA chama @p cb diretamente após cada
+ * conversão, sem k_sem_give — eliminando o context-switch do caminho crítico.
+ * Passar @p cb = NULL restaura o caminho legado (semáforo → adc_read).
+ *
+ * @param dev  Instância ADC1 (mestre do par dual; retorna imediatamente para
+ *             ADC2 pois o escravo não tem ISR própria).
+ * @param cb   Função chamada em ISR a cada frame DMA, ou NULL.
+ * @param user Ponteiro opaco repassado a @p cb.
+ */
+void adc_ch32v307_set_frame_callback(const struct device *dev,
+                                     adc_ch32v307_frame_cb_t cb,
+                                     void *user)
+{
+    struct adc_ch32v307_data *data = dev->data;
+    /* Escrita atômica: o compilador não pode reordenar as duas atribuições
+     * acima de frame_cb — user_data deve estar visível antes do ponteiro
+     * de função, senão a ISR pode chamar cb com user=NULL. */
+    data->frame_cb_user = user;
+    compiler_barrier();
+    data->frame_cb = cb;
+}

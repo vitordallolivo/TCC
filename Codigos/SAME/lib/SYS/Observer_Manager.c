@@ -201,6 +201,12 @@ static float out_torque_helice;
 static float out_amp_e;      /* amplitude da BEMF estimada (|ê|) — lock da PLL */
 static float out_phase_err;  /* erro de fase da PLL no último passo */
 
+/* Valores αβ do último Observer_Step_ABC (lidos na same_wq, sem lock). */
+static float out_v_alpha;
+static float out_v_beta;
+static float out_i_alpha;
+static float out_i_beta;
+
 /* Reconfiguração pendente: escrita pela same_wq, aplicada pela thread do ADC. */
 static obs_params    pending_params;
 static atomic_t      reconfig_pending;
@@ -764,6 +770,35 @@ float Observer_Get_Bemf_Amplitude(void) { return out_amp_e; }
 /** @brief Erro de fase da PLL do último passo. @return rad (0 se BEMF baixa). */
 float Observer_Get_Phase_Error(void)    { return out_phase_err; }
 
+/* Clarke 3-termos amplitude-invariante — usada em Observer_Step_ABC. */
+#define TWO_THIRDS_V   0.6666666666666666f
+#define INV_SQRT3_V    0.5773502691896258f
+
+/**
+ * @brief Clarke transform (amplitude-invariante, 3 termos) + Observer_Step.
+ * Computa αβ a partir de V/A por fase e avança o SMO. Armazena os αβ para os
+ * getters, para o HAL publicar na telemetria.
+ */
+void Observer_Step_ABC(float Va, float Vb, float Vc, float ia, float ib, float ic)
+{
+    float v_al = TWO_THIRDS_V * (Va - 0.5f * Vb - 0.5f * Vc);
+    float v_be = INV_SQRT3_V  * (Vb - Vc);
+    float i_al = TWO_THIRDS_V * (ia - 0.5f * ib - 0.5f * ic);
+    float i_be = INV_SQRT3_V  * (ib - ic);
+
+    out_v_alpha = v_al;
+    out_v_beta  = v_be;
+    out_i_alpha = i_al;
+    out_i_beta  = i_be;
+
+    Observer_Step(v_al, v_be, i_al, i_be);
+}
+
+float Observer_Get_V_Alpha(void) { return out_v_alpha; }
+float Observer_Get_V_Beta(void)  { return out_v_beta;  }
+float Observer_Get_I_Alpha(void) { return out_i_alpha; }
+float Observer_Get_I_Beta(void)  { return out_i_beta;  }
+
 /**
  * @brief Verifica se o estado dinâmico do observador é todo finito.
  * @return true se î,ê,PLL,θ̂,torque são finitos (false = divergiu → NaN/Inf).
@@ -795,4 +830,33 @@ bool Observer_Gamma_Signs_Valid(void)
 {
     return live_params.gamma1 > 0.0f && live_params.gamma2 < 0.0f
         && live_params.gammat > 0.0f;
+}
+
+/**
+ * @brief Lê o valor atual de um parâmetro do observador a partir de
+ * pending_params (inclui CMDs ainda não aplicados pelo laço do ADC).
+ * TARGET_TS_ADC é devolvido em µs (igual ao formato do CMD).
+ * @param target TARGET_* do parâmetro
+ * @param value  [out] valor atual
+ * @return true se o target pertence ao observador
+ */
+bool Observer_Get_Param(target_type target, float *value)
+{
+    k_mutex_lock(&cfg_mutex, K_FOREVER);
+    bool ok = true;
+    switch (target) {
+        case TARGET_POLES_PAIRS:          *value = pending_params.pole_pairs;       break;
+        case TARGET_RESISTANCE:           *value = pending_params.Rs;               break;
+        case TARGET_INDUCTANCE:           *value = pending_params.Ls;               break;
+        case TARGET_KV_RATING:            *value = pending_params.Kv;               break;
+        case TARGET_GAMMA1:               *value = pending_params.gamma1;           break;
+        case TARGET_GAMMA2:               *value = pending_params.gamma2;           break;
+        case TARGET_GAMMAT:               *value = pending_params.gammat;           break;
+        case TARGET_BEMF_LPF_FREQUENCY:   *value = pending_params.bemf_lpf;        break;
+        case TARGET_TORQUE_LPF_FREQUENCY: *value = pending_params.torque_lpf;      break;
+        case TARGET_TS_ADC:               *value = pending_params.ts * 1e6f;       break;
+        default: ok = false; break;
+    }
+    k_mutex_unlock(&cfg_mutex);
+    return ok;
 }
