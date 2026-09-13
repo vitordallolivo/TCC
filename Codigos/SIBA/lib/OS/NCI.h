@@ -15,4 +15,7 @@ void NCI_Set_Connection_Status(bool status);
  * Thread-safe; chamado pelo Log_Manager a cada 10 Hz (siba_wq). */
 void NCI_Transmit(const void *buf, size_t len);
 
+/* Liga/desliga o print periódico de status na UART (CONFIG_SIBA_NET_STATUS_UART). */
+void NCI_Set_Status_Print(bool enabled);
+
 #endif /* NCI_H */

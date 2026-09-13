@@ -68,22 +68,15 @@ static void check_load_cells_health(void)
 }
 
 /**
- * @brief Aplica o throttle no ESC, armando-o automaticamente se necessário.
+ * @brief Aplica o throttle no ESC (sem armar — caller é responsável por
+ * garantir que o ESC já está armado antes de chamar).
  * @param pct throttle desejado; clampado em [0, 100]
  */
 static void apply_throttle(float pct)
 {
     if (pct < 0.0f)   pct = 0.0f;
     if (pct > 100.0f) pct = 100.0f;
-
-    int r = HAL_ESC_Set_Throttle(pct);
-    if (r == -EPERM) {
-        LOG_WRN("Propeller: ESC não armado, armando agora...");
-        HAL_ESC_Arm();
-        r = HAL_ESC_Set_Throttle(pct);
-    }
-
-    if (r == 0) {
+    if (HAL_ESC_Set_Throttle(pct) == 0) {
         applied_throttle = pct;
     }
 }
@@ -163,10 +156,15 @@ void Propeller_Manager_Calibrate_Cell_Weight(uint8_t idx, float known_weight)
  * @brief Aplica o pedido de throttle do usuário, retendo aumentos se a
  * corrente já estiver acima do limite (Propeller_Manager_Update reduz).
  * @param percent throttle pedido (0-100%)
- * @return sempre 0
+ * @return 0 em sucesso, -EPERM se ESC não armado
  */
 int Propeller_Manager_Request_Throttle(float percent)
 {
+    if (!HAL_ESC_Is_Armed()) {
+        LOG_WRN("Propeller: throttle ignorado — ESC nao armado (arme via CMD de rede ou 'arm')");
+        return -EPERM;
+    }
+
     k_mutex_lock(&prop_mutex, K_FOREVER);
 
     requested_throttle = percent;

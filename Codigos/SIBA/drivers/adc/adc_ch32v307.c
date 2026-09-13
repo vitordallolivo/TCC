@@ -19,6 +19,8 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
 #include <stdint.h>
+/* Observer_Manager.h — omitido na SIBA (sem observador de motor aqui). */
+#include "../adc_ch32v307.h"    /* adc_ch32v307_frame_cb_t (API pública) */
 
 LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 
@@ -54,6 +56,8 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 
 /* CTLR1 bits */
 #define ADC_CTLR1_SCAN      BIT(8)
+#define ADC_CTLR1_BUFEN     BIT(26)          /* buffer de entrada */
+#define ADC_CTLR1_PGA_MASK  (0x3UL << 27)    /* ganho x1/x4/x16/x64 (exige BUFEN) */
 
 /* Dual mode — DUALMOD[19:16], só é interpretado no CTLR1 do ADC1 (mestre).
  * 0110 = Regular simultaneous mode (manual de referência 12.3.2). */
@@ -81,17 +85,23 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 /* CFGR bits */
 #define DMA_CFGR_EN         BIT(0)
 #define DMA_CFGR_TCIE       BIT(1)   /* Transfer Complete IRQ enable */
+#define DMA_CFGR_HTIE       BIT(2)   /* Half Transfer IRQ enable */
 #define DMA_CFGR_CIRC       BIT(5)   /* Circular mode */
 #define DMA_CFGR_MINC       BIT(7)   /* Memory increment */
 #define DMA_CFGR_PSIZE_16   BIT(8)   /* Peripheral size 16 bit */
 #define DMA_CFGR_MSIZE_16   BIT(10)  /* Memory size 16 bit */
 #define DMA_CFGR_PSIZE_32   BIT(9)   /* Peripheral size 32 bit */
 #define DMA_CFGR_MSIZE_32   BIT(11)  /* Memory size 32 bit */
-#define DMA_CFGR_PL_HIGH    BIT(12)  /* Priority level high */
+#define DMA_CFGR_PL_HIGH    BIT(13)  /* Priority level high (PL[13:12]=0b10) */
 
-/* ISR/IFCR: 4 bits por canal (GIFx, TCIFx, HTIFx, TEIFx), TCIF é o bit 1
- * de cada grupo → canal N usa o bit (4*(N-1) + 1) */
+/* ISR/IFCR: 4 bits por canal (GIFx, TCIFx, HTIFx, TEIFx) → canal N usa:
+ *   GIF  no bit (4*(N-1) + 0)
+ *   TCIF no bit (4*(N-1) + 1)
+ *   HTIF no bit (4*(N-1) + 2)
+ *   TEIF no bit (4*(N-1) + 3) */
 #define DMA1_TCIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 1U)
+#define DMA1_HTIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 2U)
+#define DMA1_TEIF(ch)       BIT(4U * ((uint32_t)(ch) - 1U) + 3U)
 
 /* RCC */
 #define RCC_BASE        0x40021000UL
@@ -103,14 +113,110 @@ LOG_MODULE_REGISTER(adc_ch32v307, CONFIG_ADC_LOG_LEVEL);
 /* ADC1 = APB2ENR bit 9, ADC2 = bit 10 — blocos consecutivos de 0x400 a
  * partir de ADC1_BASE mapeiam para bits consecutivos a partir do bit 9 */
 #define RCC_APB2_ADCx(adc_index)  BIT(9U + (adc_index))
-/* ADC clock prescaler: bits 14:15 de CFGR0 → /6 = 0b10 */
-#define RCC_CFGR0_ADCPRE_DIV6  (0x2UL << 14)
+
+/* =========================================================
+ * Clock do ADC — CFGR0[15:14] = ADCPRE
+ *
+ * ⚠️ NÃO EXISTE prescaler estendido nesta família. Conferido na SDK da WCH
+ * (ch32v30x_rcc.c): CFGR0_ADCPRE_Reset_Mask = 0xFFFF3FFF limpa SÓ os bits
+ * [15:14], e ch32v30x_rcc.h define apenas RCC_PCLK2_Div2/4/6/8. Ou seja, o
+ * divisor máximo é /8.
+ *
+ * O limite do periférico é 14 MHz. Com PCLK2 = 144 MHz (o Zephyr deixa
+ * HPRE=/1 e não toca em PPRE2 — clock_control_wch_rcc.c), o melhor que /8 dá
+ * é 18 MHz: AINDA ACIMA DO LIMITE. A única forma de entrar em spec é baixar
+ * o próprio PCLK2 — ver CH32_ADC_LOWER_APB2 abaixo.
+ * ========================================================= */
 #define RCC_CFGR0_ADCPRE_MASK  (0x3UL << 14)
+#define RCC_CFGR0_PPRE2_MASK   (0x7UL << 11)
+#define RCC_CFGR0_PPRE2_DIV2   (0x4UL << 11)   /* 0b100 = HCLK/2 */
+
+/* Divisor de PCLK2 para o ADC: 2, 4, 6 ou 8.
+ * /8 é o máximo que existe — e é o que o exemplo oficial da WCH usa
+ * (RCC_ADCCLKConfig(RCC_PCLK2_Div8) em EVT/EXAM/ADC/DualADC_RegSimul). */
+#ifndef CH32_ADC_CLK_DIV
+#define CH32_ADC_CLK_DIV   8
+#endif
+
+/* DESLIGADO, e não ligue sem saber o que vem junto.
+ *
+ * Baixar PPRE2 para /2 (PCLK2 = 72 MHz) é a única forma de o ADCCLK respeitar
+ * o teto de 14 MHz do manual — o divisor do ADC vai só até /8, e 144/8 =
+ * 18 MHz ainda estoura. MAS o PCLK2 é compartilhado: `clock_control_wch_rcc.c`
+ * devolve sempre o clock de AHB em clock_control_get_rate() ("Assume that the
+ * clock tree diagram is correct and always return AHB"), ignorando PPRE2.
+ * Resultado: o driver de USART calcula `divn = 144 MHz / current_speed`
+ * enquanto o PCLK2 real é 72 MHz, e o console vai para METADE do baud —
+ * exigindo compensar `current-speed` no DTS.
+ *
+ * Ou seja: pôr o ADC em spec custa mexer no console, que funciona. Enquanto
+ * essa troca não for decidida, fica em 18 MHz (1,29x acima do limite) e o
+ * driver avisa no boot. */
+#ifndef CH32_ADC_LOWER_APB2
+#define CH32_ADC_LOWER_APB2   0
+#endif
+
+#define CH32_PCLK2_HZ   (CH32_ADC_LOWER_APB2 ? \
+                         (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC / 2) : \
+                         CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC)
+#define CH32_ADCCLK_HZ  (CH32_PCLK2_HZ / CH32_ADC_CLK_DIV)
+
+BUILD_ASSERT(CH32_ADC_CLK_DIV == 2 || CH32_ADC_CLK_DIV == 4 ||
+             CH32_ADC_CLK_DIV == 6 || CH32_ADC_CLK_DIV == 8,
+             "CH32_ADC_CLK_DIV: o ADCPRE desta familia so aceita 2, 4, 6 ou 8 "
+             "(conferido na SDK da WCH, ch32v30x_rcc.h)");
+
+/* Código de ADCPRE: /2=00, /4=01, /6=10, /8=11 */
+#define RCC_CFGR0_ADCPRE  ((uint32_t)((CH32_ADC_CLK_DIV / 2 - 1)) << 14)
+
+/* =========================================================
+ * Tempo de amostragem (SAMPTRx, 3 bits por canal)
+ *
+ * 000=1,5  001=7,5  010=13,5  011=28,5  100=41,5  101=55,5  110=71,5  111=239,5
+ *
+ * Define a taxa por canal junto com o ADCCLK:
+ *     f_s = ADCCLK / ((SMP + 11) * n_canais)
+ *
+ * O padrão anterior era 111 (239,5 ciclos), "máxima precisão" — mas com 3
+ * canais e ADCCLK de 24 MHz isso dá 31,9 kSps/canal, contra os 10 µs
+ * (100 kSps) que o observador assume em OBS_TS. Como o front-end tem RC
+ * antialiasing (o capacitor é quem entrega a carga no instante da
+ * amostragem), SMP curto não custa exatidão aqui — ver CLAUDE.md,
+ * "Filtro antialiasing".
+ *
+ * 011 (28,5) é o ponto de operação do projeto: com ADCCLK = 12 MHz dá
+ * (28,5+11)*3/12e6 = 9,875 µs, que é o OBS_TS de 10 µs do observador.
+ * ========================================================= */
+#ifndef CH32_ADC_SMP
+#define CH32_ADC_SMP   0x3U    /* 28,5 ciclos */
+#endif
+
+BUILD_ASSERT(CH32_ADC_SMP <= 0x7U, "CH32_ADC_SMP: codigo de 3 bits (0..7)");
+
+/* Ciclos de ADCCLK por conversão, ×10 para não perder a meia unidade. */
+static const uint16_t ch32_adc_smp_x10[8] = {
+    15, 75, 135, 285, 415, 555, 715, 2395
+};
+
+/* Período de UM frame (todos os canais da sequência), em nanosegundos.
+ * É o Ts real da malha — tem de bater com OBS_TS do Observer_Manager. */
+#define CH32_ADC_FRAME_NS(n_ch)                                              \
+    ((uint32_t)(((uint64_t)(ch32_adc_smp_x10[CH32_ADC_SMP] + 110U) *         \
+                 (n_ch) * 100000000ULL) / CH32_ADCCLK_HZ))
 
 /* =========================================================
  * Limite de canais suportados simultaneamente
  * ========================================================= */
 #define CH32_ADC_MAX_CHANNELS  16
+
+/* Número de frames ADC acumulados por metade do buffer ping-pong.
+ * ISR dispara a cada BATCH_FRAMES frames; o callback recebe o ponteiro
+ * para a metade estável com ch_count * BATCH_FRAMES words de uma vez.
+ * O processamento (Clarke + Observer_Step × N) acontece fora da ISR, na
+ * work queue, dando tempo ao RTOS entre batches. */
+#ifndef CH32_ADC_BATCH_FRAMES
+#define CH32_ADC_BATCH_FRAMES  256
+#endif
 
 /* Par dual (mestre ADC1 + escravo ADC2), resolvido em runtime comparando
  * cfg->base no init() de cada instância. Na SIBA (só ADC1) fica {NULL,NULL}
@@ -119,8 +225,20 @@ static const struct device *g_adc1_dev;
 static const struct device *g_adc2_dev;
 
 /* Buffer do DMA combinado de 32 bits (só usado pelo mestre em modo dual):
- * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}. */
-static __attribute__((aligned(4))) uint32_t g_dual_dma_buf[CH32_ADC_MAX_CHANNELS];
+ * um word por passo da sequência, {ADC2[31:16], ADC1[15:0]}.
+ *
+ * PING-PONG com BATCH: cada metade tem CH32_ADC_BATCH_FRAMES frames completos
+ * (3 words/frame na SAME: fase A, B e C, cada uma com {i_x, V_x}).
+ *
+ *     half-transfer  → DMA escreve a 2ª metade, ISR lê a 1ª (estável)
+ *     transfer-comp. → DMA escreve a 1ª metade, ISR lê a 2ª (estável)
+ *
+ * Dimensionado para ch_count real (3 fases) — não CH32_ADC_MAX_CHANNELS (16),
+ * que com BATCH_FRAMES=256 geraria 32 KB desnecessários.
+ * Tamanho: 2 × 3 × 256 × 4 B = 6144 B. */
+#define CH32_ADC_DMA_PHASES  3U   /* V_a/V_b/V_c || i_a/i_b/i_c */
+static __attribute__((aligned(4)))
+uint32_t g_dual_dma_buf[2U * CH32_ADC_DMA_PHASES * CH32_ADC_BATCH_FRAMES];
 
 /**
  * @brief Verifica se ADC1 e ADC2 estão ambos instanciados (par dual).
@@ -148,12 +266,50 @@ struct adc_ch32v307_data {
     uint16_t *user_buf;
     uint8_t   user_ch_count;
 
-    /* Sincronização */
+    /* Sincronização — usada apenas no caminho legado (sem callback) */
     struct k_sem            sem_sync;   /* para adc_read() síncrono */
     struct k_poll_signal   *async_sig;  /* para adc_read_async()     */
 
+    /* Callback direto de frame (ISR, sem overhead de kernel).
+     * Quando não-NULL, substitui por completo o caminho semáforo+user_buf. */
+    adc_ch32v307_frame_cb_t frame_cb;
+    void                   *frame_cb_user;
+
+    /* Offset de calibração desta instância, em LSB, com sinal.
+     * Somado a TODA amostra — ver adc_get_calibration_value(). */
+    int16_t cal_offset;
+    bool    calibrated;   /* já calibrado: não repetir a cada channel_setup */
+
+    /* Diagnóstico do stream (só o mestre atualiza) */
+    uint32_t seq;             /* frames entregues desde o boot */
+    uint32_t dropped_frames;  /* HT e TC juntos = a ISR perdeu um frame */
+
     bool initialized;
 };
+
+/**
+ * @brief Aplica o offset de calibração a uma amostra bruta de 12 bits.
+ *
+ * Réplica de Get_ConversionVal() do exemplo oficial da WCH
+ * (EVT/EXAM/ADC/DualADC_RegSimul): a autocalibração de hardware sozinha NÃO
+ * zera o erro — ela deixa um resíduo que o fabricante corrige em software.
+ * Os extremos (0 e 4095) passam sem correção de propósito: são amostras
+ * saturadas, e corrigi-las inventaria código que o conversor não produziu.
+ *
+ * @param raw contagem bruta do ADC (0..4095)
+ * @param off offset de calibração (LSB, com sinal)
+ * @return contagem corrigida, saturada em [0, 4095]
+ */
+static inline uint16_t adc_apply_cal(uint16_t raw, int16_t off)
+{
+    if (raw == 0U || raw == 4095U) {
+        return raw;
+    }
+    int32_t v = (int32_t)raw + off;
+    if (v < 0)     return 0U;
+    if (v > 4095)  return 4095U;
+    return (uint16_t)v;
+}
 
 /* =========================================================
  * Config (vinda do DTS via DEVICE_DT_INST_DEFINE)
@@ -177,22 +333,67 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
     const struct adc_ch32v307_cfg *cfg = dev->config;
     struct adc_ch32v307_data *data = dev->data;
     uint32_t tcif = DMA1_TCIF(cfg->dma_channel);
+    uint32_t htif = DMA1_HTIF(cfg->dma_channel);
+    uint32_t isr  = DMA1_ISR;
 
-    if (!(DMA1_ISR & tcif)) {
+    bool half = (isr & htif) != 0;
+    bool full = (isr & tcif) != 0;
+
+    if (!half && !full) {
+        /* Pode ser TEIF ou GIF espúrio (reset suave deixa TEIF ativo no DMA).
+         * Sem limpar, o PFIC re-despacha a ISR imediatamente ao retornar —
+         * tempestade de interrupções que trava o CPU antes de main(). */
+        DMA1_IFCR = DMA1_TCIF(cfg->dma_channel) | DMA1_HTIF(cfg->dma_channel)
+                  | DMA1_TEIF(cfg->dma_channel);
         return;
     }
-    /* Limpa flag TC do canal */
-    DMA1_IFCR = tcif;
+    /* Limpa os flags atendidos */
+    DMA1_IFCR = (half ? htif : 0U) | (full ? tcif : 0U);
 
     if (adc_dual_is_paired() && dev == g_adc1_dev) {
-        /* Mestre em modo dual: g_dual_dma_buf tem 1 word/passo — 16 bits
-         * baixos = ADC1 (este dev), 16 bits altos = ADC2 (escravo). */
+        /* Mestre em modo dual: 1 word por canal da sequência —
+         *   bits [15: 0] = código bruto ADC1 (canal i)
+         *   bits [31:16] = código bruto ADC2 (canal i)
+         *
+         * Ping-pong: half-transfer → metade estável = words 0..nch-1
+         *            transfer-complete → metade estável = words nch..2*nch-1
+         * Se as duas flags chegam juntas a ISR perdeu um frame (dado novo
+         * está na segunda metade). */
         struct adc_ch32v307_data *sdata = g_adc2_dev->data;
+        /* Cada metade do ping-pong tem ch_count × BATCH_FRAMES words. */
+        uint16_t half_len = (uint16_t)(data->ch_count * CH32_ADC_BATCH_FRAMES);
+        const uint32_t *frame = full ? &g_dual_dma_buf[half_len]
+                                     : &g_dual_dma_buf[0];
 
+        if (half && full) {
+            data->dropped_frames++;
+        }
+        data->seq++;
+
+        /* ── Callback de frame ────────────────────────────────────────────
+         * Entregamos o ponteiro para o início da metade estável + tamanho
+         * total em words (ch_count × BATCH_FRAMES). O HAL copia esse bloco
+         * para um buffer próprio e processa na work queue, sem bloquear a ISR. */
+        if (data->frame_cb) {
+            data->frame_cb(frame, half_len,
+                           data->cal_offset, sdata->cal_offset,
+                           data->frame_cb_user);
+            return;
+        }
+
+        /* ── Caminho legado (semáforo / adc_read bloqueante) ─────────────
+         * Mantido para compatibilidade com native_sim e testes unitários
+         * que usam a API padrão Zephyr (adc_read). */
         for (int i = 0; i < data->ch_count; i++) {
-            uint32_t w = g_dual_dma_buf[i];
-            if (data->user_buf)  data->user_buf[i]  = (uint16_t)(w & 0xFFFFU);
-            if (sdata->user_buf) sdata->user_buf[i] = (uint16_t)(w >> 16);
+            uint32_t w = frame[i];
+            if (data->user_buf) {
+                data->user_buf[i] =
+                    adc_apply_cal((uint16_t)(w & 0x0FFFU), data->cal_offset);
+            }
+            if (sdata->user_buf) {
+                sdata->user_buf[i] =
+                    adc_apply_cal((uint16_t)((w >> 16) & 0x0FFFU), sdata->cal_offset);
+            }
         }
 
         if (data->async_sig) {
@@ -201,12 +402,6 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
         } else {
             k_sem_give(&data->sem_sync);
         }
-        if (sdata->async_sig) {
-            k_poll_signal_raise(sdata->async_sig, 0);
-            sdata->async_sig = NULL;
-        } else {
-            k_sem_give(&sdata->sem_sync);
-        }
         return;
     }
 
@@ -214,7 +409,8 @@ static void adc_ch32v307_dma_isr(const struct device *dev)
      * fora de um par dual) — comportamento de sempre. */
     if (data->user_buf) {
         for (int i = 0; i < data->ch_count; i++) {
-            data->user_buf[i] = data->dma_buf[i];
+            data->user_buf[i] = adc_apply_cal(data->dma_buf[i] & 0x0FFFU,
+                                              data->cal_offset);
         }
     }
     if (data->async_sig) {
@@ -239,10 +435,15 @@ static void adc_rcc_enable(const struct adc_ch32v307_cfg *cfg)
     RCC_AHBPCENR  |= RCC_AHB_DMA1;
     RCC_APB2PCENR |= RCC_APB2_ADCx(adc_index);
 
-    /* ADC clock = PCLK2/6 = 24 MHz (limite datasheet 14 MHz... ajustar p/
-     * /8 se HSE < 112 MHz). Prescaler é compartilhado; última instância a
+    /* PPRE2 e ADCPRE são compartilhados pelas duas instâncias; a segunda a
      * inicializar só reafirma o mesmo valor. */
-    RCC_CFGR0 = (RCC_CFGR0 & ~RCC_CFGR0_ADCPRE_MASK) | RCC_CFGR0_ADCPRE_DIV6;
+    uint32_t cfgr0 = RCC_CFGR0;
+
+#if CH32_ADC_LOWER_APB2
+    cfgr0 = (cfgr0 & ~RCC_CFGR0_PPRE2_MASK) | RCC_CFGR0_PPRE2_DIV2;
+#endif
+    cfgr0 = (cfgr0 & ~RCC_CFGR0_ADCPRE_MASK) | RCC_CFGR0_ADCPRE;
+    RCC_CFGR0 = cfgr0;
 }
 
 /**
@@ -289,10 +490,14 @@ static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16
 
     DMA_CH_REG(chb, DMA_CH_OFF_PADDR) = cfg->base + ADC_OFF_RDATAR;
     DMA_CH_REG(chb, DMA_CH_OFF_MADDR) = (uint32_t)buf;
-    DMA_CH_REG(chb, DMA_CH_OFF_CNTR)  = count;
+    /* 2 × count × BATCH_FRAMES: cada metade contém BATCH_FRAMES frames
+     * completos (ch_count words cada). ISR dispara a cada BATCH_FRAMES frames;
+     * a metade oposta é a estável que será copiada para o trabalho na fila. */
+    DMA_CH_REG(chb, DMA_CH_OFF_CNTR)  = (uint32_t)count * 2U * CH32_ADC_BATCH_FRAMES;
 
     DMA_CH_REG(chb, DMA_CH_OFF_CFGR) =
-                    DMA_CFGR_TCIE      |
+                    DMA_CFGR_TCIE       |
+                    DMA_CFGR_HTIE       |   /* metade -> 1º frame pronto */
                     DMA_CFGR_CIRC       |
                     DMA_CFGR_MINC       |
                     DMA_CFGR_PSIZE_32   |
@@ -306,18 +511,83 @@ static void dma_init32(const struct adc_ch32v307_cfg *cfg, uint32_t *buf, uint16
  * @brief Executa a sequência de calibração de hardware do ADC (RSTCAL+CAL).
  * @param base endereço base do periférico (ADC1_BASE ou ADC2_BASE)
  */
-static void adc_calibrate(uint32_t base)
+static void adc_busy_delay(int loops)
 {
-    /* Reset calibração */
+    for (volatile int i = 0; i < loops; i++) {
+        __asm__ volatile("nop");
+    }
+}
+
+/**
+ * @brief Uma passada de autocalibração de hardware (RSTCAL -> CAL).
+ * @param base endereço base do periférico
+ * @return o código de calibração, que o HW deixa em RDATAR (§12.2.2, item 4)
+ */
+static uint16_t adc_calibrate_once(uint32_t base)
+{
     ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_RSTCAL;
     while (ADC_REG(base, ADC_OFF_CTLR2) & ADC_CTLR2_RSTCAL) {
-        /* aguarda */
+        /* HW limpa ao concluir */
     }
-    /* Inicia calibração */
     ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_CAL;
     while (ADC_REG(base, ADC_OFF_CTLR2) & ADC_CTLR2_CAL) {
-        /* aguarda */
+        /* HW limpa ao concluir */
     }
+    return (uint16_t)(ADC_REG(base, ADC_OFF_RDATAR) & 0x0FFFU);
+}
+
+/**
+ * @brief Calibra UM ADC e devolve o offset residual, em LSB com sinal.
+ *
+ * Réplica de Get_CalibrationValue() da SDK oficial da WCH
+ * (EVT/EXAM/SRC/Peripheral/src/ch32v30x_adc.c): roda a autocalibração
+ * DEZ vezes, ordena os códigos, descarta os 2 menores e os 2 maiores e tira
+ * a média dos 6 do meio — média aparada, robusta a outlier. O offset é a
+ * distância do resultado até o meio de escala (2048).
+ *
+ * Por que isso importa aqui: a autocalibração de hardware sozinha NÃO zera o
+ * erro do banco de capacitores; sobra um resíduo que o próprio fabricante
+ * corrige em software em TODAS as amostras. Num nó de medição elétrica esse
+ * resíduo não é cosmético — ele é comum às três fases, atravessa a Clarke
+ * como componente de sequência zero e vira BEMF fantasma no SMO.
+ *
+ * PRÉ-CONDIÇÕES (§12.2.2 item 4 e §12.3.2 do RM):
+ *  - ADON = 1 há mais de 2 ciclos de ADCCLK;
+ *  - BUFEN = 0 (com TKENABLE/TSVREFE ligados o buffer não pode ser
+ *    desligado, então a calibração tem de vir antes deles);
+ *  - nenhuma conversão em curso (senão o RSTCAL leva ciclos extras) e o DMA
+ *    ainda NÃO habilitado — a leitura de RDATAR pelo DMA roubaria o código.
+ *
+ * @param base endereço base do periférico (ADC1_BASE ou ADC2_BASE)
+ * @return offset a somar em cada amostra (2048 − mediana dos códigos)
+ */
+static int16_t adc_get_calibration_value(uint32_t base)
+{
+    uint16_t buf[10];
+
+    for (int i = 0; i < 10; i++) {
+        buf[i] = adc_calibrate_once(base);
+    }
+
+    /* Ordena (bubble sort — 10 elementos, roda uma vez no boot) */
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (buf[j] > buf[j + 1]) {
+                uint16_t t = buf[j];
+                buf[j] = buf[j + 1];
+                buf[j + 1] = t;
+            }
+        }
+    }
+
+    /* Média dos 6 centrais (descarta 2 de cada ponta), com arredondamento */
+    uint32_t t = 0;
+    for (int i = 0; i < 6; i++) {
+        t += buf[i + 2];
+    }
+    t = (t / 6U) + ((t % 6U) / 3U);
+
+    return (int16_t)(2048 - (int16_t)t);
 }
 
 /**
@@ -360,10 +630,16 @@ static void adc_set_sample_times(uint32_t base, const uint8_t *ids, uint8_t coun
 
     for (int i = 0; i < count; i++) {
         uint8_t ch = ids[i];
+        /* LIMPA o campo antes de gravar. A versão anterior só fazia |= com
+         * 0x7, o que funcionava por acidente (0x7 tem todos os bits) mas
+         * tornava impossível programar qualquer valor MENOR — o campo ficava
+         * preso em 239,5 ciclos para sempre. */
         if (ch <= 9) {
-            smp2 |= (0x7U << (ch * 3));
+            smp2 &= ~(0x7U << (ch * 3));
+            smp2 |=  ((uint32_t)CH32_ADC_SMP << (ch * 3));
         } else if (ch <= 17) {
-            smp1 |= (0x7U << ((ch - 10) * 3));
+            smp1 &= ~(0x7U << ((ch - 10) * 3));
+            smp1 |=  ((uint32_t)CH32_ADC_SMP << ((ch - 10) * 3));
         }
     }
     ADC_REG(base, ADC_OFF_SAMPTR2) = smp2;
@@ -379,38 +655,116 @@ static void adc_arm_dual_master(void)
     const struct adc_ch32v307_cfg *mcfg = g_adc1_dev->config;
     const struct adc_ch32v307_cfg *scfg = g_adc2_dev->config;
     struct adc_ch32v307_data *mdata = g_adc1_dev->data;
+    struct adc_ch32v307_data *sdata = g_adc2_dev->data;
 
-    /* Desliga os dois ADCs e o DMA do mestre antes de reconfigurar */
+    /* O RM exige que ambos os ADCs tenham o mesmo número de canais na sequência
+     * em modo simultâneo (L igual nos RSQRx). Além disso, ch_count=0 causaria
+     * underflow em adc_set_sequence: (uint8_t)(0-1)=255 → L=15 → ADC2 tentaria
+     * 16 conversões de canal indefinido. Retorna aqui; o arme acontece
+     * automaticamente na última chamada de adc_channel_setup quando os dois
+     * lados tiverem a mesma contagem. */
+    if (mdata->ch_count == 0 || sdata->ch_count == 0 ||
+        mdata->ch_count != sdata->ch_count) {
+        return;
+    }
+
+    /* Ordem seguida abaixo = a do exemplo oficial da WCH
+     * (EVT/EXAM/ADC/DualADC_RegSimul): modo dual e bit de DMA primeiro,
+     * ADON, buffer desligado, calibração, e só então o canal de DMA é
+     * habilitado. O canal de DMA vem por último de propósito: a calibração
+     * lê o código em RDATAR, e um DMA já ativo consumiria esse valor antes
+     * (o próprio RM avisa que a leitura de RDATAR pelo DMA limpa o EOC). */
+
+    /* --- 1. Tudo parado -------------------------------------------------- */
     DMA_CH_REG(mcfg->dma_ch_base, DMA_CH_OFF_CFGR) &= ~DMA_CFGR_EN;
     ADC_REG(mcfg->base, ADC_OFF_CTLR2) &= ~ADC_CTLR2_ADON;
     ADC_REG(scfg->base, ADC_OFF_CTLR2) &= ~ADC_CTLR2_ADON;
 
-    /* DUALMOD só é interpretado no CTLR1 do ADC1 (mestre) — Regular
-     * simultaneous mode (manual de referência 12.3.2, valor 0110). */
+    /* --- 2. CTLR1: modo dual + scan, BUFEN/PGA desligados ---------------- *
+     * DUALMOD só é interpretado no CTLR1 do ADC1 (é reservado no ADC2) e o
+     * RM exige alterá-lo com o modo dual desabilitado — que é o caso, já que
+     * acabamos de zerar ADON nos dois.
+     *
+     * BUFEN = 0 é PRÉ-CONDIÇÃO da calibração (§12.3.2): com TKENABLE ou
+     * TSVREFE ligados o buffer não pode mais ser desligado, então a
+     * calibração tem de vir antes deles. Se um dia o PGA for usado nos
+     * shunts, lembrar que BUFEN=1 pede sampling >= 7,5T — o default daqui
+     * (28,5T) já satisfaz. */
     uint32_t ctlr1 = ADC_REG(mcfg->base, ADC_OFF_CTLR1);
-    ctlr1 = (ctlr1 & ~ADC_CTLR1_DUALMOD_MASK) | ADC_CTLR1_DUALMOD_REGSIMUL | ADC_CTLR1_SCAN;
+    ctlr1 &= ~(ADC_CTLR1_DUALMOD_MASK | ADC_CTLR1_BUFEN | ADC_CTLR1_PGA_MASK);
+    ctlr1 |= ADC_CTLR1_DUALMOD_REGSIMUL | ADC_CTLR1_SCAN;
     ADC_REG(mcfg->base, ADC_OFF_CTLR1) = ctlr1;
-    ADC_REG(scfg->base, ADC_OFF_CTLR1) |= ADC_CTLR1_SCAN;
 
-    /* DMA combinado de 32 bits — só o mestre tem linha de DMA de verdade
-     * (ver nota grande no topo do arquivo). */
-    dma_init32(mcfg, g_dual_dma_buf, mdata->ch_count);
+    ADC_REG(scfg->base, ADC_OFF_CTLR1) =
+        (ADC_REG(scfg->base, ADC_OFF_CTLR1) & ~(ADC_CTLR1_BUFEN | ADC_CTLR1_PGA_MASK))
+        | ADC_CTLR1_SCAN;
 
-    /* Mestre: ADON+CONT+DMA+trigger por SW (SWSTART dispara os dois juntos).
-     * Escravo: só ADON+CONT, sem DMA nem trigger próprios. */
-    ADC_REG(mcfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT | ADC_CTLR2_DMA |
-                                        ADC_CTLR2_EXTTRIG | (0x7UL << 17); /* EXTSEL=111: SWSTART */
+    /* --- 3. CTLR2 sem ADON ---------------------------------------------- *
+     * ALIGN = 0 (direita). EXTTRIG=1 + EXTSEL=111 (SWSTART) nos DOIS: o RM
+     * é explícito que, em modo dual com disparo externo, o trigger tem de
+     * estar habilitado no mestre E no escravo, com o escravo em software
+     * trigger, "to prevent spurious triggers to start unwanted slave
+     * conversion" (§12.2.7). O escravo NÃO recebe o bit DMA: só o ADC1 tem
+     * linha de DMA, e é pelo RDATAR dele que o dado do ADC2 sai. */
+    ADC_REG(mcfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_CONT | ADC_CTLR2_DMA |
+                                         ADC_CTLR2_EXTTRIG | (0x7UL << 17);
+    ADC_REG(scfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_CONT |
+                                         ADC_CTLR2_EXTTRIG | (0x7UL << 17);
+
+    /* --- 4. ADON sozinho, e espera tSTAB + >= 2 ADCCLK ------------------- *
+     * "When only ADON changes in the register, a conversion will be started.
+     * If any other bits are sent to change, a new conversion will not be
+     * started" (§12.3.3) — daí a config acima ir num acesso com ADON = 0.
+     * Aqui ADON vai de 0 para 1, o que ACORDA o módulo (não inicia
+     * conversão); a conversão começa no SWSTART do passo 6. */
     ADC_REG(mcfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
-
-    ADC_REG(scfg->base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT;
     ADC_REG(scfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
+    adc_busy_delay(2000);   /* tSTAB, com folga */
 
-    adc_calibrate(mcfg->base);
-    adc_calibrate(scfg->base);
+    /* --- 5. Calibração dos dois, ANTES de o canal de DMA subir -----------
+     * UMA vez por ADC: o guarda de contagem acima faz esta função só rodar
+     * quando ambos os lados têm o mesmo ch_count, o que acontece apenas na
+     * última chamada de adc_channel_setup — portanto uma calibração no boot. */
+    if (!mdata->calibrated) {
+        mdata->cal_offset = adc_get_calibration_value(mcfg->base);
+        mdata->calibrated = true;
+    }
+    if (!sdata->calibrated) {
+        sdata->cal_offset = adc_get_calibration_value(scfg->base);
+        sdata->calibrated = true;
+        LOG_INF("Calibracao HW: offset ADC1=%d LSB, ADC2=%d LSB",
+                (int)mdata->cal_offset, (int)sdata->cal_offset);
+    }
 
-    /* Dispara a primeira conversão — só no mestre; o escravo é acionado
-     * junto, em hardware, pelo trigger simultâneo do modo dual. */
+    /* --- 6. Agora sim o DMA combinado de 32 bits (ping-pong) ------------- */
+    dma_init32(mcfg, g_dual_dma_buf, mdata->ch_count);
+    mdata->seq = 0;
+    mdata->dropped_frames = 0;
+
+    /* --- 7. Dispara a conversão contínua (só no mestre; o escravo é
+     * acionado junto, em hardware, pelo trigger simultâneo) -------------- */
     ADC_REG(mcfg->base, ADC_OFF_CTLR2) |= ADC_CTLR2_SWSTART;
+
+    uint32_t frame_ns = CH32_ADC_FRAME_NS(mdata->ch_count);
+
+    LOG_INF("ADC dual armado: ADCCLK=%u Hz SMP=%u %u canais -> frame=%u ns "
+            "(%u kSps/canal)",
+            (unsigned)CH32_ADCCLK_HZ, (unsigned)CH32_ADC_SMP,
+            (unsigned)mdata->ch_count, (unsigned)frame_ns,
+            (unsigned)(1000000U / frame_ns));
+
+    /* O ADC está fora da spec? O limite do periférico é 14 MHz e o divisor
+     * máximo desta família é /8 — com PCLK2 = 144 MHz não dá para chegar lá
+     * sem baixar o próprio PCLK2 (CH32_ADC_LOWER_APB2). */
+    if (CH32_ADCCLK_HZ > 14000000U) {
+        LOG_WRN("ADCCLK=%u Hz ACIMA do limite de 14 MHz do periferico "
+                "(exatidao/linearidade degradadas). Divisor maximo e /8; "
+                "para entrar em spec use CH32_ADC_LOWER_APB2=1.",
+                (unsigned)CH32_ADCCLK_HZ);
+    }
+
+    /* Verificação de coerência Ts vs observador: omitida na SIBA (sem SMO). */
+    LOG_INF("SIBA ADC: frame period = %u ns", (unsigned)frame_ns);
 }
 
 static void adc_hw_reconfigure(const struct device *dev);
@@ -491,17 +845,25 @@ static void adc_hw_reconfigure(const struct device *dev)
         return;
     }
 
-    /* Modo independente de sempre (SIBA, ou qualquer instância isolada) */
-    dma_init(cfg, data->dma_buf, data->ch_count);
+    /* Modo independente de sempre (SIBA, ou qualquer instância isolada).
+     * Mesma sequência do caminho dual: CTLR1 com BUFEN/PGA off, CTLR2 sem
+     * ADON, ADON sozinho, calibra, e só então o canal de DMA sobe. */
+    ADC_REG(base, ADC_OFF_CTLR1) =
+        (ADC_REG(base, ADC_OFF_CTLR1) & ~(ADC_CTLR1_BUFEN | ADC_CTLR1_PGA_MASK))
+        | ADC_CTLR1_SCAN;
 
-    ADC_REG(base, ADC_OFF_CTLR1) |= ADC_CTLR1_SCAN;
-    ADC_REG(base, ADC_OFF_CTLR2) = ADC_CTLR2_ADON | ADC_CTLR2_CONT | ADC_CTLR2_DMA |
+    ADC_REG(base, ADC_OFF_CTLR2) = ADC_CTLR2_CONT | ADC_CTLR2_DMA |
                                    ADC_CTLR2_EXTTRIG | (0x7UL << 17); /* EXTSEL=111: SWSTART */
+    ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;   /* ADON sozinho */
+    adc_busy_delay(2000);                              /* tSTAB */
 
-    /* Necessário: ligar novamente após setar bits */
-    ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_ADON;
+    if (!data->calibrated) {          /* uma vez só — ver nota no caminho dual */
+        data->cal_offset = adc_get_calibration_value(base);
+        data->calibrated = true;
+        LOG_INF("Calibracao HW (independente): offset=%d LSB", (int)data->cal_offset);
+    }
 
-    adc_calibrate(base);
+    dma_init(cfg, data->dma_buf, data->ch_count);
 
     /* Dispara primeira conversão */
     ADC_REG(base, ADC_OFF_CTLR2) |= ADC_CTLR2_SWSTART;
@@ -536,9 +898,30 @@ static int adc_ch32v307_read(const struct device *dev,
     data->user_buf  = (uint16_t *)seq->buffer;
     data->async_sig = NULL;
 
-    /* O DMA circular já está rodando (mestre, em modo dual, ou este mesmo
-     * ADC, em modo independente); semáforo é dado na próxima TC — em modo
-     * dual, quem dá este semáforo é a ISR do MESTRE (ver adc_ch32v307_dma_isr). */
+    /* ESCRAVO do par dual: NÃO espera nada.
+     *
+     * Em modo dual simultâneo os dois resultados chegam no MESMO word de
+     * DMA e a ISR do mestre já preencheu os dois user_buf. Quem chama faz
+     *     adc_read(adc1);   // espera o frame N
+     *     adc_read(adc2);   // <- aqui
+     * e nesse ponto o buffer do escravo JÁ contém o frame N.
+     *
+     * A versão anterior fazia k_sem_reset() + k_sem_take() aqui, o que
+     * descartava o semáforo do frame N e ficava esperando o N+1: o
+     * observador consumia DOIS transfer-complete por passo e rodava na
+     * METADE da taxa de conversão — com o Ts calculado pela constante,
+     * não pelo hardware. Era o maior erro de Ts da cadeia.
+     *
+     * Único efeito residual: no primeiríssimo frame após o boot o user_buf
+     * do escravo ainda não estava registrado quando a ISR rodou, então a
+     * primeira leitura de corrente sai zerada. A calibração de offset
+     * descarta os primeiros frames de qualquer forma. */
+    if (adc_dual_is_paired() && dev == g_adc2_dev) {
+        return 0;
+    }
+
+    /* O DMA circular já está rodando; o semáforo vem no próximo evento de
+     * half-transfer ou transfer-complete (ver adc_ch32v307_dma_isr). */
     k_sem_reset(&data->sem_sync);
     int ret = k_sem_take(&data->sem_sync, K_MSEC(100));
     if (ret) {
@@ -547,6 +930,24 @@ static int adc_ch32v307_read(const struct device *dev,
     }
 
     return 0;
+}
+
+/**
+ * @brief Diagnóstico do stream de conversão (só faz sentido no mestre dual).
+ * @param dev instância do driver
+ * @param seq [out] frames entregues desde o boot (pode ser NULL)
+ * @param dropped [out] frames perdidos por atraso da ISR (pode ser NULL)
+ *
+ * Não há flag de overrun nos canais regulares deste ADC: sem este contador,
+ * um frame perdido é sobrescrito em silêncio e o observador recebe uma
+ * amostra deslocada no tempo sem nenhum sinal de erro.
+ */
+void adc_ch32v307_get_stats(const struct device *dev, uint32_t *seq, uint32_t *dropped)
+{
+    const struct adc_ch32v307_data *data = dev->data;
+
+    if (seq)     *seq     = data->seq;
+    if (dropped) *dropped = data->dropped_frames;
 }
 
 /**
@@ -600,6 +1001,8 @@ static int adc_ch32v307_init(const struct device *dev)
     data->ch_count  = 0;
     data->async_sig = NULL;
     data->user_buf  = NULL;
+    data->calibrated = false;
+    data->cal_offset = 0;
 
     /* Registra este device como mestre (ADC1) ou escravo (ADC2) do par
      * dual, comparando só a base física. */
@@ -620,8 +1023,13 @@ static int adc_ch32v307_init(const struct device *dev)
     }
 
     /* Habilita a IRQ do canal DMA1, só se esta instância tiver DMA própria
-     * (o escravo ADC2 recebe o resultado via ISR do mestre). */
+     * (o escravo ADC2 recebe o resultado via ISR do mestre).
+     * Limpa flags residuais ANTES de habilitar: após reset suave o canal pode
+     * ter TEIF pendente; sem esse clear o PFIC dispararia a ISR imediatamente
+     * ao sair de irq_enable e travaria em tempestade antes de main(). */
     if (cfg->has_dma) {
+        DMA1_IFCR = DMA1_TCIF(cfg->dma_channel) | DMA1_HTIF(cfg->dma_channel)
+                  | DMA1_TEIF(cfg->dma_channel);
         cfg->irq_config_func(dev);
     }
 
@@ -692,3 +1100,28 @@ static const struct adc_driver_api adc_ch32v307_api = {
         &adc_ch32v307_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ADC_CH32V307_INIT)
+
+/**
+ * @brief Registra (ou remove) callback direto de frame para o ADC mestre.
+ *
+ * Quando @p cb != NULL, a ISR de DMA chama @p cb diretamente após cada
+ * conversão, sem k_sem_give — eliminando o context-switch do caminho crítico.
+ * Passar @p cb = NULL restaura o caminho legado (semáforo → adc_read).
+ *
+ * @param dev  Instância ADC1 (mestre do par dual; retorna imediatamente para
+ *             ADC2 pois o escravo não tem ISR própria).
+ * @param cb   Função chamada em ISR a cada frame DMA, ou NULL.
+ * @param user Ponteiro opaco repassado a @p cb.
+ */
+void adc_ch32v307_set_frame_callback(const struct device *dev,
+                                     adc_ch32v307_frame_cb_t cb,
+                                     void *user)
+{
+    struct adc_ch32v307_data *data = dev->data;
+    /* Escrita atômica: o compilador não pode reordenar as duas atribuições
+     * acima de frame_cb — user_data deve estar visível antes do ponteiro
+     * de função, senão a ISR pode chamar cb com user=NULL. */
+    data->frame_cb_user = user;
+    compiler_barrier();
+    data->frame_cb = cb;
+}

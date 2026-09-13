@@ -85,6 +85,7 @@ void Log_Manager_Update(uint32_t sensor_id, float value)
         case SENSOR_ID_TEMPERATURE_BATTERY:  current_log.temperature_battery  = value; break;
         case SENSOR_ID_AIR_SPEED:            current_log.air_speed            = value; break;
         case SENSOR_ID_RPM:                  current_log.rpm                  = value; break;
+        case SENSOR_ID_TEMPERATURE_MOTOR:   current_log.temperature_motor    = value; break;
         default:
             LOG_WRN("Log_Manager: sensor_id desconhecido %d", sensor_id);
             break;

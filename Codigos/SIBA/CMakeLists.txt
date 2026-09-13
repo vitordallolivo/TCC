@@ -19,6 +19,7 @@ project(SIBA)
 # Aplicacao_Pi/CLAUDE.md.
 target_sources(app PRIVATE
     src/main.c
+    src/phy_pll3_preinit.c
 
     # OS
     lib/OS/OSSI.c
@@ -34,6 +35,7 @@ target_sources(app PRIVATE
     lib/SYS/Security_Manager.c
     lib/SYS/Log_Manager.c
     lib/SYS/Test_Shell.c
+    lib/SYS/NVM.c
 )
 
 if(NOT CONFIG_ARCH_POSIX)
@@ -46,6 +48,16 @@ if(NOT CONFIG_ARCH_POSIX)
     # sem .read_async, causando jalr por ponteiro NULL em
     # HAL_thread_ADC_fn (ver CONFIG_ADC_CH32V00X=n em prj.conf).
     target_sources(app PRIVATE drivers/adc/adc_ch32v307.c)
+
+    # ADC da SIBA mede sinais lentos (v_batt, i_batt, temperatura, Pitot):
+    # usa o maior tempo de amostragem possível (SMP=7 = 239,5 ciclos) e
+    # BATCH_FRAMES=1 para que o callback do HAL receba exatamente 1 frame
+    # (nch = 3×1 = 3 = HAL_ADC_CHANNELS_PER_ADC), mantendo o loop de
+    # acumulação correto sem alterar HAL.c. ISR ~24 kHz vs ~150 kHz antes.
+    target_compile_definitions(app PRIVATE
+        CH32_ADC_SMP=7
+        CH32_ADC_BATCH_FRAMES=1
+    )
 endif()
 
 target_include_directories(app PRIVATE

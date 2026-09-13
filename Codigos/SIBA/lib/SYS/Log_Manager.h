@@ -19,6 +19,7 @@
 #define SENSOR_ID_TEMPERATURE_BATTERY 9U
 #define SENSOR_ID_AIR_SPEED 10U
 #define SENSOR_ID_RPM 11U
+#define SENSOR_ID_TEMPERATURE_MOTOR 12U
 
 /* ===========================================================
  * Structs geradas a partir do SIBA.yaml
@@ -68,6 +69,8 @@ typedef struct __attribute__((packed)) {
     float air_speed;
 
     float rpm;
+
+    float temperature_motor;
 
     log_status status;
 

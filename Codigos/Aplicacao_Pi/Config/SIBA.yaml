@@ -51,6 +51,7 @@ enums:
     - TARGET_TEMPERATURE_SENSOR   # 9  -> SENSOR_ID_TEMPERATURE_BATTERY
     - TARGET_PITOT_TUBE           # 10 -> SENSOR_ID_AIR_SPEED
     - TARGET_DEFAULT              # 11 -> alvo genérico (START/STOP/RESET)
+    - TARGET_TEMPERATURE_MOTOR    # 12 -> SENSOR_ID_TEMPERATURE_MOTOR
 
   status_type:
     - STATUS_OK
@@ -114,6 +115,7 @@ error_bits:
   - { name: ERROR_SEC_EMERGENCY_ACTIVE,       bit: 19, group: "Segurança",    msg: "PARADA DE EMERGÊNCIA ativa — motor desarmado" }
   # --- Sistema ---
   - { name: ERROR_OS_GPIO_INIT_FAILED,        bit: 24, group: "Sistema",      msg: "Falha ao inicializar um módulo de hardware (GPIO)" }
+  - { name: ERROR_MCU_POWER_READY,            bit: 25, group: "Sistema",      msg: "Bancada não inicializada — aguardando sequência de energização (relé)" }
 
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida/segurança
 # por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).
@@ -160,6 +162,10 @@ sensor_defaults:
   # esgota. Abaixo de ~3 m/s a leitura é dominada por ruído mesmo com 12 bits.
   - { target: SENSOR_ID_AIR_SPEED, linear: 1.691423, offset: 0.0, zero: 2664.4, law: sqrt, min: 0.0, max: 42.0 }
   - { target: SENSOR_ID_RPM, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: 20000.0, error_bit: ERROR_SEC_RPM_EXCESSIVE }
+  # Termistor NTC no estator/carcaça do motor — mesma cadeia de condicionamento
+  # do termistor de bateria (0,040 °C/mV). Máximo 150 °C (limite típico de
+  # enrolamentos BLDC classe F). Sem bit de erro por ora (só diagnóstico).
+  - { target: SENSOR_ID_TEMPERATURE_MOTOR, linear: 0.040, offset: 0.0, min: -40.0, max: 150.0 }
 
 structs:
 
@@ -193,5 +199,6 @@ structs:
     - { name: temperature_battery, type: float }
     - { name: air_speed, type: float }             # Pitot tube wind speed (m/s)
     - { name: rpm, type: float }                   # Motor revolutions per minute
+    - { name: temperature_motor, type: float }   # Motor winding temperature (°C), ADC1 CH3/PA3
     - { name: status, type: log_status }         # Integrity of the telemetry frame
     - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver CLAUDE.md "Error_Detect/Error_Erase"

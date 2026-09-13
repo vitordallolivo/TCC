@@ -10,6 +10,7 @@
 #include "Propeller_Manager.h"
 #include "Security_Manager.h"
 #include "Log_Manager.h"
+#include "NVM.h"
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -108,6 +109,7 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
         case SENSOR_ID_I_BATT:
         case SENSOR_ID_TEMPERATURE_BATTERY:
         case SENSOR_ID_AIR_SPEED:
+        case SENSOR_ID_TEMPERATURE_MOTOR:
             HAL_ADC_Set_Calib((uint8_t)tid, linear, offset);
             break;
 
@@ -135,6 +137,7 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
         case SENSOR_ID_I_BATT:
         case SENSOR_ID_TEMPERATURE_BATTERY:
         case SENSOR_ID_AIR_SPEED:
+        case SENSOR_ID_TEMPERATURE_MOTOR:
             HAL_ADC_Get_Calib((uint8_t)tid, linear, offset);
             break;
 
@@ -153,7 +156,7 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
-    if (tid < 0 || tid >= 11) {
+    if (tid < 0 || tid >= CMD_CORE_SENSOR_COUNT) {
         LOG_WRN("CMD SENSOR: target_id %d inválido", tid);
         return;
     }
@@ -178,10 +181,18 @@ static void handle_func_sensor(const CMD *cmd)
             default:
                 break;  /* MAX/MIN/RESET tratados no bloco genérico abaixo */
         }
+        /* Lê de volta do HAL (tare pode ser raw novo) e persiste no NVM. */
+        {
+            float scale, tare;
+            HAL_HX711_Get_Calib((uint8_t)tid, &scale, &tare);
+            NVM_Set_Sensor_Calib((uint8_t)tid, scale, tare);
+            NVM_Save_Calibration();
+        }
         return;
     }
 
     SENSORS *s = &sensor_cfg[tid];
+    bool nvm_dirty = false;
 
     switch (act) {
         case DEFAULT_ACTION_SENSE_MAX_VALID:
@@ -201,6 +212,8 @@ static void handle_func_sensor(const CMD *cmd)
             apply_sensor_calib(tid, linear, offset);
             s->Linear_Coeff = linear;
             s->Offset_Coeff = offset;
+            NVM_Set_Sensor_Calib((uint8_t)tid, linear, offset);
+            nvm_dirty = true;
             LOG_INF("CMD SENSOR[%d]: linear=%.4f", tid, (double)cmd->value);
             break;
         }
@@ -212,6 +225,8 @@ static void handle_func_sensor(const CMD *cmd)
             apply_sensor_calib(tid, linear, offset);
             s->Linear_Coeff = linear;
             s->Offset_Coeff = offset;
+            NVM_Set_Sensor_Calib((uint8_t)tid, linear, offset);
+            nvm_dirty = true;
             LOG_INF("CMD SENSOR[%d]: offset=%.4f", tid, (double)cmd->value);
             break;
         }
@@ -223,11 +238,17 @@ static void handle_func_sensor(const CMD *cmd)
             if (tid <= 5) {
                 Propeller_Manager_Tare_Cell((uint8_t)tid);
             }
+            NVM_Set_Sensor_Calib((uint8_t)tid, s->Linear_Coeff, s->Offset_Coeff);
+            nvm_dirty = true;
             LOG_INF("CMD SENSOR[%d]: reset default", tid);
             break;
 
         default:
             LOG_WRN("CMD SENSOR: ação %d desconhecida", act);
+    }
+
+    if (nvm_dirty) {
+        NVM_Save_Calibration();
     }
 }
 

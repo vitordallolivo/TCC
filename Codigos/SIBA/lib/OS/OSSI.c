@@ -17,8 +17,11 @@ LOG_MODULE_REGISTER(ossi, LOG_LEVEL_WRN);
 /* ── siba_wq ─────────────────────────────────────────────────────────────
  * Thread única de processamento: sensores, CMDs, log TX.
  * Prioridade 5 (mesmo que a antiga Sys_thread_fn e NCI).
- * Stack 2048B — suficiente para Battery_Manager_Update (eval_soc + poly). */
-#define SIBA_WQ_STACK_SIZE  2048
+ * Stack 8192B: FPU_SHARING salva 128B de contexto FPU na stack do siba_wq
+ * a cada preempção da ISR do ADC (~24 kHz). Com 2048B o stack transbordava
+ * durante Battery/Propeller/Security_Manager + LOG_ERR, corrompendo o
+ * estado do ETH stack — NET_EVENT_IF_UP nunca disparava. */
+#define SIBA_WQ_STACK_SIZE  8192
 #define SIBA_WQ_PRIORITY       5
 
 K_THREAD_STACK_DEFINE(siba_wq_stack, SIBA_WQ_STACK_SIZE);

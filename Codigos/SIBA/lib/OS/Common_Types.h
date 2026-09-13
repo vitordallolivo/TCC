@@ -81,7 +81,10 @@ typedef enum {
     TARGET_PITOT_TUBE,
 
 
-    TARGET_DEFAULT
+    TARGET_DEFAULT,
+
+
+    TARGET_TEMPERATURE_MOTOR
 
 
 } target_type;

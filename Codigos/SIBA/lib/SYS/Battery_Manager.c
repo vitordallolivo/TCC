@@ -5,16 +5,11 @@
  */
 #include "Battery_Manager.h"
 #include "Security_Manager.h"
+#include "HAL.h"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/drivers/gpio.h>
 
 LOG_MODULE_REGISTER(battery_mgr, LOG_LEVEL_DBG);
-
-/* Relé de potência — ajuste o GPIO conforme esquemático */
-#define RELAY_GPIO_NODE DT_ALIAS(relay0)
-static const struct gpio_dt_spec relay_gpio =
-    GPIO_DT_SPEC_GET_OR(RELAY_GPIO_NODE, gpios, {0});
 
 /* Polinômio SOC: SOC = p4*Vc^4 + p3*Vc^3 + p2*Vc^2 + p1*Vc + p0
  * (Vc = tensão por célula). Coeficientes padrão calibrados para
@@ -162,17 +157,9 @@ static float eval_soc(float v)
     return soc;
 }
 
-/** @brief Configura o GPIO do relé (desligado) e zera o estado. */
+/** @brief Zera o estado do relé; o GPIO já foi configurado por HAL_Relay_Init(). */
 void Battery_Manager_Init(void)
 {
-    if (relay_gpio.port && gpio_is_ready_dt(&relay_gpio)) {
-        gpio_pin_configure_dt(&relay_gpio, GPIO_OUTPUT_INACTIVE);
-        LOG_INF("Battery: relé configurado");
-    } else {
-        LOG_WRN("Battery: relé GPIO não disponível");
-        Security_Manager_Error_Detect(ERROR_OS_GPIO_INIT_FAILED);
-    }
-
     relay_state = false;
     LOG_INF("Battery_Manager inicializado");
 }
@@ -286,16 +273,25 @@ uint8_t Battery_Manager_Get_Cell_Count(void)
 }
 
 /**
- * @brief Liga/desliga o relé de potência da bateria.
- * @param on true = liga, false = desliga
+ * @brief Liga/desliga o relé de potência da bateria via HAL.
+ * Energizar executa a sequência de pré-carga (precharge → 3 s → power),
+ * bloqueando a thread chamadora durante esse tempo.
+ * @param on true = energizar, false = desenergizar
  */
 void Battery_Manager_Set_Relay(bool on)
 {
     relay_state = on;
-
-    if (!relay_gpio.port) return;
-    gpio_pin_set_dt(&relay_gpio, on ? 1 : 0);
-    LOG_INF("Battery: relé %s", on ? "ON" : "OFF");
+    if (on) {
+        HAL_Relay_Energize();
+        /* Relay energizado — bancada pronta para operar */
+        Security_Manager_Error_Erase(ERROR_MCU_POWER_READY);
+        LOG_INF("Battery: relé energizado (sequência de pré-carga concluída)");
+    } else {
+        HAL_Relay_Deenergize();
+        /* Relay aberto — bancada não está pronta */
+        Security_Manager_Error_Detect(ERROR_MCU_POWER_READY);
+        LOG_INF("Battery: relé desenergizado");
+    }
 }
 
 /** @brief Último estado comandado do relé. @return true = ligado. */

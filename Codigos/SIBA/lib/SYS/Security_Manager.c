@@ -22,11 +22,13 @@ static bool emergency_active = false;
  * é sempre feito através de Error_Detect/Error_Erase/Get_Error_Code. */
 static uint32_t error_code = 0U;
 
-/** @brief Zera o estado de emergência e o código de erro agregado. */
+/** @brief Zera o estado de emergência; pré-seta ERROR_MCU_POWER_READY (relay aberto ao boot). */
 void Security_Manager_Init(void)
 {
     emergency_active = false;
     error_code       = 0U;
+    /* Relay não está energizado ao boot — seta bit para a GUI saber. */
+    error_code |= (uint32_t)ERROR_MCU_POWER_READY;
     LOG_INF("Security_Manager inicializado");
 }
 

@@ -24,6 +24,7 @@ typedef enum {
     ERROR_SEC_RPM_EXCESSIVE = (1U << 18),  /* Segurança: Rotação do motor (RPM) acima do limite de segurança */
     ERROR_SEC_EMERGENCY_ACTIVE = (1U << 19),  /* Segurança: PARADA DE EMERGÊNCIA ativa — motor desarmado */
     ERROR_OS_GPIO_INIT_FAILED = (1U << 24),  /* Sistema: Falha ao inicializar um módulo de hardware (GPIO) */
+    ERROR_MCU_POWER_READY = (1U << 25),  /* Sistema: Bancada não inicializada — aguardando sequência de energização (relé) */
 } siba_error_bit_t;
 
 #endif /* ERROR_CODES_H */
