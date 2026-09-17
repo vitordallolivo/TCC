@@ -50,4 +50,7 @@ void NVM_Set_Sensor_Calib(uint8_t sensor_id, float linear, float offset);
 /** @brief Total de ciclos de gravação acumulados. */
 uint32_t NVM_Get_Write_Count(void);
 
+/** @brief Lê a calibração em cache (o que foi salvo/restaurado do EEPROM). */
+void NVM_Get_Sensor_Calib(uint8_t sensor_id, float *linear, float *offset);
+
 #endif /* NVM_H */

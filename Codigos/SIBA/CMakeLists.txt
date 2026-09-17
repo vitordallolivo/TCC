@@ -19,7 +19,6 @@ project(SIBA)
 # Aplicacao_Pi/CLAUDE.md.
 target_sources(app PRIVATE
     src/main.c
-    src/phy_pll3_preinit.c
 
     # OS
     lib/OS/OSSI.c
@@ -34,7 +33,7 @@ target_sources(app PRIVATE
     lib/SYS/Propeller_Manager.c
     lib/SYS/Security_Manager.c
     lib/SYS/Log_Manager.c
-    lib/SYS/Test_Shell.c
+    $<$<BOOL:${CONFIG_SHELL}>:lib/SYS/Test_Shell.c>
     lib/SYS/NVM.c
 )
 

@@ -19,11 +19,10 @@
 #include <zephyr/drivers/gpio.h>
 #include <string.h>
 
-/* LED de status de rede: acende quando o link ETH sobe, apaga quando cai.
- * Alias led0 → ready_pin (PE15, GPIO_ACTIVE_HIGH). */
+/* LED verde (PB4): acende quando link ETH sobe, apaga quando cai. */
 #ifndef CONFIG_ARCH_POSIX
 static const struct gpio_dt_spec net_led =
-    GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
+    GPIO_DT_SPEC_GET(DT_NODELABEL(led_green), gpios);
 #endif
 
 LOG_MODULE_REGISTER(nci_core, LOG_LEVEL_DBG);
@@ -210,10 +209,15 @@ void NCI_Init(void)
     }
 #endif
 
-    /* Verifica se a interface já está up (pode acontecer no native_sim). */
+    /* Verifica se a interface já está up (pode acontecer no native_sim).
+     * Nesse caso NET_EVENT_IF_UP já disparou antes do callback ser registrado
+     * — replicar o efeito do callback manualmente. */
     struct net_if *iface = net_if_get_default();
     if (iface && net_if_is_up(iface)) {
         is_network_connected = true;
+#ifndef CONFIG_ARCH_POSIX
+        gpio_pin_set_dt(&net_led, 1);
+#endif
         LOG_INF("NCI: interface já UP ao iniciar");
     }
 

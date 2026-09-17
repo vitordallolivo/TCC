@@ -36,6 +36,14 @@
             gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
             label = "System Ready LED / MCU_Sig_Ready";
         };
+        led_green: led_green {
+            gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
+            label = "Status LED verde (MCU pronto / sem emergencia)";
+        };
+        led_red: led_red {
+            gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
+            label = "Status LED vermelho (erro ativo)";
+        };
     };
 
     /* PD2 — saída da porta AND que aciona o SSR de 100 A.
@@ -333,7 +341,7 @@
 /* SPI1 — W25Q flash (dados de logging / configuração extra).
  * CS gerenciado via GPIO PA2 (GPIO_ACTIVE_LOW, controlado em software).  */
 &spi1 {
-    status = "okay";
+    status = "disabled";
     pinctrl-0 = <&spi1_default>;
     pinctrl-names = "default";
     cs-gpios = <&gpioa 2 GPIO_ACTIVE_LOW>;

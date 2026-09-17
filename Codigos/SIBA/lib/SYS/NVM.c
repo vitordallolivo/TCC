@@ -255,3 +255,12 @@ uint32_t NVM_Get_Write_Count(void)
 {
     return s_write_count;
 }
+
+void NVM_Get_Sensor_Calib(uint8_t sensor_id, float *linear, float *offset)
+{
+    if (sensor_id >= NVM_SENSOR_COUNT || !linear || !offset) {
+        return;
+    }
+    *linear = s_cal.sensors[sensor_id].linear;
+    *offset = s_cal.sensors[sensor_id].offset;
+}

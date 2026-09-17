@@ -13,8 +13,8 @@ diagnóstico via UART (`Test_Shell.c`).
 Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
 
 **Status atual:** firmware compila e builda (`make build` / `west build -b siba_board`).
-ETH funciona via PLL3 preinit (`src/phy_pll3_preinit.c`). NVM/EEPROM funciona.
-Shell UART funciona. Validação em bancada com hardware físico em andamento.
+ETH: IF_UP dispara, TX ainda sem frames no fio (diagnóstico em andamento).
+NVM/EEPROM funciona. Shell UART funciona. Validação em bancada em andamento.
 
 > **Pinagem:** `boards/wch/siba_board/siba_board.dts`.
 > Em caso de divergência com este arquivo, o DTS manda.
@@ -52,8 +52,7 @@ SIBA/
 │       ├── NVM.c/h              # Calibração persistente em EEPROM I2C2 (0x50)
 │       └── Error_Codes.h        # AUTO-GERADO
 ├── src/
-│   ├── main.c
-│   └── phy_pll3_preinit.c       # Fix: configura PLL3 antes do phy_mii_init
+│   └── main.c
 ├── CMakeLists.txt
 ├── prj.conf
 └── Makefile
@@ -162,9 +161,11 @@ Ambos abertos no boot. Relay só fechado via CMD/shell.
 ### ETH — MAC interno CH32V307
 
 IP board: `169.254.97.51` / IP PC: `169.254.255.255` (broadcast), sem DHCP.
-**Fix PLL3 obrigatório:** `src/phy_pll3_preinit.c` roda `SYS_INIT(POST_KERNEL, 55)` para
-configurar PLL3 + `EXTEN_ETH_10M_EN` antes do `phy_mii_init` (POST_KERNEL+60).
-Sem isso, MDIO flutua → timeout → ETH permanentemente OFFLINE.
+PLL3 configurado pelo próprio `eth_wch_init` upstream ao detectar
+`phy-connection-type = "internal"` no DTS. O `phy_pll3_preinit.c` foi
+removido — era tentativa de fix sem efeito.
+**TX morto:** IF_UP dispara mas nenhum frame sai do fio. Diagnóstico ativo
+(`CONFIG_ETHERNET_LOG_LEVEL=4`, `printk` em NCI_Transmit para ver retorno de sendto).
 
 ### LED status de rede — PE15
 

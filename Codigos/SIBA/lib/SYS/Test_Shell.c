@@ -5,6 +5,7 @@
 #include "Test_Shell.h"
 #include "HAL.h"
 #include "NCI.h"
+#include "NVM.h"
 #include "Battery_Manager.h"
 #include "Propeller_Manager.h"
 #include "Security_Manager.h"
@@ -244,6 +245,30 @@ static int cmd_calib(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_ARG_REGISTER(calib, NULL,
     "<id> linear|offset <val> | <id> reset — calibracao sensor/celula",
     cmd_calib, 3, 1);
+
+/* ── nvm ─────────────────────────────────────────────────────────────────── */
+static int cmd_nvm(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc); ARG_UNUSED(argv);
+
+    static const char * const names[NVM_SENSOR_COUNT] = {
+        "load_cell_0", "load_cell_1", "load_cell_2",
+        "load_cell_3", "load_cell_4", "load_cell_5",
+        "v_batt", "i_batt", "soc",
+        "temp_batt", "air_speed", "rpm", "temp_motor",
+    };
+
+    shell_print(sh, "NVM EEPROM  write_count=%u", NVM_Get_Write_Count());
+    shell_print(sh, "  id  %-14s  linear            offset", "sensor");
+    for (uint8_t i = 0; i < NVM_SENSOR_COUNT; i++) {
+        float lin = 0.0f, off = 0.0f;
+        NVM_Get_Sensor_Calib(i, &lin, &off);
+        shell_print(sh, "  %2u  %-14s  %16.6f  %16.6f",
+                    i, names[i], (double)lin, (double)off);
+    }
+    return 0;
+}
+SHELL_CMD_REGISTER(nvm, NULL, "calibracao salva no EEPROM (todos os 13 sensores)", cmd_nvm);
 
 /* ── mon ─────────────────────────────────────────────────────────────────── */
 static int cmd_mon(const struct shell *sh, size_t argc, char **argv)

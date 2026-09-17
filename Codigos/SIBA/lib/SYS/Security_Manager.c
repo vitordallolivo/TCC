@@ -8,8 +8,13 @@
 #include "Log_Manager.h"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
 
 LOG_MODULE_REGISTER(security_mgr, LOG_LEVEL_WRN);
+
+/* LED vermelho (PA15): MCU ready — apagado em emergência ou boot sem relay. */
+static const struct gpio_dt_spec led_red =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(led_red), gpios);
 
 /* Os limites operacionais NÃO vivem mais aqui — vêm da tabela central
  * SIBA_SENSOR_TABLE em CMD_Core_prm.h (via CMD_Core_Get_Sensor_Cfg).
@@ -29,6 +34,11 @@ void Security_Manager_Init(void)
     error_code       = 0U;
     /* Relay não está energizado ao boot — seta bit para a GUI saber. */
     error_code |= (uint32_t)ERROR_MCU_POWER_READY;
+
+    if (gpio_is_ready_dt(&led_red)) {
+        gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_INACTIVE);
+    }
+
     LOG_INF("Security_Manager inicializado");
 }
 
@@ -116,4 +126,7 @@ void Security_Manager_Check(uint32_t sensor_id, float value)
     } else {
         Security_Manager_Error_Erase(bit);
     }
+
+    /* LED vermelho: MCU ready = sem emergência e sem erros críticos. */
+    gpio_pin_set_dt(&led_red, (!emergency_active && error_code == 0U) ? 1 : 0);
 }

@@ -19,6 +19,30 @@ import socket
 import struct
 import sys
 import time
+import os
+import subprocess
+import atexit
+
+# ── Firewall temporário (Windows only) ───────────────────────────────────────
+_FW_RULE = "SIBA_Telemetria_Temp"
+
+def _netsh(*args):
+    r = subprocess.run(["netsh", "advfirewall", "firewall"] + list(args),
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+def _setup_firewall():
+    if os.name != "nt":
+        return
+    _netsh("delete", "rule", f"name={_FW_RULE}")          # limpa eventual lixo anterior
+    if _netsh("add", "rule", f"name={_FW_RULE}",
+              "protocol=UDP", "dir=in", "localport=5555",
+              "action=allow", "profile=any"):
+        atexit.register(_netsh, "delete", "rule", f"name={_FW_RULE}")
+        print("[firewall] Regra temporária adicionada (removida ao sair)")
+    else:
+        print("[firewall] Sem permissão para regra de firewall — execute como Administrador se não receber pacotes")
+# ─────────────────────────────────────────────────────────────────────────────
 
 UDP_PORT = 5555
 
@@ -85,6 +109,7 @@ def print_packet(p, addr):
 
 def main():
     once = "--once" in sys.argv
+    _setup_firewall()
 
     print(f"TELEMETRY_LOG struct size: {STRUCT_SIZE} bytes (esperado: 64)")
     assert STRUCT_SIZE == 64, f"Struct size inesperado: {STRUCT_SIZE}"
