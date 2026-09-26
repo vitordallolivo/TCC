@@ -9,10 +9,15 @@ serial via stdin (-uart_stdinout), já que o backend Telnet fica desligado
 em native_sim.
 """
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
+
+# O shell do Zephyr colore o prompt e reposiciona o cursor. Isso é para um
+# terminal VT100 — no TinyTerminal (rich text) viraria lixo na tela.
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
 
 def native_sim_supported():
@@ -88,7 +93,9 @@ class NativeSimProcess:
 
         def _relay_log():
             for line in self.proc.stdout:
-                print(f"[{self.board_id}-native_sim] {line.rstrip()}")
+                clean = _ANSI.sub("", line).rstrip()
+                if clean:
+                    print(f"[{self.board_id}-native_sim] {clean}")
 
         self.log_thread = threading.Thread(
             target=_relay_log, name=f"NativeSimLog_{self.board_id}", daemon=True

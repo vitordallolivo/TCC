@@ -184,6 +184,18 @@ mesmo tempo.)
 
 ### Bugs históricos já corrigidos (relevantes se algo parecido reaparecer)
 
+- **Reconectar não voltava a receber nada (gráficos parados)** — corrigido em
+  26/09/2026. `LinkManager.stop()` parava e dava `join()` nos workers mas
+  **não os removia de `self.workers`**; `start_link()` retorna cedo quando a
+  placa já consta no dicionário, então a reconexão reaproveitava o objeto
+  morto. Como `threading.Thread` não reinicia depois de terminar, a placa
+  ficava sem thread de RX: nenhuma telemetria chegava e os gráficos ficavam
+  parados até reiniciar a aplicação. `send_command` também caía num link
+  morto. Correção: `stop()` faz `self.workers.clear()`, e `start_link()`
+  descarta e recria um link cujo `is_alive()` for falso. Reproduzido e
+  validado com o firmware em `native_sim` (25 pacotes em 2,5 s antes e depois
+  da reconexão).
+
 - **`sizeof(CMD)` no `native_sim` (pacote curto)**: `func_type`/
   `instruct_type` são enums C, cujo tamanho é impl-definido (4 bytes no gcc
   host, 1 byte só com `-fshort-enums` na placa RISC-V). `generate.py` +
@@ -303,6 +315,35 @@ probe(id)` / `.probe_all()`.
 
 ---
 
+## Shell do firmware pelo TinyTerminal — `<placa> native shell <comando>`
+
+Com o firmware rodando como processo (`siba native start`), o TinyTerminal
+alcança o shell de UART do PRÓPRIO firmware:
+
+```
+siba native start
+siba native shell tele        # status do firmware (lib/SYS/Test_Shell.c)
+siba native shell btn on      # finge o botão de emergência (só native_sim)
+siba native shell arm
+```
+
+Como funciona: o `LinkManager` passou a subir TODAS as placas com
+`-uart_stdinout` (antes era só a SPMM), então o shell do firmware fica no
+stdin/stdout do processo. `LinkManager.native_shell(board, line)` escreve
+nesse stdin; a resposta sai no relay de log, com o prefixo
+`[<placa>-native_sim]`. Para as placas `udp_struct` é um canal EXTRA — os
+comandos normais continuam indo por UDP.
+
+Limites:
+- **Só em `native_sim`.** Em hardware real esse shell está na UART da placa;
+  o PC fala por Ethernet. O comando avisa se a placa não estiver em modo
+  nativo.
+- **A SAME não tem shell** (sem `CONFIG_SHELL` no `prj.conf`): o comando
+  existe por simetria, mas nada responde.
+- **O autocompletar não conhece os comandos do firmware** — ele completa até
+  `native shell` e daí em diante é texto livre. Daria para popular lendo o
+  `help` do firmware no boot, se valer a pena.
+
 ## Banco de teste por linha de comando — `native_cli.py`
 
 Sobe o `zephyr.exe` da SIBA ou da SAME e conversa com ele pelo MESMO caminho
@@ -326,12 +367,6 @@ o botão de emergência e só existe em `native_sim`.
 
 ## Observações em aberto
 
-- **BUG ABERTO — gráficos não voltam ao normal depois de reconectar.**
-  Conectar, desconectar e conectar de novo deixa os gráficos em estado
-  inconsistente (não retomam a plotagem normal). Reproduzido pelo autor em
-  26/09/2026. Ainda não investigado: provavelmente o buffer/curva do
-  `pyqtgraph` não é rearmado no segundo `start_link`, ou o timer de replot
-  fica preso ao worker antigo. Reiniciar a aplicação contorna.
 
 - **`BoardSimulator` (modo mock) pode divergir do protocolo real** — ele
   simula calibração com lógica simplificada de string-matching em

@@ -103,9 +103,10 @@ commands:
     # Firmware real rodando como processo (native_sim) — ver SIBA/CLAUDE.md
     # "Modo Mock (native_sim)" e Aplicacao_Pi/CLAUDE.md
     native:
-      help: "Firmware real via native_sim: siba native [start|stop] (requer 'make native_sim' em SIBA/)"
+      help: "Firmware real via native_sim: siba native [start|stop|shell] (requer 'make native_sim' em SIBA/)"
       start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
       stop:  { help: "Encerra o processo do firmware native_sim" }
+      shell: { help: "Manda a linha ao shell de UART do firmware: siba native shell tele", type: "string" }
 
     test_io:
       help: "Testa RX/TX da SIBA isoladamente (envia CMD neutro, espera telemetria)"
@@ -115,9 +116,10 @@ commands:
     # Vale até 'siba force off' ou até a placa reiniciar.
     force:
       help: "Sobrescreve o botao fisico de emergencia: siba force [on|off]"
-      admin_only: true
-      on:  { help: "A SIBA passa a IGNORAR o botao de emergencia" }
-      off: { help: "A SIBA volta a respeitar o botao de emergencia" }
+      # Aspas obrigatorias: em YAML, `on`/`off` sem aspas viram booleanos
+      # (True/False) e o autocompletar/help do terminal mostraria "force True".
+      "on":  { help: "A SIBA passa a IGNORAR o botao de emergencia" }
+      "off": { help: "A SIBA volta a respeitar o botao de emergencia" }
 
     # Calibração e Parâmetros (Padrão SAME)
     set:
@@ -193,6 +195,12 @@ commands:
       stop:
         help: "Para a geração de dados simulados"
         type: "null"
+
+  logs:
+    help: "Telemetria das placas neste terminal: logs [on|off]. Comeca DESLIGADA"
+    # Aspas obrigatorias: `on`/`off` sem aspas viram booleanos em YAML.
+    "on":  { help: "Passa a imprimir cada pacote de telemetria recebido" }
+    "off": { help: "Silencia a telemetria (respostas de comando continuam)" }
 
   clear: { help: "Limpa a tela do terminal" }
   help: { help: "Mostra esta lista de ajuda" }

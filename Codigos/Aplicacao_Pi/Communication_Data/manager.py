@@ -63,10 +63,21 @@ class LinkManager:
     # Ciclo de vida dos links
     # ------------------------------------------------------------------ #
     def start_link(self, board):
-        """Cria e inicia o link da placa se ainda não existir."""
+        """Cria e inicia o link da placa se ainda não existir.
+
+        Um link já registrado mas com a thread MORTA é descartado e recriado:
+        `threading.Thread` não reinicia depois de terminar, então reaproveitar
+        o objeto deixaria a placa sem RX (era o bug de reconectar — ver
+        stop()).
+        """
         board = board.upper()
-        if board in self.workers:
-            return
+        existing = self.workers.get(board)
+        if existing is not None:
+            alive = getattr(existing, "is_alive", None)
+            if alive is None or alive():
+                return
+            print(f"[NET] Link antigo de {board} estava morto — recriando.")
+            self.workers.pop(board, None)
         cfg = self.registry.get(board)
         if cfg is None:
             print(f"[NET] Placa {board} não registrada.")
@@ -217,10 +228,14 @@ class LinkManager:
         else:
             worker.ip = loopback
 
+        # -uart_stdinout para TODAS as placas: além da SPMM (que usa o shell
+        # como único canal de comando), ele dá acesso ao shell de diagnóstico
+        # do firmware da SIBA por `siba native shell <comando>`. Para as placas
+        # udp_struct é um canal EXTRA — o comando normal continua indo por UDP.
         proc = NativeSimProcess(
             board, exe_path,
-            extra_args=['-uart_stdinout'] if is_telnet else None,
-            pipe_stdin=is_telnet,
+            extra_args=['-uart_stdinout'],
+            pipe_stdin=True,
         )
         if not proc.start():
             worker.ip = getattr(worker, 'original_ip', worker.ip)
@@ -234,6 +249,18 @@ class LinkManager:
         self.native_enabled[board] = True
         print(f"[NATIVE_SIM] {board} ({cfg.transport}) — comunicação real via {loopback}.")
         return True
+
+    def native_shell(self, board, line):
+        """Encaminha uma linha ao shell de UART do firmware em native_sim.
+
+        Só faz sentido com o firmware rodando como processo local: é o stdin
+        dele. Em hardware real não existe esse caminho (o PC fala por
+        Ethernet). Retorna False se a placa não estiver em native_sim.
+        """
+        proc = self.native.get(board.upper())
+        if proc is None:
+            return False
+        return proc.write_stdin(line)
 
     def start_native_sim_auto(self, board):
         """Conveniência p/ a GUI: resolve o path e sobe o native_sim."""
@@ -364,4 +391,9 @@ class LinkManager:
         for w in self.workers.values():
             w.stop()
             w.join(timeout=1.0)
+        # ESVAZIAR é obrigatório: as threads já terminaram e não reiniciam, e
+        # start_link() pula placas que ainda constam aqui. Sem isto, reconectar
+        # reaproveitava o link morto — a placa nunca mais entregava telemetria
+        # e os gráficos ficavam parados até reiniciar a aplicação.
+        self.workers.clear()
         print("[NET] Interface de rede encerrada.")

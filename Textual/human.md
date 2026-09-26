@@ -2222,11 +2222,10 @@ SAME; desabilitado para a SPMM, que fala texto por Telnet e tem caminho
 próprio. Pede confirmação, avisando que o ESC e os relés voltam ao estado de
 boot.
 
-**Janela principal** (`GUI/mainAlbatrozGUI.py`): menu **Bancada → SIBA** com
-"Armar bancada" e "Desligar bancada", e os mesmos dois como **botões** num
-grupo no fim do painel central. O armar pede confirmação. O helper
-`_send_board_cmd` passou a aceitar `status`, que faltava para carregar o
-`action_or_status`.
+**Janela principal** — o menu "Bancada" e os botões de armar/desligar que esta
+rodada chegou a criar foram **desfeitos a pedido do autor** (ver a correção
+logo abaixo). Do que ficou: o helper `_send_board_cmd` passou a aceitar
+`status`, que faltava para carregar o `action_or_status`.
 
 **A sobrescrita do botão de emergência ficou fora da tela de propósito**, a
 pedido do autor: é comando de terminal, `siba force on|off`, em
@@ -2274,9 +2273,109 @@ interface, que agora é o botão do Gerenciador de Placas.
    a suspeita é o buffer/curva do \textit{pyqtgraph} não ser rearmado no
    segundo `start_link`, ou o timer de replot ficar preso ao worker antigo.
    Reiniciar a aplicação contorna.
-2. **Posição dos botões de bancada na tela.** Eles entram numa linha nova do
-   \textit{grid} do painel central, abaixo do que já existia --- escolha
-   segura, que não disputa célula com nenhum widget do `.ui`. **Vale o autor
-   olhar se é onde ele quer.**
-3. **Nada disso está no Capítulo 3** --- continua valendo o que já ficou
+2. **Nada disso está no Capítulo 3** --- continua valendo o que já ficou
    registrado nas rodadas anteriores.
+
+### Correção: sem botões nem menu; "pronto" automático; bug do reconectar
+
+O autor rejeitou a mudança de interface: **nada de botão nem de menu**. O que
+ficou:
+
+- **Removidos** o menu "Bancada", o submenu SIBA, as duas ações e os dois
+  botões do painel central. A janela principal voltou ao que era.
+- **A intenção de forçar continua só no TinyTerminal** (`siba force on|off`).
+- **Mantido** o botão ⟳ Reiniciar do Gerenciador de Placas, que o autor
+  aprovou.
+
+**O aviso de "pronto" agora é automático.** Em vez de um clique, a aplicação
+declara `FUNC_START / INSTR_WRITE / TARGET_DEFAULT / STATUS_OK` sozinha, uma
+vez por conexão, assim que chega o **primeiro pacote de telemetria** da placa
+(`_announce_ready`, chamado de `process_network_data`). Só a SIBA recebe: é
+ela que tem a cadeia de potência.
+
+**O botão Conectar passou a pingar antes.** `on_toggle_network` agora sonda as
+placas do modo atual com o `DiscoveryService` --- a mesma rotina do
+Gerenciador de Placas --- numa thread, e só sobe o link das que responderam;
+se nenhuma responde, avisa e não conecta. O botão mostra "Procurando…"
+enquanto isso.
+
+### Bug do reconectar: causa encontrada e corrigida
+
+O bug que o autor relatou (conectar, desconectar e conectar de novo deixa os
+gráficos parados) **não era do \\textit{pyqtgraph}** --- era de rede, e os
+gráficos ficavam parados porque simplesmente não chegava mais nada.
+
+`LinkManager.stop()` parava e dava `join()` nos workers, mas **não os removia
+de `self.workers`**; `start_link()` retorna cedo quando a placa já consta no
+dicionário. Como `threading.Thread` não reinicia depois de terminar, a
+reconexão reaproveitava o objeto morto e a placa ficava **sem thread de RX**.
+O `send_command` também passava a escrever num link morto.
+
+Correção em `Communication_Data/manager.py`: `stop()` faz
+`self.workers.clear()`, e `start_link()` descarta e recria um link cujo
+`is_alive()` seja falso.
+
+**Reproduzido e validado** com o firmware em `native_sim`: antes, 25 pacotes
+na primeira conexão e **0** na segunda, com o mesmo objeto de link sendo
+reaproveitado (`is_alive()` falso); depois, 25 e 25, objeto novo e thread
+viva.
+
+**Fluxo completo conferido na GUI \\textit{offscreen}**, duas voltas de
+conectar/desconectar: ping → conecta quem respondeu → primeiro log → aviso de
+pronto → a SIBA energiza (o bit `ERROR_MCU_POWER_READY`, de relé aberto, sai
+do `error_code`) → dados entrando nos buffers. Idêntico nas duas voltas.
+
+### Precisa de revisão do orientador
+
+1. **A bancada passa a energizar e armar sozinha ao conectar.** É o que o
+   autor pediu --- o supervisório declara "pronto" no primeiro log, e a SIBA,
+   com o botão de emergência liberado, fecha a pré-carga, fecha a potência e
+   **arma o ESC**. Ou seja: abrir a aplicação e conectar deixa o motor pronto
+   para responder a \\textit{throttle}, sem nenhum clique adicional. A única
+   barreira é o botão de emergência físico. **Vale confirmar que é esse o
+   comportamento desejado com a hélice acoplada.**
+2. **O Capítulo 3 continua sem nada disso.**
+
+### TinyTerminal: `force` sem privilégio e telemetria silenciada por padrão
+
+- **`siba force on|off` deixou de exigir `sudo`** — a marca `admin_only` saiu
+  do `Config/commands.yaml`, a pedido do autor.
+- **A telemetria das placas não é mais impressa no terminal por padrão.** A
+  ~\SI{10}{\hertz} por placa ela rolava a tela e escondia as respostas dos
+  comandos. Novo comando **`logs on` / `logs off`**, começando **desligado**;
+  a mensagem de boas-vindas do terminal avisa da existência dele. As respostas
+  de comando, os avisos e os erros continuam aparecendo normalmente.
+
+**Armadilha de YAML encontrada no caminho:** as chaves `on:` e `off:` sem
+aspas são lidas como os booleanos `True`/`False` (YAML 1.1), e o
+autocompletar do terminal mostrava "logs True" / "logs False". Ambas as
+entradas novas (`logs` e `siba force`) foram escritas com aspas ---
+`"on":` / `"off":` --- com um comentário no arquivo para não se repetir.
+
+### TinyTerminal alcança o shell do firmware
+
+Pedido do autor: poder digitar os comandos do shell de UART pelo TinyTerminal.
+Feito como `<placa> native shell <comando>` --- por exemplo
+`siba native shell tele`, `siba native shell btn on`.
+
+- `LinkManager` passou a subir **todas** as placas em `native_sim` com
+  `-uart_stdinout` (antes só a SPMM), de modo que o shell do firmware fica no
+  stdin/stdout do processo. Para SIBA/SAME é um canal **extra**: os comandos
+  normais continuam indo por UDP.
+- Novo `LinkManager.native_shell(placa, linha)` escreve nesse stdin; a
+  resposta sai no relay de log com o prefixo `[<placa>-native_sim]`.
+- O relay agora **remove as sequências ANSI** do shell do Zephyr (cor do
+  prompt, reposicionamento de cursor), que no TinyTerminal apareceriam como
+  lixo.
+
+**Verificado pela telemetria** (efeito observável, não só o envio):
+`siba native shell btn on` levanta o bit de emergência no `error_code`
+(0x02080101, emergência ATIVA) e `btn off` o limpa.
+
+**Limites, registrados no `Aplicacao_Pi/CLAUDE.md`:** só funciona em
+`native_sim` (em hardware o shell está na UART da placa e o PC fala
+Ethernet); a **SAME não tem shell** --- não há `CONFIG_SHELL` no `prj.conf`
+dela, então o comando existe por simetria mas nada responde; e o
+autocompletar não conhece os comandos do firmware --- completa até
+`native shell` e daí em diante é texto livre. **Popular o autocompletar
+lendo o `help` do firmware no boot é possível, mas não foi feito.**

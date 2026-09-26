@@ -18,7 +18,7 @@ import shutil
 
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QInputDialog,
                                QMenu, QComboBox, QLabel, QWidget, QHBoxLayout,
-                               QGridLayout, QPushButton, QGroupBox)
+                               QGridLayout)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile, Slot, QTimer, QThread, Signal, Qt
 from PySide6.QtGui import QAction
@@ -27,6 +27,7 @@ from Communication_Data import codecs
 
 # Importações de hardware e componentes customizados
 from Communication_Data.Ethernet import EthernetManager
+from Communication_Data.discovery import DiscoveryService
 from GUI.SAMEConfigDialog import SAMEConfigDialog
 from GUI.TinyTerminal import TinyTerminal
 from GUI.BoardManagerDialog import BoardManagerDialog
@@ -47,6 +48,10 @@ TYPE_MAP = {
 }
 
 class AlbatrozGUI(QMainWindow):
+    # Resultado do ping disparado pelo botão Conectar — emitido da thread de
+    # sondagem, consumido na thread da UI (mesmo padrão do Gerenciador).
+    _probe_done = Signal(dict)
+
     def __init__(self):
         super().__init__()
         
@@ -114,6 +119,12 @@ class AlbatrozGUI(QMainWindow):
             handle_callback=self.process_network_data,
             sample_callback=self.on_decoded_sample  # amostras já decodificadas (ex.: SPMM)
         )
+
+        # Ping antes de conectar + controle do aviso de "supervisório pronto"
+        # (uma vez por conexão, no primeiro pacote de cada placa).
+        self.discovery = DiscoveryService(self.eth)
+        self._ready_announced = set()
+        self._probe_done.connect(self._connect_probed)
 
         # 5. Inicializa o Terminal (Agora ele herdará self.eth corretamente do parent)
         self.terminal = TinyTerminal(self.config_dir, self)
@@ -230,7 +241,6 @@ class AlbatrozGUI(QMainWindow):
 
         # Reorganiza a barra de menus (tudo em português, menus de topo).
         self._build_menus()
-        self._build_bench_buttons()
         # Seletor "Modo de Operação" (canto direito da barra de menus).
         self._build_mode_selector()
 
@@ -448,10 +458,6 @@ class AlbatrozGUI(QMainWindow):
         self.action_calib_load_cell.triggered.connect(self.open_load_cell_calib)
         self.action_spmm_ensaio = QAction("Ensaios SPMM (B, τc, J)", self)
         self.action_spmm_ensaio.triggered.connect(self.open_spmm_ensaio)
-        self.action_bench_arm = QAction("Armar bancada (SIBA)", self)
-        self.action_bench_arm.triggered.connect(self.bench_arm)
-        self.action_bench_off = QAction("Desligar bancada (SIBA)", self)
-        self.action_bench_off.triggered.connect(self.bench_shutdown)
 
         # Traduz as ações existentes do .ui para português.
         for attr, txt in [("actionLoad", "Carregar"), ("actionCreate", "Criar"),
@@ -505,18 +511,6 @@ class AlbatrozGUI(QMainWindow):
         self.action_info = QAction("Guia do Usuário (Sobre)", self)
         self.action_info.triggered.connect(self.open_info)
 
-        # --- Bancada (topo) — cadeia de potência da SIBA. Os mesmos comandos
-        #     estão nos botões do painel central; o reinício de placa fica no
-        #     Gerenciador de Placas. A sobrescrita do botão de emergência NÃO
-        #     está aqui de propósito: é comando de terminal (`siba force on`),
-        #     para não virar um clique de menu.
-        self.menu_bench = QMenu("Bancada", mb)
-        self.submenu_bench_siba = QMenu("SIBA", self.menu_bench)
-        self.submenu_bench_siba.addAction(self.action_bench_arm)
-        self.submenu_bench_siba.addAction(self.action_bench_off)
-        self.menu_bench.addMenu(self.submenu_bench_siba)
-        mb.addMenu(self.menu_bench)
-
         self.menu_options = QMenu("Opções", mb)
         self.menu_options.addAction(self.action_sensor_config)
         self.menu_options.addAction(self.action_board_manager)
@@ -562,6 +556,7 @@ class AlbatrozGUI(QMainWindow):
             if hasattr(self, 'terminal'):
                 self.terminal.log_board_data(protocol, data, decoded)
 
+            self._announce_ready(protocol)
             self._check_error_code(protocol, decoded)
             self._update_internal_buffers(decoded)
         except Exception as e:
@@ -834,22 +829,77 @@ class AlbatrozGUI(QMainWindow):
 
     @Slot()
     def on_toggle_network(self):
-        if not self.eth.running:
-            boards = self._boards_in_mode(getattr(self, "op_mode", "SPMM"))
-            print(f"Conectando placas do modo {self.op_mode}: {boards}")
-            self.on_clear_all()
-            try:
-                self.eth.start()
-                for b in boards:
-                    self.eth.start_link(b)
-            except Exception as e:
-                print(f"Erro de rede: {e}")
-            self.ui.pushButton_2.setText("Desconectar")
-        else:
+        """Conecta/desconecta. Ao conectar, PINGA antes — mesma rotina do
+        Gerenciador de Placas — e só sobe o link das placas que responderam."""
+        if self.eth.running:
             self.eth.stop()
             self._spmm_armed = False
+            self._ready_announced.clear()
             self.ui.pushButton_2.setText("Conectar")
             print("Rede parada.")
+            return
+
+        boards = self._boards_in_mode(getattr(self, "op_mode", "SPMM"))
+        print(f"Procurando placas do modo {self.op_mode}: {boards}")
+        self.on_clear_all()
+        self._ready_announced.clear()
+        self.ui.pushButton_2.setEnabled(False)
+        self.ui.pushButton_2.setText("Procurando…")
+
+        def work():
+            found = {}
+            for b in boards:
+                try:
+                    found[b] = self.discovery.probe(b)
+                except Exception as e:
+                    print(f"[NET] Falha ao sondar {b}: {e}")
+                    found[b] = False
+            self._probe_done.emit(found)
+
+        threading.Thread(target=work, name="ProbeOnConnect", daemon=True).start()
+
+    @Slot(dict)
+    def _connect_probed(self, found):
+        """Resultado do ping (thread da UI): conecta quem respondeu."""
+        self.ui.pushButton_2.setEnabled(True)
+        presentes = [b for b, ok in found.items() if ok]
+        ausentes = [b for b, ok in found.items() if not ok]
+
+        if ausentes:
+            print(f"[NET] Sem resposta: {', '.join(ausentes)}.")
+        if not presentes:
+            self.ui.pushButton_2.setText("Conectar")
+            QMessageBox.warning(
+                self, "Nenhuma placa encontrada",
+                "Nenhuma das placas do modo atual respondeu ao ping.\n\n"
+                "Confira o cabo e o IP/porta no Gerenciador de Placas, ou "
+                "suba o firmware em simulação nativa.")
+            return
+
+        print(f"[NET] Respondeu(ram): {', '.join(presentes)} — conectando.")
+        try:
+            self.eth.start()
+            for b in presentes:
+                self.eth.start_link(b)
+        except Exception as e:
+            print(f"Erro de rede: {e}")
+        self.ui.pushButton_2.setText("Desconectar")
+
+    def _announce_ready(self, board):
+        """Declara à placa que o supervisório está pronto, uma vez por conexão.
+
+        É uma das DUAS condições que a SIBA exige para armar a bancada (a
+        outra é o botão de emergência liberado) — por isso vai sozinho,
+        assim que o primeiro pacote de telemetria chega, sem botão na tela.
+        Só a SIBA trata este comando: é ela que tem a cadeia de potência.
+        """
+        if board != "SIBA" or board in self._ready_announced:
+            return
+        self._ready_announced.add(board)
+        print(f"[NET] {board}: primeiro log recebido — avisando que o "
+              f"supervisorio esta pronto.")
+        self._send_board_cmd(board, "FUNC_START", 1.0,
+                             instr="INSTR_WRITE", status="STATUS_OK")
 
     @Slot()
     def on_clear_all(self):
@@ -1209,68 +1259,6 @@ class AlbatrozGUI(QMainWindow):
             self._send_board_cmd("SIBA", "FUNC_STOP", 0.0)
             print("[Motor] SIBA ESC parado (throttle 1000 + stop).")
         self.ui.Motor_action.setValue(0)
-
-    def _build_bench_buttons(self):
-        """Dois botões de bancada no fim do painel central: armar e desligar.
-
-        Acrescentados numa linha NOVA do QGridLayout (rowCount()), abaixo do
-        que já existe no .ui — não disputa célula com nenhum widget existente.
-        """
-        grid = self.ui.centralwidget.layout()
-        if grid is None:
-            return
-
-        self.btn_bench_arm = QPushButton("⚡ Armar bancada")
-        self.btn_bench_arm.setToolTip(
-            "Fecha a pré-carga, espera os capacitores do ESC e fecha a "
-            "potência; depois arma o ESC. A SIBA recusa se o botão de "
-            "emergência estiver apertado."
-        )
-        self.btn_bench_arm.clicked.connect(self.bench_arm)
-
-        self.btn_bench_off = QPushButton("⏻ Desligar bancada")
-        self.btn_bench_off.setToolTip(
-            "Desarma o ESC e abre os dois relés (potência, depois pré-carga)."
-        )
-        self.btn_bench_off.clicked.connect(self.bench_shutdown)
-
-        box = QGroupBox("Bancada (SIBA)")
-        h = QHBoxLayout(box)
-        h.addWidget(self.btn_bench_arm)
-        h.addWidget(self.btn_bench_off)
-        h.addStretch()
-
-        cols = max(grid.columnCount(), 1)
-        grid.addWidget(box, grid.rowCount(), 0, 1, cols)
-
-    @Slot()
-    def bench_arm(self):
-        """Manda a SIBA armar a bancada (FUNC_START/STATUS_OK).
-
-        O firmware só obedece com o botão de emergência liberado — ou
-        sobrescrito por `siba force on` no terminal.
-        """
-        if QMessageBox.question(
-            self, "Armar bancada",
-            "Energizar e armar a bancada?\n\n"
-            "A pré-carga fecha, os capacitores do ESC carregam, a potência "
-            "fecha e o ESC é armado. A partir daí o motor responde a "
-            "throttle.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        ) != QMessageBox.Yes:
-            return
-        if "SIBA" not in self.eth.workers:
-            self.eth.start_link("SIBA")
-        self._send_board_cmd("SIBA", "FUNC_START", 1.0,
-                             instr="INSTR_WRITE", status="STATUS_OK")
-        print("[Bancada] SIBA: comando de armar enviado.")
-
-    @Slot()
-    def bench_shutdown(self):
-        """Manda a SIBA desligar a bancada (FUNC_START/STATUS_ERROR)."""
-        self._send_board_cmd("SIBA", "FUNC_START", 0.0,
-                             instr="INSTR_WRITE", status="STATUS_ERROR")
-        print("[Bancada] SIBA: comando de desligar enviado.")
 
     def _send_board_cmd(self, board, func_name, value, target="TARGET_DEFAULT",
                         instr="INSTR_NONE", status=None):

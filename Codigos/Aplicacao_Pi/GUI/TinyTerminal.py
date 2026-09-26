@@ -44,6 +44,10 @@ class TinyTerminal(QWidget):
         self.history = []
         self.history_index = -1
         self.quiet_mocks = set() # Armazena quais boards não devem logar BIN
+        # Telemetria das placas no terminal: começa DESLIGADA (a ~10 Hz por
+        # placa ela rola a tela e esconde as respostas dos comandos).
+        # Alterna com 'logs on' / 'logs off'.
+        self.board_logs_enabled = False
         self.input.installEventFilter(self) 
 
         self.is_admin = self._check_os_permission()
@@ -71,7 +75,7 @@ class TinyTerminal(QWidget):
         sys.stdout = self
 
         self.append_log("SYS", "===============================================================", "#ADFF2F")
-        self.append_log("SYS", "Esse é o Tiny Terminal ele não é um terminal shell é completamente auto contido, feito para facilitar mudanças de parametros online. \n Como ele funciona? Bem ele usa de arquivos .yaml para conseguir configurar as placas (SIBA e SAME) e o próprio terminal, ou seja os codigos são padronizados. \n Além disso ele conta com funções de MOCK, para testar features da própria. \n Para mais informações use o comando help", "#ADFF2F")
+        self.append_log("SYS", "Esse é o Tiny Terminal ele não é um terminal shell é completamente auto contido, feito para facilitar mudanças de parametros online. \n Como ele funciona? Bem ele usa de arquivos .yaml para conseguir configurar as placas (SIBA e SAME) e o próprio terminal, ou seja os codigos são padronizados. \n Além disso ele conta com funções de MOCK, para testar features da própria. \n A telemetria das placas nao e impressa aqui por padrao (ela rolaria a tela a 10 Hz) — use 'logs on' para ver. \n Para mais informações use o comando help", "#ADFF2F")
         self.append_log("SYS", "===============================================================", "#ADFF2F")
 
 
@@ -318,7 +322,13 @@ class TinyTerminal(QWidget):
             self._list_subcommands(value, prefix=f"{prefix}{key} ", color=color)
 
     def log_board_data(self, board, data, decoded=None):
-        """Exibe dados de rede no console do terminal."""
+        """Exibe a telemetria das placas no console do terminal.
+
+        DESLIGADO por padrão: a ~10 Hz por placa, isso rola a tela e esconde
+        as respostas dos comandos. Liga/desliga com `logs on` / `logs off`.
+        """
+        if not self.board_logs_enabled:
+            return
         # Se a board estiver no modo "quiet" (no-comment), ignoramos o log de BIN/LOG
         if board in self.quiet_mocks:
             return # Não loga nada se estiver no modo quiet
@@ -430,6 +440,30 @@ class TinyTerminal(QWidget):
 
     def _cmd_siba_native_start(self, args): self._native_sim_flow("SIBA")
     def _cmd_siba_native_stop(self, args): self.eth.stop_native_sim("SIBA")
+    def _cmd_siba_native_shell(self, args): self._native_shell_flow("SIBA", args)
+    def _cmd_same_native_shell(self, args): self._native_shell_flow("SAME", args)
+
+    def _native_shell_flow(self, board, args):
+        """Manda a linha crua ao shell de UART do firmware em native_sim.
+
+        É o shell do PRÓPRIO firmware (lib/SYS/Test_Shell.c), não este
+        terminal — por isso a resposta aparece como log da placa, com o
+        prefixo [<placa>-native_sim]. Só existe com o firmware rodando como
+        processo local; em hardware real o PC fala por Ethernet, e esse shell
+        está na UART da placa.
+        """
+        if not args:
+            self.append_log("ERR", f"uso: {board.lower()} native shell <comando>   "
+                                   f"(ex.: {board.lower()} native shell tele)",
+                            "#FF4500")
+            return
+        line = " ".join(args)
+        if not self.eth.native_shell(board, line):
+            self.append_log("ERR", f"{board} não está em native_sim — use "
+                                   f"'{board.lower()} native start' antes.",
+                            "#FF4500")
+            return
+        self.append_log("SHELL", f"({board}) -> {line}", "#DDA0DD")
     def _cmd_same_native_start(self, args): self._native_sim_flow("SAME")
     def _cmd_same_native_stop(self, args): self.eth.stop_native_sim("SAME")
 
@@ -456,6 +490,19 @@ class TinyTerminal(QWidget):
             self.append_log("SYS", "Esse é o FIRMWARE DE VERDADE (não um fake) — testa TX/RX UDP reais.", "#DCDCDC")
         else:
             self.append_log("ERR", f"Falha ao iniciar native_sim para {board} (ver console).", "#FF4500")
+
+    def _cmd_logs_on(self, args):  self._set_board_logs(True)
+    def _cmd_logs_off(self, args): self._set_board_logs(False)
+
+    def _set_board_logs(self, on):
+        """Liga/desliga a impressão da telemetria das placas neste terminal."""
+        self.board_logs_enabled = bool(on)
+        if on:
+            self.append_log("SYS", "Telemetria das placas LIGADA no terminal "
+                                   "(use 'logs off' para silenciar).", "#ADFF2F")
+        else:
+            self.append_log("SYS", "Telemetria das placas silenciada "
+                                   "('logs on' para ver de novo).", "#ADFF2F")
 
     def _cmd_siba_force_on(self, args):  self._emergency_override_flow(True)
     def _cmd_siba_force_off(self, args): self._emergency_override_flow(False)
