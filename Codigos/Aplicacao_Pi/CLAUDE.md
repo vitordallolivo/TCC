@@ -74,7 +74,8 @@ Aplicacao_Pi/
 │   ├── test_coeff_auto.py           #   simulação do SMO (dependência do autotune)
 │   ├── helice_coeff.py              #   coeficientes CT/CQ/J — modo --csv ou simulação
 │   └── plot_pi.py
-└── mainApp.py                       # Entry point
+├── mainApp.py                       # Entry point da GUI
+└── native_cli.py                    # banco de teste CLI: sobe SIBA/SAME em native_sim e conversa por UDP
 ```
 
 > **Arquitetura em camadas** (refactor do antigo `Ethernet.py` monolítico):
@@ -302,7 +303,35 @@ probe(id)` / `.probe_all()`.
 
 ---
 
+## Banco de teste por linha de comando — `native_cli.py`
+
+Sobe o `zephyr.exe` da SIBA ou da SAME e conversa com ele pelo MESMO caminho
+da GUI (UDP real em loopback, CMD de 8 bytes montado a partir de
+`Config/<placa>.yaml`), sem abrir a interface gráfica. Reaproveita
+`registry`/`codecs`/`native_sim`, então o protocolo continua vindo de uma
+fonte só.
+
+```bash
+python native_cli.py SIBA                          # sobe e abre o prompt
+python native_cli.py SAME --no-spawn               # usa um já em execução
+python native_cli.py SIBA -c arm -c tele -c off    # roteiro e sai
+python native_cli.py SIBA -c "shell btn on" -c arm # `shell` fala com o shell do firmware
+```
+
+Comandos: `arm`, `off`, `force on|off`, `estop`, `esc <us>`, `reset`, `tele`,
+`watch [n]`, `shell <linha>`, `raw f i t v a`, `sleep <s>`, `help`, `quit`.
+Como sobe o firmware com `-uart_stdinout`, o `shell` dá acesso aos comandos de
+diagnóstico do próprio firmware — inclusive o `btn on|off` da SIBA, que finge
+o botão de emergência e só existe em `native_sim`.
+
 ## Observações em aberto
+
+- **BUG ABERTO — gráficos não voltam ao normal depois de reconectar.**
+  Conectar, desconectar e conectar de novo deixa os gráficos em estado
+  inconsistente (não retomam a plotagem normal). Reproduzido pelo autor em
+  26/09/2026. Ainda não investigado: provavelmente o buffer/curva do
+  `pyqtgraph` não é rearmado no segundo `start_link`, ou o timer de replot
+  fica preso ao worker antigo. Reiniciar a aplicação contorna.
 
 - **`BoardSimulator` (modo mock) pode divergir do protocolo real** — ele
   simula calibração com lógica simplificada de string-matching em

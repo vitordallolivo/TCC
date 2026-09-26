@@ -48,10 +48,8 @@
 #define HAL_I2C_SCAN_ADDR_MIN   0x03U
 #define HAL_I2C_SCAN_ADDR_MAX   0x77U
 
-/* ── Relay sequencing ───────────────────────────────────────────────────── *
- * Tempo de espera após fechar relay_precharge antes de fechar relay_power. *
- * Limita inrush nos capacitores do ESC.                                    */
-#define HAL_RELAY_PRECHARGE_MS  3000U
+/* O tempo de pré-carga NÃO vive aqui: é parâmetro de bancada, decidido pela
+ * camada System e passado em HAL_Relay_Energize(). Ver Battery_Manager. */
 
 /* ── API pública ──────────────────────────────────────────────────────── */
 
@@ -98,13 +96,34 @@ int HAL_I2C_Read(uint16_t addr, uint8_t *buf, size_t len);
 int HAL_I2C_Write(uint16_t addr, const uint8_t *buf, size_t len);
 int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count);
 
-/* Relés — sequência obrigatória (ver HAL_RELAY_PRECHARGE_MS).
- * HAL_Relay_Energize: fecha pre-carga → aguarda → fecha potência.
+/* Relés — sequência obrigatória.
+ * HAL_Relay_Energize: fecha pre-carga → aguarda `precharge_ms` → fecha
+ * potência. O HAL não escolhe esse tempo: recebe o que a camada de cima
+ * mandar, e só garante a ordem dos contatos.
  * HAL_Relay_Deenergize: abre potência → abre pre-carga (sem delay).
  * Ambas bloqueiam a thread chamadora durante a sequência. */
 int  HAL_Relay_Init(void);
-void HAL_Relay_Energize(void);
+void HAL_Relay_Energize(uint32_t precharge_ms);
 void HAL_Relay_Deenergize(void);
 bool HAL_Relay_Is_Energized(void);
+/* true se QUALQUER um dos dois contatos estiver fechado — inclusive durante
+ * a pré-carga, quando a sequência ainda não terminou mas já há corrente. */
+bool HAL_Relay_Any_Closed(void);
+/* Estado de cada contato isoladamente, para diagnóstico. */
+bool HAL_Relay_Precharge_Closed(void);
+bool HAL_Relay_Power_Closed(void);
+
+/* Botão de emergência (PD2, entrada) + LED externo de pronto (PE15, saída).
+ * A inversão do botão (0 = apertado) está declarada no DTS como
+ * GPIO_ACTIVE_LOW; HAL_Emergency_Is_Pressed já devolve lógica positiva.
+ * Falha de leitura do pino é reportada como "apertado" (falha segura). */
+int  HAL_Emergency_Init(void);
+bool HAL_Emergency_Is_Pressed(void);
+void HAL_Ready_Led_Set(bool on);
+#ifdef CONFIG_ARCH_POSIX
+/* Só native_sim: finge o botão, para exercitar a recusa de armar sem o pino
+ * físico. Não existe no build da placa. */
+void HAL_Emergency_Sim_Set_Pressed(bool pressed);
+#endif
 
 #endif /* HAL_H */

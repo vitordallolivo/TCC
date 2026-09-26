@@ -27,9 +27,10 @@
         led0 = &ready_pin;
     };
 
-    /* PE15 — LED de status + MCU_Sig_Ready (porta AND → SSR 100 A).
-     * Mesmo pino cumpre dois papéis: indica "sistema pronto" ao operador
-     * e habilita o SSR via porta lógica AND (PD2 é a outra entrada). */
+    /* PE15 — saída: LED EXTERNO de "sistema pronto" (MCU_Sig_Ready).
+     * Aceso quando não há emergência ativa nem erro no error_code; é o
+     * sinal visual de que o operador pode rodar o ensaio. Acionado pelo
+     * Security_Manager via HAL_Ready_Led_Set(). */
     leds {
         compatible = "gpio-leds";
         ready_pin: ready_pin {
@@ -46,12 +47,15 @@
         };
     };
 
-    /* PD2 — saída da porta AND que aciona o SSR de 100 A.
-     * Precisa de PE15=1 (MCU pronto) E PD2=1 (confirmação de sequência)
-     * para fechar o SSR — proteção de dois fatores. */
-    gpio_pd2_and_out: gpio-pd2-and-out {
+    /* PD2 — entrada: BOTÃO DE PARADA DE EMERGÊNCIA.
+     * Nível físico no pino: 0 = apertado (emergência), 1 = solto (pode
+     * rodar). GPIO_ACTIVE_LOW declara essa inversão, de modo que a API
+     * lógica do Zephyr (gpio_pin_get_dt) devolve 1 quando apertado — o
+     * HAL não repete a inversão em código. Configurado com pull-up
+     * interno, já que o botão fecha contra o terra. */
+    emergency_button: emergency-button {
         compatible = "siba,gpio-array";
-        gpios = <&gpiod 2 GPIO_ACTIVE_HIGH>;
+        gpios = <&gpiod 2 GPIO_ACTIVE_LOW>;
     };
 
     /* ── Relés de potência ─────────────────────────────────────────────── *

@@ -33,7 +33,8 @@ target_sources(app PRIVATE
     lib/SYS/Propeller_Manager.c
     lib/SYS/Security_Manager.c
     lib/SYS/Log_Manager.c
-    $<$<BOOL:${CONFIG_SHELL}>:lib/SYS/Test_Shell.c>
+    # Ferramenta de bancada — fora do produto final (ver Kconfig).
+    $<$<BOOL:${CONFIG_SIBA_TEST_SHELL}>:lib/SYS/Test_Shell.c>
     lib/SYS/NVM.c
 )
 

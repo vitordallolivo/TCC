@@ -12,4 +12,47 @@ config SIBA_NET_STATUS_UART
 	  status da conexão, IP configurado, células de carga, bateria,
 	  rpm e error_code. Útil para bancada sem a GUI conectada.
 
+config SIBA_RELAY_PRECHARGE_MS
+	int "Tempo de pré-carga antes de fechar o relé de potência (ms)"
+	default 5000
+	range 0 60000
+	help
+	  Intervalo entre fechar o relé de pré-carga (PB13) e fechar o de
+	  potência (PB12). É o tempo dado aos capacitores do barramento do
+	  ESC para carregarem através do resistor de pré-carga, limitando a
+	  corrente de inrush no fechamento da potência.
+
+	  Com o resistor de pré-carga de 100 ohm dimensionado na metodologia
+	  e 2000 uF de capacitância equivalente do ESC, a constante de tempo
+	  é de 0,2 s; o critério de projeto (regime permanente em cinco
+	  constantes) daria 1 s. O padrão de 5000 ms é uma margem deliberada
+	  sobre esse critério, a ser refinada em bancada.
+
+	  Curto demais e o relé de potência fecha sobre capacitor ainda
+	  descarregado, com o pico de inrush que a pré-carga existe para
+	  evitar; longo demais só atrasa a partida. A sequência bloqueia a
+	  fila de trabalho durante todo o intervalo.
+
+	  Quem lê este valor é o Battery_Manager, que o passa ao HAL — o HAL
+	  não decide tempo de bancada.
+
+config SIBA_TEST_SHELL
+	bool "Comandos de diagnóstico de bancada no shell"
+	depends on SHELL
+	default y
+	help
+	  Compila lib/SYS/Test_Shell.c, que registra no shell os comandos de
+	  bancada: telemetria, sensores crus e calibrados, lista de erros,
+	  armar/desarmar, parada de emergência, taração e calibração de
+	  células de carga, parâmetros de bateria e acionamento do relé.
+
+	  É ferramenta de desenvolvimento e ensaio, NÃO faz parte do produto
+	  final: dá acesso direto ao ESC e aos relés pela UART, sem passar
+	  pela aplicação de supervisão nem pelo protocolo de rede, e sem
+	  autenticação de nenhum tipo.
+
+	  Para tirar do produto, desabilite também CONFIG_SHELL — sem isso o
+	  interpretador continua ocupando flash, só que sem comandos da
+	  aplicação.
+
 endmenu

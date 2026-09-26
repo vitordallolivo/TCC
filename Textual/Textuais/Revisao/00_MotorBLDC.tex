@@ -2,10 +2,10 @@
 
 Os motores de corrente contínua sem escovas (\textit{Brushless Direct Current} --- BLDC) são amplamente utilizados em aplicações que exigem alta eficiência e elevada densidade de potência, características essenciais para sistemas de propulsão elétrica embarcados \cite{Krishnan2017}. Diferentemente dos motores CC convencionais com escovas, a comutação nos motores BLDC é realizada eletronicamente por meio de um inversor de potência, o que elimina o desgaste mecânico das escovas e reduz significativamente a interferência eletromagnética gerada durante a operação \cite{Fitzgerald2014}.
 
-O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é descrito por um circuito RL associado a uma força contraeletromotriz (FEM) de perfil idealmente trapezoidal \cite{Krishnan2017}, conforme ilustrado na \autoref{fig:bldc_equivalente}. Para uma fase genérica $k \in \{a, b, c\}$, a tensão aplicada aos terminais é expressa por \eqref{eq:bldc_eletrica}:
+O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é descrito por um circuito RL associado a uma força contraeletromotriz (FEM) de perfil idealmente trapezoidal \cite{Krishnan2017}, conforme ilustrado na \autoref{fig:bldc_equivalente}. Para uma fase genérica $k \in \{a, b, c\}$, a tensão de fase --- medida entre o terminal e o neutro $n$, e portanto denotada $v_{an}$, $v_{bn}$ e $v_{cn}$ --- é expressa por \eqref{eq:bldc_eletrica}:
 \begin{equation}
     \begin{cases}
-    v_k(t) = R i_k + L \frac{di_k}{dt} + e_k \\ 
+    v_{kn}(t) = R i_k + L \frac{di_k}{dt} + e_k \\ 
     \sum_{k=a}^c i_k(t) = 0
     \end{cases}
     \label{eq:bldc_eletrica}
@@ -18,22 +18,22 @@ O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é desc
     \begin{circuitikz}[american, scale=1.2]
         
         % Fase A
-        \draw (0,2) node[left] {$v_a(t)$} to[short, o-] (0.5,2)
+        \draw (0,2) node[left] {$v_{an}(t)$} to[short, o-] (0.5,2)
               to[L, l=$L$, i=$i_a$] (2.5,2)
               to[R, l=$R$] (4.5,2)
-              to[V, l=$e_1(t)$,invert] (6.5,2) coordinate (Na);
+              to[V, l=$e_a(t)$,invert] (6.5,2) coordinate (Na);
               
         % Fase B
-        \draw (0,0) node[left] {$v_b(t)$} to[short, o-] (0.5,0)
+        \draw (0,0) node[left] {$v_{bn}(t)$} to[short, o-] (0.5,0)
               to[L, l=$L$, i=$i_b$] (2.5,0)
               to[R, l=$R$] (4.5,0)
-              to[V, l=$e_2(t)$,invert] (6.5,0) coordinate (Nb);
+              to[V, l=$e_b(t)$,invert] (6.5,0) coordinate (Nb);
               
         % Fase C
-        \draw (0,-2) node[left] {$v_c(t)$} to[short, o-] (0.5,-2)
+        \draw (0,-2) node[left] {$v_{cn}(t)$} to[short, o-] (0.5,-2)
               to[L, l=$L$, i=$i_c$] (2.5,-2)
               to[R, l=$R$] (4.5,-2)
-              to[V, l=$e_3(t)$,invert] (6.5,-2) coordinate (Nc);
+              to[V, l=$e_c(t)$,invert] (6.5,-2) coordinate (Nc);
               
         % Fechamento do Ponto Neutro (Conexão Estrela)
         \draw (Na) -- (Nc); % Linha vertical conectando os três ramos
@@ -46,7 +46,7 @@ O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é desc
     \small Fonte: Autor (2026).
 \end{figure}
 
-onde $v_k$ é a tensão de fase, $R$ a resistência do enrolamento, $L$ a indutância própria da fase, $i_k$ a corrente e $e_k$ a força contraeletromotriz induzida. A magnitude da FEM $e_k$ é proporcional à velocidade angular mecânica do rotor ($\omega_m$) e à constante de força contraeletromotriz ($k_e$) \cite{Krishnan2017}, conforme a \eqref{eq:bldc_fem}:
+onde $v_{kn}$ é a tensão de fase, $R$ a resistência do enrolamento, $L$ a indutância própria da fase, $i_k$ a corrente e $e_k$ a força contraeletromotriz induzida. A magnitude da FEM $e_k$ é proporcional à velocidade angular mecânica do rotor ($\omega_m$) e à constante de força contraeletromotriz ($k_e$) \cite{Krishnan2017}, conforme a \eqref{eq:bldc_fem}:
 \begin{equation}
     e_k = k_e \, \omega_m \, f_k(\theta_e)
     \label{eq:bldc_fem}
@@ -283,9 +283,9 @@ Para análise e controle, aplica-se ainda a Transformada de Park, que gira o ref
 
 Conforme apresentado na \autoref{eq:Eq_nao_linear}, o sistema é descrito por equações dinâmicas não lineares, o que impõe desafios significativos à estimação de estados. Estruturas de observadores lineares clássicos, como o Observador de Luenberger ou o Regulador Linear Quadrático Gaussiano (LQG), podem não apresentar convergência satisfatória ou estabilidade em regimes transitórios e amplas faixas de operação, visto que negligenciam as não linearidades intrínsecas do modelo. Diante desse cenário, a literatura especializada destaca com frequência duas abordagens robustas: o Observador por Modos Deslizantes (SMO - Sliding Mode Observer) e o Filtro de Kalman Estendido, porém o EKF não será abordado neste trabalho, devido ao maior custo computacional e maior complexidade a solução adotada neste trabalho.
 
-\subsubsection{Observador por Modos Deslizantes (SMO)}
+\section{Observador por Modos Deslizantes (SMO)}
 \label{sec:SMO_revbib}
-O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fundamenta-se na teoria de sistemas de estrutura variável, sendo amplamente reconhecido por sua robustez intrínseca contra variações paramétricas e rejeição a distúrbios externos \cite{AbKaf2024}. Diferente de observadores lineares, o SMO utiliza uma lei de controle descontínua para forçar os erros de estado a convergirem para uma superfície de deslizamento em tempo finito. A \autoref{fig:smo_diagrama_bloco} ilustra a estrutura genérica do observador: o modelo estimado recebe a mesma entrada $u$ da planta real e corrige suas estimativas com base no erro de saída $y - \hat{y}$, processado por uma função não linear.
+O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fundamenta-se na teoria de sistemas de estrutura variável \cite{Utkin1992}, sendo amplamente reconhecido por sua robustez intrínseca contra variações paramétricas e rejeição a distúrbios externos \cite{AbKaf2024,OkLee2022}. Diferente de observadores lineares, o SMO utiliza uma lei de controle descontínua para forçar os erros de estado a convergirem para uma superfície de deslizamento em tempo finito. A \autoref{fig:smo_diagrama_bloco} ilustra a estrutura genérica do observador: o modelo estimado recebe a mesma entrada $u$ da planta real e corrige suas estimativas com base no erro de saída $y - \hat{y}$, processado por uma função não linear.
 
 \begin{figure}[H]
     \centering
@@ -311,15 +311,15 @@ O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fund
         \node[font=\tiny] at ($(sum)+(0,0.3)$) {$+$};
         \node[font=\tiny] at ($(sum)+(0,-0.3)$) {$-$};
 
-        % ── Bloco sign ──────────────────────────────────────────────────
-        \node[bloco, minimum width=5em] (sign) at (7.5,1.0) {sign$(\cdot)$};
+        % ── Bloco da função de chaveamento ──────────────────────────────
+        \node[bloco, minimum width=5em] (sat) at (7.5,1.0) {Sat$(\cdot)$};
 
         % ── Ganho L ─────────────────────────────────────────────────────
         \node[bloco, minimum width=3em] (L) at (3.5,1.0) {$L$};
 
         % ── Modelo estimado (base da área sombreada) ─────────────────────
         \node[bloco, minimum width=11em, minimum height=3.8em] (obs) at (7,-1.5)
-            {\footnotesize$\dot{\hat{x}}=A\hat{x}+Bu+L\cdot\text{sign}(y-C\hat{x})$\\[2pt]
+            {\footnotesize$\dot{\hat{x}}=A\hat{x}+Bu+L\cdot\text{Sat}(y-C\hat{x})$\\[2pt]
              \footnotesize$\hat{y}=C\hat{x}$};
         \node[font=\scriptsize, above=1pt of obs.north] {Modelo Estimado};
 
@@ -345,9 +345,9 @@ O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fund
         \draw[->] (y_fork) -- (sum.north);
         \draw[->] (y_fork) -- ++(1.5,0) node[right]{$y$};
 
-        % ── sum → sign → L ────────────────────────────────────────────────
-        \draw[->] (sum.west) -- node[above]{\footnotesize$y-C\hat{x}$} (sign.east);
-        \draw[->] (sign.west) -- (L.east);
+        % ── sum → Sat → L ─────────────────────────────────────────────────
+        \draw[->] (sum.west) -- node[above]{\footnotesize$y-C\hat{x}$} (sat.east);
+        \draw[->] (sat.west) -- (L.east);
 
         % ── Modelo estimado → ŷ ───────────────────────────────────────────
         \coordinate (yhat_fork) at (11.5,-1.5);
@@ -359,6 +359,64 @@ O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fund
     \end{tikzpicture}
     \fonte{Adaptado de \cite{AbKaf2024}.}
 \end{figure}
+
+O bloco $\text{Sat}(\cdot)$ da \autoref{fig:smo_diagrama_bloco} não designa uma
+expressão única, e sim a família de funções de chaveamento admissíveis pela
+teoria de modos deslizantes \cite{Utkin1992,EdwardsSpurgeon1998}: basta que a função seja ímpar, limitada e
+monotônica para que o termo de correção sempre se oponha ao erro. A
+\autoref{fig:funcoes_chaveamento} reúne as formas de uso corrente, com o erro
+normalizado pela espessura $\epsilon$ da camada limite.
+
+\begin{figure}[H]
+    \centering
+    \caption{Funções de chaveamento admissíveis na superfície de deslizamento}
+    \label{fig:funcoes_chaveamento}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.88\textwidth, height=6.2cm,
+            xmin=-3, xmax=3, ymin=-1.5, ymax=1.5,
+            axis lines=middle,
+            xlabel={$\tilde{\imath}/\epsilon$},
+            ylabel={$\text{Sat}(\tilde{\imath}/\epsilon)$},
+            every axis x label/.style={at={(current axis.right of origin)},
+                                       anchor=north west, font=\footnotesize},
+            every axis y label/.style={at={(current axis.above origin)},
+                                       anchor=south east, font=\footnotesize},
+            xtick={-3,-2,-1,1,2,3}, ytick={-1,-0.5,0.5,1},
+            ticklabel style={font=\scriptsize},
+            grid=both, grid style={gray!18},
+            samples=301, no markers, thick,
+            legend style={font=\footnotesize, at={(0.5,-0.14)}, anchor=north,
+                          legend columns=2, draw=none, column sep=1.2em},
+        ]
+            \addplot[black, densely dashed] coordinates {(-3,-1) (0,-1)};
+            \addlegendentry{sinal (descontínua)}
+            \addplot[black, densely dashed, forget plot]
+                coordinates {(0,1) (3,1)};
+            \addplot[blue!70, domain=-3:3] {max(-1,min(1,x))};
+            \addlegendentry{saturação linear}
+            \addplot[red!70!black, domain=-3:3] {tanh(x)};
+            \addlegendentry{tangente hiperbólica}
+            \addplot[green!45!black, domain=-3:3] {x/(1+abs(x))};
+            \addlegendentry{sigmoide}
+        \end{axis}
+    \end{tikzpicture}
+    \fonte{Autor (2026)}
+\end{figure}
+
+A função sinal é o caso limite, adotado na formulação original da teoria
+\cite{Utkin1992}: comuta com ganho infinito na origem e leva o erro à
+superfície em tempo finito, mas, sendo descontínua, excita o
+\textit{chattering} quando implementada em tempo discreto \cite{Young1999}. As
+demais trocam a descontinuidade por uma rampa de largura finita --- dentro da
+camada limite o observador passa a se comportar como um estimador de alto
+ganho, e fora dela o chaveamento é recuperado \cite{SlotineLi1991}. Em
+observadores aplicados a máquinas de ímã permanente, a tangente hiperbólica e a
+sigmoide são as substituições mais frequentes \cite{Kim2011,Qiao2013}. A
+escolha entre elas desloca o compromisso entre
+velocidade de convergência e amplitude da oscilação residual, sem alterar a
+estrutura do observador; por isso a notação genérica $\text{Sat}(\cdot)$ é
+mantida nas equações que seguem.
 
 A estrutura do observador para o motor BLDC no referencial estacionário $\alpha\beta$ é projetada para estimar as correntes estatóricas e as forças contraeletromotrizes (BEMF). A dinâmica das correntes estimadas ($\hat{i}$) é definida por \eqref{eq:smo_modelo}:
 
@@ -382,7 +440,7 @@ Definindo o erro de estimação de corrente como $\tilde{i}_{\alpha,\beta} = i_{
         \dot{\tilde{i}}_{\alpha} = -\frac{R_s}{L_s}\tilde{i}_{\alpha} - \frac{\tilde{e}_{\alpha}}{L_s} - K_{11} \text{Sat}(\tilde{i}_{\alpha}) \\
         \dot{\tilde{i}}_{\beta} = -\frac{R_s}{L_s}\tilde{i}_{\beta} - \frac{\tilde{e}_{\beta}}{L_s} - K_{22} \text{Sat}(\tilde{i}_{\beta}) \\
         \dot{\hat{e}}_{\alpha} = K_{31} \text{Sat}(\tilde{i}_{\alpha}) \\
-        \dot{\hat{e}}_{\beta} = K_{42} \text{Sat}(\tilde{i}_{\alpha})
+        \dot{\hat{e}}_{\beta} = K_{42} \text{Sat}(\tilde{i}_{\beta})
     \end{cases}
     \label{eq:eq18_error_dyn}
 \end{equation}

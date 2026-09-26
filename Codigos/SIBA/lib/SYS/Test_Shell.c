@@ -42,6 +42,15 @@ static int cmd_tele(const struct shell *sh, size_t argc, char **argv)
                      (HAL_ESC_PWM_MAX_US - HAL_ESC_PWM_MIN_US)) / 1000.0f;
     shell_print(sh, "  ESC: %s  duty=%.1f%%  pulso=%.3f ms",
                 armed ? "ARMADO" : "disarm", (double)duty, (double)pulse_ms);
+
+    shell_print(sh, "  reles: pre-carga=%s  potencia=%s  (espera de %u ms)",
+                HAL_Relay_Precharge_Closed() ? "FECHADO" : "aberto",
+                HAL_Relay_Power_Closed()     ? "FECHADO" : "aberto",
+                Battery_Manager_Get_Precharge_Ms());
+    shell_print(sh, "  emergencia: botao=%s  parada=%s  sobrescrita=%s",
+                HAL_Emergency_Is_Pressed()             ? "APERTADO" : "solto",
+                Security_Manager_Is_Emergency_Active() ? "ATIVA"    : "livre",
+                Security_Manager_Get_Emergency_Override() ? "SIM"   : "nao");
     return 0;
 }
 SHELL_CMD_REGISTER(tele, NULL, "snapshot do TELEMETRY_LOG", cmd_tele);
@@ -139,23 +148,51 @@ static int cmd_esc(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_ARG_REGISTER(esc, NULL, "<0-100> — throttle %%", cmd_esc, 2, 0);
 
 /* ── arm / disarm ────────────────────────────────────────────────────────── */
+/* Armar a bancada é a cadeia inteira, na ordem: fecha pré-carga, espera os
+ * capacitores do ESC carregarem, fecha potência e só então arma o ESC.
+ * Desarmar percorre o caminho inverso. O ESC ainda é armado direto no HAL,
+ * sem passar pelo Propeller_Manager — o limite de corrente só atua sobre
+ * pedidos de throttle, não sobre a armação. */
 static int cmd_arm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
-    HAL_ESC_Arm();
-    shell_print(sh, "ESC armado");
+
+    if (!HAL_Relay_Power_Closed()) {
+        shell_print(sh, "energizando: pre-carga -> %u ms -> potencia, depois ESC",
+                    Battery_Manager_Get_Precharge_Ms());
+    }
+
+    if (Security_Manager_Arm_Bench() != 0) {
+        shell_error(sh, "recusado — botao de emergencia apertado "
+                        "(ou sobrescreva por comando de rede)");
+        return -EPERM;
+    }
+
+    shell_print(sh, "bancada armada — pre-carga=%s potencia=%s ESC=%s",
+                HAL_Relay_Precharge_Closed() ? "fechado" : "aberto",
+                HAL_Relay_Power_Closed()     ? "fechado" : "aberto",
+                HAL_ESC_Is_Armed()           ? "armado"  : "disarm");
     return 0;
 }
-SHELL_CMD_REGISTER(arm, NULL, "arma o ESC (HAL direto, bloqueia ~2s)", cmd_arm);
+SHELL_CMD_REGISTER(arm, NULL,
+                   "arma a bancada: pre-carga -> potencia -> ESC (bloqueia)",
+                   cmd_arm);
 
 static int cmd_disarm(const struct shell *sh, size_t argc, char **argv)
 {
     ARG_UNUSED(argc); ARG_UNUSED(argv);
-    HAL_ESC_Disarm();
-    shell_print(sh, "ESC desarmado");
+
+    Security_Manager_Shutdown_Bench();
+
+    shell_print(sh, "bancada desarmada — pre-carga=%s potencia=%s ESC=%s",
+                HAL_Relay_Precharge_Closed() ? "fechado" : "aberto",
+                HAL_Relay_Power_Closed()     ? "fechado" : "aberto",
+                HAL_ESC_Is_Armed()           ? "armado"  : "disarm");
     return 0;
 }
-SHELL_CMD_REGISTER(disarm, NULL, "desarma o ESC", cmd_disarm);
+SHELL_CMD_REGISTER(disarm, NULL,
+                   "desarma a bancada: ESC -> potencia -> pre-carga",
+                   cmd_disarm);
 
 /* ── estop ───────────────────────────────────────────────────────────────── */
 static int cmd_estop(const struct shell *sh, size_t argc, char **argv)
@@ -166,6 +203,21 @@ static int cmd_estop(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 SHELL_CMD_REGISTER(estop, NULL, "emergency stop (Security_Manager)", cmd_estop);
+
+#ifdef CONFIG_ARCH_POSIX
+/* ── btn (só native_sim) ─────────────────────────────────────────────────── */
+static int cmd_btn(const struct shell *sh, size_t argc, char **argv)
+{
+    ARG_UNUSED(argc);
+    bool pressed = (strcmp(argv[1], "on") == 0);
+    HAL_Emergency_Sim_Set_Pressed(pressed);
+    shell_print(sh, "botao de emergencia simulado: %s",
+                pressed ? "APERTADO" : "solto");
+    return 0;
+}
+SHELL_CMD_ARG_REGISTER(btn, NULL, "on|off — finge o botao de emergencia (sim)",
+                       cmd_btn, 2, 0);
+#endif /* CONFIG_ARCH_POSIX */
 
 /* ── reboot ──────────────────────────────────────────────────────────────── */
 static int cmd_reboot(const struct shell *sh, size_t argc, char **argv)

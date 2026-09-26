@@ -50,7 +50,29 @@ resultantes estão na \autoref{fig:pcb_same}.
 \label{sec:same_tensao}
 \label{sec:same_condicionamento}
 
-O sistema de aquisição utiliza dois conversores ADC operando em paralelo no CH32V307 com frequência de clock ADC de 14~MHz, conforme Tabela~4-40 do datasheet \cite{ch32v307_datasheet}. Cada módulo opera a taxa máxima de 1~MSps, com ADC1 digitalizando as três tensões de fase e ADC2 capturando as três correntes de fase de forma entrelançada, alcançando aproximadamente 333~kSps por canal. Esta taxa é escolhida para amostrar bem acima da frequência de chaveamento do ESC (12~kHz) e capturar a dinâmica do motor em operação, garantindo que o teorema de amostragem de Nyquist seja satisfeito \cite{oppenheim2009}.
+A aquisição emprega os dois conversores do CH32V307 em modo dual simultâneo: o
+primeiro converte as três tensões de fase e o segundo, as três correntes,
+ambos disparados pelo mesmo instante de amostragem. Cada par tensão--corrente
+de uma mesma fase é, portanto, amostrado junto --- condição necessária para a
+transformada de Clarke e para o observador, que confrontam tensão e corrente
+instante a instante. Como só o primeiro conversor dispõe de linha de
+requisição de acesso direto à memória, o resultado dos dois é entregue em uma
+única transferência de \num{32} bits, com o segundo conversor ocupando a
+metade superior da palavra.
+
+O divisor do \textit{clock} do conversor admite apenas as razões \num{2},
+\num{4}, \num{6} e \num{8} sobre o barramento de periféricos, que opera a
+\SI{144}{\mega\hertz}: o menor valor alcançável sem intervir nesse barramento é
+\SI{18}{\mega\hertz}, acima do teto de \SI{14}{\mega\hertz} da
+\autoref{tab:adc_specs}. O ponto de projeto adotado é \SI{12}{\mega\hertz},
+obtido reduzindo o barramento de periféricos à metade. Com tempo de amostragem
+de \num{28,5} ciclos e três canais por conversor, um quadro completo --- as três
+tensões e as três correntes --- consome $(28{,}5+11)\times 3 = 118{,}5$ ciclos,
+ou \SI{9,875}{\micro\second}. A taxa de quadro resultante é de
+\SI{101}{\kilo\hertz}, e é ela que define o período de amostragem $T_s$ do
+observador. A banda útil vai até \SI{50}{\kilo\hertz} por Nyquist
+\cite{oppenheim2009}, bem acima da frequência de chaveamento do ESC, de
+\SI{8}{\kilo\hertz}.
 
 \begin{table}[h]
 \centering
@@ -75,7 +97,14 @@ Tempo total de conversão & $t_{CONV}$ & 14 & -- & 252 & $1/f_{ADC}$ \\
 \end{tabular}
 \end{table}
 
-Com clock de 14~MHz, o tempo total de conversão varia entre 1~$\mu$s (14 ciclos) e 18~$\mu$s (252 ciclos). Como o período de PWM em 12~kHz é de 83,33~$\mu$s e cada ADC realiza apenas 3 conversões por período, há folga suficiente para adotar tempo de amostragem $t_s$ elevado, priorizando o assentamento do sinal em detrimento da velocidade bruta.
+Com o \textit{clock} de \SI{12}{\mega\hertz}, uma conversão isolada leva de
+\SI{1,17}{\micro\second} (\num{14} ciclos) a \SI{21}{\micro\second}
+(\num{252} ciclos). O tempo de amostragem $t_s$ é, assim, o que fixa a taxa de
+quadro, e não uma folga a ser preenchida: \num{28,5} ciclos é o maior valor
+tabelado que ainda mantém o quadro em \SI{10}{\micro\second}. O assentamento do
+sinal na entrada fica a cargo do capacitor do filtro \textit{antialiasing} de
+cada canal, que é quem entrega a carga exigida pelo capacitor de amostragem do
+conversor no instante da aquisição.
 
 A impedância de entrada externa $R_{AIN}$ deve ser limitada para garantir que o erro de amostragem permaneça abaixo de 1/4 LSB, conforme a \autoref{eq:rain_max} \cite{ch32v307_datasheet}.
 
@@ -170,8 +199,8 @@ pouco mais do dobro da tensão de barramento, folga adotada para o sobressinal d
 comutação --- e a resolução em \SI{14,8}{\milli\volt} por LSB.
 
 A resistência equivalente do divisor é de \SI{7,09}{\kilo\ohm}, abaixo do limite
-de \SI{11,4}{\kilo\ohm} imposto pela Tabela~\ref{tab:rain_max} para o menor
-tempo de amostragem tabelado, de modo que a escolha de $t_s$ fica livre.
+de \SI{25,2}{\kilo\ohm} que a Tabela~\ref{tab:rain_max} impõe ao tempo de
+amostragem adotado, de \num{28,5} ciclos.
 
 O capacitor fica em aberto nesta etapa. Fixadas as resistências, ele é o único
 grau de liberdade que resta, e seu valor decorre da frequência de corte
@@ -190,8 +219,8 @@ proporcional ao sinal, é absorvido na calibração.
 
 \begin{equation}
 \varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
-= \SI{7,09}{\kilo\ohm} \times \SI{333}{\kilo\hertz} \times \SI{8}{\pico\farad}
-= \SI{1,89}{\percent}
+= \SI{7,09}{\kilo\ohm} \times \SI{101}{\kilo\hertz} \times \SI{8}{\pico\farad}
+= \SI{0,57}{\percent}
 \label{eq:cond_ganho}
 \end{equation}
 
@@ -485,8 +514,8 @@ isolado.
 
 \begin{equation}
 \varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
-= \SI{1,8}{\kilo\ohm} \times \SI{333}{\kilo\hertz} \times \SI{8}{\pico\farad}
-= \SI{0,48}{\percent}
+= \SI{1,8}{\kilo\ohm} \times \SI{101}{\kilo\hertz} \times \SI{8}{\pico\farad}
+= \SI{0,15}{\percent}
 \label{eq:cond_ganho_i}
 \end{equation}
 
@@ -524,7 +553,7 @@ detalhado a seguir e ilustrado na \autoref{fig:sequencia_same}.
     \label{fig:blocos_same}
     \begin{tikzpicture}[
         font=\small,
-        layer/.style={draw, rounded corners, minimum width=9.2cm, minimum height=1.7cm},
+        layer/.style={draw, rounded corners, minimum width=11.2cm, minimum height=1.7cm},
         mod/.style={draw, rounded corners, align=center, minimum height=0.7cm, minimum width=1.9cm, fill=white},
         title/.style={font=\bfseries\small},
         arrow/.style={-{Latex}, thick}
@@ -540,10 +569,11 @@ detalhado a seguir e ilustrado na \autoref{fig:sequencia_same}.
 
         \node[layer, fill=black!15] (os) at (0,-0.15) {};
         \node[title] at (os.north)  [yshift=-0.3cm] {Vcore - OS};
-        \node[mod] (ossi) at (-3.2,-0.45) {OSSI};
-        \node[mod] (nci)  at (-1.05,-0.45) {NCI};
-        \node[mod] (hal)  at (1.05,-0.45) {HAL};
-        \node[mod] (cmd)  at (3.2,-0.45) {CMD\_Core};
+        \node[mod] (ossi) at (-4.3,-0.45) {OSSI};
+        \node[mod] (nci)  at (-2.15,-0.45) {NCI};
+        \node[mod] (hal)  at (0,-0.45) {HAL};
+        \node[mod] (cmd)  at (2.15,-0.45) {CMD\_Core};
+        \node[mod] (nvm)  at (4.3,-0.45) {NVM};
 
         \draw[arrow] (app.south) -- (sys.north);
         \draw[arrow] (sys.south) -- (os.north) node[midway, right]{via OSSI};

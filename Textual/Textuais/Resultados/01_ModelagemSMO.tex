@@ -212,7 +212,7 @@ de seis passos que alimenta a dinâmica eletromecânica.
     ]
         \node [coordinate] (in_i) {};
         \node [sum, right=1.5cm of in_i] (sum_i) {$\Sigma$};
-        \node [block, right=1cm of sum_i] (sat) {Função de Chaveamento \\ $s_{\alpha\beta} = \tanh\!\left(\frac{e_i}{8{,}0}\right)$};
+        \node [block, right=1cm of sum_i] (sat) {Função de Chaveamento \\ $s_{\alpha\beta} = \text{Sat}\!\left(\frac{e_i}{8{,}0}\right)$};
         \node [block, right=1cm of sat] (gain_smo) {Ganhos Deslizantes \\ $K_{s1} \cdot T_s, \quad K_{s2} \cdot T_s$};
         \node [block, below=1cm of gain_smo] (est_i) {Integração da Corrente \\ $\hat{i}_k = \Phi_i \hat{i}_{k-1} + \Gamma_v u + \Gamma_{s1} s$};
         \node [block, left=1.5cm of est_i] (est_e) {Estimativa BEMF  \\ $\hat{e}_{raw} = \Phi_e \hat{e}_{k-1} + K_{s2} s$};
@@ -248,7 +248,7 @@ corrente estimada quanto a estimativa bruta da BEMF.
 \EndFunction
 \Statex
 \Function{FuncaoComutacao}{$x$}
-    \State \Return $\mathrm{sat}(x,-1,1)$ \textbf{ou} $\tanh(x)$ \textbf{ou} $x/(1+|x|)$ \Comment{seleção por \texttt{SMO\_SWITCH\_FUNC}}
+    \State \Return $\mathrm{sat}(x,-1,1)$ \textbf{ou} $\tanh(x)$ \textbf{ou} $x/(1+|x|)$ \Comment{qualquer uma das formas da \autoref{fig:funcoes_chaveamento}}
 \EndFunction
 \end{algorithmic}
 \end{algorithm}

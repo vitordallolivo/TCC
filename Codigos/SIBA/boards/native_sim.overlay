@@ -1,4 +1,5 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 
 /*
  * Overlay de devicetree para `west build -b native_sim`.
@@ -27,5 +28,26 @@
         #size-cells = <0>;
         #forward-cells = <1>;
         status = "okay";
+    };
+};
+
+/*
+ * LEDs de status sobre o GPIO emulado (gpio0).
+ *
+ * Security_Manager.c usa `led_red` e NCI.c usa `led_green` com
+ * GPIO_DT_SPEC_GET direto, sem guarda #ifdef CONFIG_ARCH_POSIX — diferente
+ * do HAL, que estubla tudo. Sem estes dois nodelabels o build de native_sim
+ * não liga. Na siba_board são PA15 e PB4; aqui, pinos do gpio_emul a partir
+ * do 1 (o 0 já é o led_0 que a própria native_sim declara).
+ */
+&leds {
+    led_red: led_red {
+        gpios = <&gpio0 1 GPIO_ACTIVE_HIGH>;
+        label = "LED vermelho (emulado)";
+    };
+
+    led_green: led_green {
+        gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+        label = "LED verde (emulado)";
     };
 };

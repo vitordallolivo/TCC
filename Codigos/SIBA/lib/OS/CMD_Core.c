@@ -32,9 +32,35 @@ static void handle_func_start(const CMD *cmd)
             LOG_INF("CMD: START load_cell[%d] — já ativo", cmd->target_id);
             break;
         case TARGET_DEFAULT:
-            /* START genérico/telemetria (ex.: `siba start telemetry` do app e o
-             * CMD neutro do test_io) — a telemetria já está sempre ativa. */
-            LOG_INF("CMD: START (telemetria/geral) — já ativo");
+            /* Cadeia de potência da bancada, comandada pelo supervisório: o
+             * campo action_or_status diz o quê (ver status_type no SIBA.yaml).
+             * É o caminho que substitui o shell de diagnóstico, que não vai
+             * no produto final. Só INSTR_WRITE age; o resto continua sendo o
+             * START neutro de telemetria que o app e o test_io já mandavam. */
+            if (cmd->instruction != INSTR_WRITE) {
+                LOG_INF("CMD: START (telemetria/geral) — já ativo");
+                break;
+            }
+            switch ((status_type)cmd->action_or_status) {
+                case STATUS_OK:
+                    LOG_INF("CMD START: supervisorio liberou — armando bancada");
+                    if (Security_Manager_Arm_Bench() != 0) {
+                        LOG_ERR("CMD START: armar recusado pela seguranca");
+                    }
+                    break;
+                case STATUS_ERROR:
+                    LOG_WRN("CMD START: desligar bancada");
+                    Security_Manager_Shutdown_Bench();
+                    break;
+                case STATUS_EMERGENCY_OVERRIDE:
+                    Security_Manager_Set_Emergency_Override(true);
+                    break;
+                case STATUS_EMERGENCY_RESTORE:
+                    Security_Manager_Set_Emergency_Override(false);
+                    break;
+                default:
+                    LOG_INF("CMD: START (telemetria/geral) — já ativo");
+            }
             break;
         default:
             LOG_WRN("CMD START: target %d não reconhecido", cmd->target_id);

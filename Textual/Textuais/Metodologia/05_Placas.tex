@@ -51,7 +51,7 @@ em três camadas lógicas, apresentadas na \autoref{fig:Metodologia_Diagrama_pla
 A camada base (\textit{Vcore - OS}) encapsula as rotinas nativas do
 \textit{Zephyr} e os periféricos do microcontrolador, apresentando uma
 arquitetura idêntica para a SIBA e a SAME e promovendo o reaproveitamento de
-código entre as duas placas. Ela é composta por quatro módulos, detalhados na
+código entre as duas placas. Ela é composta por cinco módulos, detalhados na
 \autoref{fig:Metodologia_Vcore}:
 
 \begin{itemize}
@@ -59,6 +59,7 @@ código entre as duas placas. Ela é composta por quatro módulos, detalhados na
     \item \textbf{NCI (\textit{Network Core Interface}):} gerenciador do \textit{socket} UDP, responsável pela recepção e pela transmissão de pacotes com latência minimizada.
     \item \textbf{HAL (\textit{Hardware Abstraction Layer}):} interface direta com os periféricos do microcontrolador (como o ADC operando via DMA para leituras analógicas em \textit{background}), isolando os registradores físicos das camadas superiores.
     \item \textbf{CMD\_Core:} interpretador central que recebe os pacotes binários brutos entregues pelo NCI, valida as instruções e as encaminha ao OSSI para despacho.
+    \item \textbf{NVM (\textit{Non-Volatile Memory}):} guarda numa memória EEPROM externa, acessada por barramento I\textsuperscript{2}C, os coeficientes de calibração de cada sensor --- e, na SAME, também os parâmetros do observador. Na partida o módulo restaura o que está gravado; quando o operador confirma uma calibração pela aplicação de supervisão, o CMD\_Core manda gravá-la, de modo que ela sobrevive à desenergização da placa.
 \end{itemize}
 
 \begin{figure}[H]
@@ -74,10 +75,12 @@ código entre as duas placas. Ela é composta por quatro módulos, detalhados na
         \node[box, above=1.1cm of ossi] (hal) {HAL};
         \node[box, left=1.6cm of ossi] (nci) {NCI};
         \node[box, right=1.6cm of ossi] (cmd) {CMD\_Core};
+        \node[box, below=1.1cm of ossi] (nvm) {NVM\\(EEPROM)};
 
         \draw[arrow] (hal) -- (ossi);
         \draw[arrow] (nci) -- (ossi);
         \draw[arrow] (cmd) -- (ossi);
+        \draw[arrow] (nvm) -- (ossi);
     \end{tikzpicture}
 
     Fonte: Autor (2026)

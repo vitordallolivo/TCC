@@ -53,10 +53,30 @@ enums:
     - TARGET_DEFAULT              # 11 -> alvo genérico (START/STOP/RESET)
     - TARGET_TEMPERATURE_MOTOR    # 12 -> SENSOR_ID_TEMPERATURE_MOTOR
 
+  # Campo `action_or_status` do CMD quando a função é FUNC_START e o alvo é
+  # TARGET_DEFAULT. É por aqui que o supervisório comanda a cadeia de potência
+  # da bancada, sem depender do shell de diagnóstico (que não vai no produto).
+  #
+  #   FUNC_START / INSTR_WRITE / TARGET_DEFAULT / action_or_status =
+  #     STATUS_OK                  -> "tudo certo, pode armar": fecha pré-carga,
+  #                                   espera, fecha potência e arma o ESC.
+  #                                   SÓ acontece se o botão de emergência
+  #                                   estiver liberado (ou sobrescrito).
+  #     STATUS_ERROR               -> desligar: desarma o ESC e abre os dois
+  #                                   relés (potência depois pré-carga).
+  #     STATUS_EMERGENCY_OVERRIDE  -> passa a IGNORAR o botão físico de
+  #                                   emergência.
+  #     STATUS_EMERGENCY_RESTORE   -> volta a respeitar o botão.
+  #
+  # Para armar com o botão apertado o PC precisa enviar os DOIS: primeiro o
+  # override, depois o STATUS_OK. Acrescentar valores só no FIM da lista — o
+  # índice é compartilhado com a GUI.
   status_type:
     - STATUS_OK
     - STATUS_ERROR
     - STATUS_NONE # Don't care
+    - STATUS_EMERGENCY_OVERRIDE # Ignora o botão físico de emergência
+    - STATUS_EMERGENCY_RESTORE  # Volta a respeitar o botão físico
 
   default_action:
     - DEFAULT_ACTION_NONE # Does nothing

@@ -10,10 +10,11 @@ import threading
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QWidget,
+    QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
+from Communication_Data import codecs
 from Communication_Data.discovery import DiscoveryService
 from Communication_Data.native_sim import native_sim_supported
 
@@ -67,6 +68,11 @@ class _BoardRow:
         self.btn_apply = QPushButton("Aplicar")
         self.btn_detect = QPushButton("Detectar")
         self.btn_native = QPushButton("▶ Sim. Nativa")
+        self.btn_reset = QPushButton("⟳ Reiniciar")
+        self.btn_reset.setToolTip(
+            "Reinicia o firmware da placa (FUNC_RESET). A placa cai e volta "
+            "sozinha; a calibração salva no EEPROM é restaurada no boot."
+        )
         self.last_present = None  # None=não testada, True/False=resultado
 
 
@@ -97,7 +103,7 @@ class BoardManagerDialog(QDialog):
         root = QVBoxLayout(self)
 
         grid = QGridLayout()
-        headers = ["", "Placa", "IP", "Portas", "Status", "", "", ""]
+        headers = ["", "Placa", "IP", "Portas", "Status", "", "", "", ""]
         for c, h in enumerate(headers):
             lbl = QLabel(f"<b>{h}</b>")
             grid.addWidget(lbl, 0, c)
@@ -114,9 +120,18 @@ class BoardManagerDialog(QDialog):
             grid.addWidget(row.btn_apply, r, 5)
             grid.addWidget(row.btn_detect, r, 6)
             grid.addWidget(row.btn_native, r, 7)
+            grid.addWidget(row.btn_reset, r, 8)
             row.btn_apply.clicked.connect(lambda _=False, b=cfg.id: self._apply_row(b))
             row.btn_detect.clicked.connect(lambda _=False, b=cfg.id: self._detect_one(b))
             row.btn_native.clicked.connect(lambda _=False, b=cfg.id: self._toggle_native(b))
+            row.btn_reset.clicked.connect(lambda _=False, b=cfg.id: self._reset_board(b))
+            if cfg.transport != "udp_struct":
+                # FUNC_RESET é do protocolo binário CMD; a SPMM fala texto por
+                # Telnet e tem o próprio caminho de reinicialização.
+                row.btn_reset.setEnabled(False)
+                row.btn_reset.setToolTip(
+                    "Só para placas com protocolo CMD (SIBA/SAME)."
+                )
             if not linux_ok:
                 # native_sim (zephyr.exe) é um binário POSIX de Linux.
                 row.btn_native.setEnabled(False)
@@ -164,6 +179,41 @@ class BoardManagerDialog(QDialog):
     # ------------------------------------------------------------------ #
     # Descoberta
     # ------------------------------------------------------------------ #
+    def _reset_board(self, board_id):
+        """Envia FUNC_RESET para a placa (reboot frio do firmware).
+
+        Confirmação explícita: a placa cai, o link fica mudo por alguns
+        segundos e qualquer ensaio em curso é interrompido.
+        """
+        if QMessageBox.question(
+            self, "Reiniciar placa",
+            f"Reiniciar o firmware da {board_id}?\n\n"
+            "A placa vai cair e voltar sozinha. Um ensaio em curso é "
+            "interrompido, e o ESC e os relés voltam ao estado de boot "
+            "(desarmado e abertos).",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+
+        cfg = self.manager.registry.get(board_id)
+        raw = self.manager.configs.get(board_id, {})
+        enums = codecs.board_protocol_cfg(raw, board_id).get("enums", {})
+
+        def idx(cat, name, default=0):
+            lst = enums.get(cat, [])
+            return lst.index(name) if name in lst else default
+
+        cmd = codecs.encode_cmd(
+            idx("func_type", "FUNC_RESET"),
+            idx("instruct_type", "INSTR_WRITE", 1),
+            idx("target_type", "TARGET_DEFAULT"),
+            1.0, 0,
+        )
+        if self.manager.send_command(board_id, cmd):
+            self._append_note(f"{board_id}: FUNC_RESET enviado — aguardando o boot.")
+        else:
+            self._append_note(f"{board_id}: falha ao enviar FUNC_RESET (link fechado?).")
+
     def _detect_one(self, board_id):
         self.rows[board_id].status.setText("testando...")
         self.rows[board_id].status.setStyleSheet("color: #f0ad4e;")

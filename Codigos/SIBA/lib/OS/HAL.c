@@ -224,10 +224,17 @@ static void adc_stimulus_work_fn(struct k_work *w)
     float rpm          = HAL_RPM_Get();
     float th_frac      = throttle_pct / 100.0f;
 
-    float i_mv = HAL_SIM_I_MV_IDLE
-               + (HAL_SIM_I_MV_MAX - HAL_SIM_I_MV_IDLE) * th_frac * th_frac
-               + hal_sim_noise(HAL_SIM_I_NOISE);
-    if (i_mv < 0.0f) i_mv = 0.0f;
+    /* Com os dois contatos abertos não passa corrente pela bateria. Sem esta
+     * porta o estímulo injetava corrente desde o boot e o Battery_Manager
+     * acusava contato colado (ERROR_BATT_RELAY_MISMATCH) em toda execução do
+     * simulado — falso positivo que não existe no hardware. */
+    float i_mv = 0.0f;
+    if (HAL_Relay_Any_Closed()) {
+        i_mv = HAL_SIM_I_MV_IDLE
+             + (HAL_SIM_I_MV_MAX - HAL_SIM_I_MV_IDLE) * th_frac * th_frac
+             + hal_sim_noise(HAL_SIM_I_NOISE);
+        if (i_mv < 0.0f) i_mv = 0.0f;
+    }
 
     hal_sim_vbatt_mv -= i_mv * HAL_SIM_VBATT_DRAIN_PER_TICK * 0.01f;
     if (hal_sim_vbatt_mv < HAL_SIM_VBATT_MV_EMPTY) hal_sim_vbatt_mv = HAL_SIM_VBATT_MV_EMPTY;
@@ -1269,6 +1276,13 @@ int HAL_I2C_Scan(uint8_t *found_addrs, size_t max, size_t *out_count)
 
 static bool hal_relay_energized;
 
+/* Estado comandado de cada contato, individualmente. `hal_relay_energized`
+ * só fica verdadeiro com a sequência INTEIRA concluída; estes dois seguem
+ * cada linha, inclusive durante os segundos em que apenas a pré-carga está
+ * fechada — janela em que já circula corrente e isso é esperado. */
+static bool hal_relay_precharge_closed;
+static bool hal_relay_power_closed;
+
 #ifndef CONFIG_ARCH_POSIX
 
 #define RELAY_POWER_NODE      DT_NODELABEL(relay_power)
@@ -1291,20 +1305,25 @@ int HAL_Relay_Init(void)
     }
     gpio_pin_configure_dt(&relay_power_pin,     GPIO_OUTPUT_INACTIVE);
     gpio_pin_configure_dt(&relay_precharge_pin, GPIO_OUTPUT_INACTIVE);
-    hal_relay_energized = false;
+    hal_relay_energized       = false;
+    hal_relay_precharge_closed = false;
+    hal_relay_power_closed     = false;
     LOG_INF("HAL Relay: PB12(power) + PB13(precharge) init OK — ambos abertos");
     return 0;
 }
 
-void HAL_Relay_Energize(void)
+void HAL_Relay_Energize(uint32_t precharge_ms)
 {
     if (hal_relay_energized) return;
-    LOG_INF("HAL Relay: fechando pre-carga (PB13)");
+    LOG_INF("HAL Relay: fechando pre-carga (PB13) — aguardando %u ms",
+            (unsigned)precharge_ms);
     gpio_pin_set_dt(&relay_precharge_pin, 1);
-    k_sleep(K_MSEC(HAL_RELAY_PRECHARGE_MS));
+    hal_relay_precharge_closed = true;
+    k_sleep(K_MSEC(precharge_ms));
     LOG_INF("HAL Relay: fechando potencia (PB12)");
     gpio_pin_set_dt(&relay_power_pin, 1);
-    hal_relay_energized = true;
+    hal_relay_power_closed = true;
+    hal_relay_energized    = true;
     LOG_INF("HAL Relay: energizado");
 }
 
@@ -1313,9 +1332,11 @@ void HAL_Relay_Deenergize(void)
     if (!hal_relay_energized) return;
     LOG_INF("HAL Relay: abrindo potencia (PB12)");
     gpio_pin_set_dt(&relay_power_pin, 0);
+    hal_relay_power_closed = false;
     LOG_INF("HAL Relay: abrindo pre-carga (PB13)");
     gpio_pin_set_dt(&relay_precharge_pin, 0);
-    hal_relay_energized = false;
+    hal_relay_precharge_closed = false;
+    hal_relay_energized        = false;
     LOG_INF("HAL Relay: desenergizado");
 }
 
@@ -1323,22 +1344,29 @@ void HAL_Relay_Deenergize(void)
 
 int HAL_Relay_Init(void)
 {
-    hal_relay_energized = false;
+    hal_relay_energized        = false;
+    hal_relay_precharge_closed = false;
+    hal_relay_power_closed     = false;
     LOG_INF("HAL Relay: native_sim — stubs sem GPIO real");
     return 0;
 }
 
-void HAL_Relay_Energize(void)
+void HAL_Relay_Energize(uint32_t precharge_ms)
 {
     if (hal_relay_energized) return;
-    hal_relay_energized = true;
-    LOG_INF("HAL Relay: [sim] energizado");
+    hal_relay_precharge_closed = true;
+    hal_relay_power_closed     = true;
+    hal_relay_energized        = true;
+    LOG_INF("HAL Relay: [sim] energizado (pre-carga de %u ms nao simulada)",
+            (unsigned)precharge_ms);
 }
 
 void HAL_Relay_Deenergize(void)
 {
     if (!hal_relay_energized) return;
-    hal_relay_energized = false;
+    hal_relay_power_closed     = false;
+    hal_relay_precharge_closed = false;
+    hal_relay_energized        = false;
     LOG_INF("HAL Relay: [sim] desenergizado");
 }
 
@@ -1348,6 +1376,112 @@ bool HAL_Relay_Is_Energized(void)
 {
     return hal_relay_energized;
 }
+
+bool HAL_Relay_Any_Closed(void)
+{
+    return hal_relay_precharge_closed || hal_relay_power_closed;
+}
+
+bool HAL_Relay_Precharge_Closed(void)
+{
+    return hal_relay_precharge_closed;
+}
+
+bool HAL_Relay_Power_Closed(void)
+{
+    return hal_relay_power_closed;
+}
+
+/* ── Botão de emergência (PD2) + LED externo de pronto (PE15) ───────────
+ * PD2 é entrada com pull-up interno: 0 no pino = apertado, 1 = solto. A
+ * inversão está no DTS (GPIO_ACTIVE_LOW), então gpio_pin_get_dt devolve 1
+ * para "apertado" e o código aqui não inverte nada de novo.
+ * PE15 é saída e acende o LED externo de "sistema pronto".
+ * Quem consome os dois é o Security_Manager, a cada despacho de sensor.
+ * native_sim: stubs — botão sempre solto, LED só loga a transição. */
+
+#ifndef CONFIG_ARCH_POSIX
+
+static const struct gpio_dt_spec emergency_btn =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(emergency_button), gpios);
+static const struct gpio_dt_spec ready_led =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(ready_pin), gpios);
+
+int HAL_Emergency_Init(void)
+{
+    int r;
+
+    if (!device_is_ready(emergency_btn.port)) {
+        LOG_ERR("botao de emergencia (PD2): GPIO nao pronto");
+        return -ENODEV;
+    }
+    if (!device_is_ready(ready_led.port)) {
+        LOG_ERR("LED externo de pronto (PE15): GPIO nao pronto");
+        return -ENODEV;
+    }
+
+    r = gpio_pin_configure_dt(&emergency_btn, GPIO_INPUT | GPIO_PULL_UP);
+    if (r) {
+        LOG_ERR("PD2 configure falhou: %d", r);
+        return r;
+    }
+    r = gpio_pin_configure_dt(&ready_led, GPIO_OUTPUT_INACTIVE);
+    if (r) {
+        LOG_ERR("PE15 configure falhou: %d", r);
+        return r;
+    }
+
+    LOG_INF("HAL Emergencia: PD2(botao, 0=apertado) + PE15(LED pronto) init OK");
+    return 0;
+}
+
+bool HAL_Emergency_Is_Pressed(void)
+{
+    int v = gpio_pin_get_dt(&emergency_btn);
+    if (v < 0) {
+        LOG_ERR("leitura de PD2 falhou (%d) — tratando como apertado", v);
+        return true;
+    }
+    return v == 1;   /* lógico: 1 = ativo = apertado (DTS marca ACTIVE_LOW) */
+}
+
+void HAL_Ready_Led_Set(bool on)
+{
+    gpio_pin_set_dt(&ready_led, on ? 1 : 0);
+}
+
+#else /* CONFIG_ARCH_POSIX — stubs sem GPIO real */
+
+static bool hal_sim_ready_led;
+static bool hal_sim_btn_pressed;
+
+int HAL_Emergency_Init(void)
+{
+    hal_sim_ready_led  = false;
+    hal_sim_btn_pressed = false;
+    LOG_INF("HAL Emergencia: native_sim — botao simulado (solto)");
+    return 0;
+}
+
+bool HAL_Emergency_Is_Pressed(void)
+{
+    return hal_sim_btn_pressed;
+}
+
+void HAL_Emergency_Sim_Set_Pressed(bool pressed)
+{
+    hal_sim_btn_pressed = pressed;
+    LOG_WRN("HAL Emergencia: [sim] botao %s", pressed ? "APERTADO" : "solto");
+}
+
+void HAL_Ready_Led_Set(bool on)
+{
+    if (on == hal_sim_ready_led) return;
+    hal_sim_ready_led = on;
+    LOG_INF("HAL Emergencia: [sim] LED de pronto %s", on ? "aceso" : "apagado");
+}
+
+#endif /* CONFIG_ARCH_POSIX */
 
 /* HAL_Init — inicializa periféricos e cria a thread bloqueante do HX711.
  * O ADC usa ISR callback (sem thread própria). O relay deve ser energizado
@@ -1363,6 +1497,9 @@ int HAL_Init(void)
     int r;
 
     r = HAL_Relay_Init();
+    if (r) return r;
+
+    r = HAL_Emergency_Init();
     if (r) return r;
 
     r = HAL_ADC_Init();

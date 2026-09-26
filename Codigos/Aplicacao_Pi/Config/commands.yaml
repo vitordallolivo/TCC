@@ -110,6 +110,15 @@ commands:
     test_io:
       help: "Testa RX/TX da SIBA isoladamente (envia CMD neutro, espera telemetria)"
 
+    # Sobrescrita do botão FÍSICO de emergência. De propósito só aqui, e não
+    # como botão de tela: é desvio de segurança, não operação de rotina.
+    # Vale até 'siba force off' ou até a placa reiniciar.
+    force:
+      help: "Sobrescreve o botao fisico de emergencia: siba force [on|off]"
+      admin_only: true
+      on:  { help: "A SIBA passa a IGNORAR o botao de emergencia" }
+      off: { help: "A SIBA volta a respeitar o botao de emergencia" }
+
     # Calibração e Parâmetros (Padrão SAME)
     set:
       help: "Ajuste de parâmetros: siba set [target] [action] [value]"

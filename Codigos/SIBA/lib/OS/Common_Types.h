@@ -98,7 +98,13 @@ typedef enum {
     STATUS_ERROR,
 
 
-    STATUS_NONE
+    STATUS_NONE,
+
+
+    STATUS_EMERGENCY_OVERRIDE,
+
+
+    STATUS_EMERGENCY_RESTORE
 
 
 } status_type;

@@ -1709,3 +1709,574 @@ Seção de Zephyr mantida sem corte, conforme instrução do autor.
 Condensação adicional de `sec:same_tensao` em `08_SAME.tex` (remoção das
 equações de física magnética). Autor confirmou condensar "mais", mas a instrução
 foi cortada antes de especificar até onde. Aguardando retomada.
+
+---
+
+## ✅ Rodada de correções contra o firmware e os dados (26/09/2026)
+
+Oito tarefas independentes pedidas ao vivo, cada uma compilada em separado.
+Todas fecharam com **zero referências indefinidas** e sem erro de bibtex.
+
+### 1. Figura da estrutura genérica do SMO: `sign` → `Sat` + figura nova
+
+Em `Revisao/00_MotorBLDC.tex`, o bloco `sign(·)` da `fig:smo_diagrama_bloco`
+(Figura 5) e a equação dentro do bloco "Modelo Estimado" passaram a usar
+`Sat(·)` — coerente com `eq:smo_modelo`, que já usava `Sat`. O nó TikZ foi
+renomeado de `sign` para `sat`.
+
+Criada a **`fig:funcoes_chaveamento`** (Figura 6, pgfplots): sinal, saturação
+linear, tangente hiperbólica e sigmoide sobrepostas, com o erro normalizado
+pela espessura $\epsilon$ da camada limite. Dois parágrafos acompanham: um
+antes da figura (condição de admissibilidade — ímpar, limitada, monotônica) e
+um depois (a função sinal é o caso limite e gera *chattering*; as contínuas
+trocam a descontinuidade por rampa finita; a escolha desloca o compromisso
+convergência × oscilação residual, sem mudar a estrutura do observador).
+
+### 2. Equação 18 e notação de fase
+
+- `eq:eq18_error_dyn`: a quarta linha era $\dot{\hat{e}}_\beta = K_{42}\,
+  \text{Sat}(\tilde{i}_\alpha)$ — **corrigido para $\tilde{i}_\beta$**.
+- Modelo elétrico por fase: a tensão agora é declarada como tensão de fase
+  medida entre terminal e neutro, denotada $v_{an}$, $v_{bn}$, $v_{cn}$, e a
+  `eq:bldc_eletrica` passou a escrever $v_{kn}$. Na `fig:bldc_equivalente`
+  (Figura 3) os rótulos viraram $v_{an}(t)$/$v_{bn}(t)$/$v_{cn}(t)$ e as
+  fontes de FEM, que estavam como $e_1$/$e_2$/$e_3$, viraram $e_a$/$e_b$/$e_c$.
+
+**Escopo deliberadamente contido:** a seção de Clarke continua usando
+$v_a$, $v_b$, $v_c$ — ali são tensões de terminal, e a matriz 2/3 elimina o
+modo comum, de modo que a transformada vale para as duas convenções. **Se o
+orientador quiser a notação `an/bn/cn` propagada até o Clarke, é uma decisão
+a tomar** — não foi feita.
+
+### 3. SMO promovido de subseção para seção
+
+`\subsubsection{Observador por Modos Deslizantes (SMO)}` virou
+`\section{...}`. Hoje é a **seção 2.2** (antes 2.1.1.1). Não houve órfão: o
+conteúdo do SMO vai até o fim de `00_MotorBLDC.tex`. As demais seções do
+capítulo 2 deslocaram-se para 2.3–2.6.
+
+### 4. Figura da malha de estimação (simulação): `tanh` → `Sat`
+
+`fig:diagrama_smo` em `Resultados/01_ModelagemSMO.tex`: o bloco "Função de
+Chaveamento" mostrava $\tanh(e_i/8{,}0)$, agora mostra
+$\text{Sat}(e_i/8{,}0)$. No `alg:smo`, o comentário que citava o nome da
+constante de compilação da função de chaveamento foi trocado por uma remissão
+à `fig:funcoes_chaveamento` (regra 7 do `CLAUDE.md`).
+
+**Nota factual:** o código realmente roda com a tangente hiperbólica. O texto
+agora usa `Sat` como notação genérica da família, o que é consistente — mas
+**vale o orientador confirmar** se prefere nomear a forma efetivamente
+implementada.
+
+### 5. Seção 3.8.1 realinhada ao firmware
+
+Trocado o parágrafo de abertura e o parágrafo de tempo de conversão em
+`Metodologia/08_SAME.tex`. O que mudou, item a item:
+
+| Estava | Está |
+|---|---|
+| ADCCLK de 14 MHz | divisor só vai a /8 sobre 144 MHz → 18 MHz; ponto de projeto de **12 MHz**, com o barramento de periféricos reduzido à metade |
+| "1 MSps por ADC", "333 kSps por canal" | quadro de $(28{,}5+11)\times3 = 118{,}5$ ciclos = **9,875 µs → 101 kHz de taxa de quadro**, que é o $T_s$ do observador |
+| ADC1 tensões / ADC2 correntes "de forma entrelançada" | **modo dual simultâneo**: cada par tensão–corrente da mesma fase é amostrado no mesmo instante; só o primeiro conversor tem linha de DMA, então os dois saem numa transferência de 32 bits |
+| ESC a 12 kHz | **8 kHz** (bate com a Tabela de parâmetros do Apêndice B) |
+| "folga para adotar $t_s$ elevado" | $t_s$ é o que **fixa** a taxa de quadro; 28,5 ciclos é o maior valor tabelado que mantém o quadro em 10 µs; o assentamento fica a cargo do capacitor do filtro *antialiasing* |
+| `eq:cond_ganho`: 7,09 kΩ × 333 kHz × 8 pF = 1,89 % | 7,09 kΩ × **101 kHz** × 8 pF = **0,57 %** |
+| `eq:cond_ganho_i`: 1,8 kΩ × 333 kHz × 8 pF = 0,48 % | 1,8 kΩ × **101 kHz** × 8 pF = **0,15 %** |
+
+Ajustado junto o comentário do divisor de tensão, que dizia que "a escolha de
+$t_s$ fica livre": agora aponta o limite de 25,2 kΩ correspondente aos 28,5
+ciclos adotados.
+
+**Precisa de revisão do orientador:** a `tab:rain_max` (impedância máxima de
+entrada × tempo de amostragem) continua com os números do *datasheet*,
+calculados a 14 MHz. A 12 MHz os limites mudam. Como os dois divisores
+(7,09 kΩ e 1,8 kΩ) ficam folgados em qualquer dos dois cenários, a conclusão
+não muda — **mas a tabela deveria ser recalculada** se o orientador quiser
+rigor numérico.
+
+### 6. Conclusão, objetivo 1
+
+Em `Conclusao/00_Conclusao.tex`, "condicionamento de corrente por seguidor de
+tensão" estava errado: **não há amplificador em nenhum dos dois caminhos**.
+Reescrito para divisores resistivos com filtro *antialiasing*, com os valores
+e as remissões às `fig:cond_tensao` e `fig:cond_corrente`.
+
+### 7. Tabela de pinagem da SIBA refeita pelo devicetree
+
+`tab:pinagem_siba` em `Metodologia/07_SIBA.tex` foi reconstruída a partir de
+`Codigos/SIBA/boards/wch/siba_board/siba_board.dts`. Praticamente **toda linha
+estava desatualizada**:
+
+- ADC1 (mestre) é PA0/PA1/PA3 — Pitot, termistor da bateria, termistor do
+  motor. Não é "tensão, corrente e temperatura da bateria" em PA0/PA1/PA2.
+- ADC2 (escravo) existe e não estava na tabela: PC3/PC4/PC2 — tensão e
+  corrente da bateria, mais um canal de reserva.
+- O barramento I²C é o **I2C2 em PB10/PB11**, não I2C1 em PB8/PB9, e serve a
+  **EEPROM de calibração** (FT24C32A, 4 kB), não um "barramento de uso geral".
+- Relés: **PB12 (potência) e PB13 (pré-carga)** — não PB15 sozinho.
+- Acrescentados: PE15 + PD2 (as duas entradas da porta lógica que habilita o
+  contator de estado sólido), PB4/PA15 (LEDs verde e vermelho), PA5–PA7/PA2
+  (flash serial prevista em placa, não habilitada).
+- Células de carga: **PE0–PE5 (clock) e PE6–PE11 (dado)**, não PE2–PE13.
+
+O parágrafo de abertura também foi reescrito: a restrição do primeiro
+conversor aos canais 0, 1 e 3 vem dos pinos tomados pela flash serial, não de
+um limite PA0–PA7 do multiplexador.
+
+### 8. Módulo de persistência (EEPROM) nas camadas
+
+A camada *Vcore - OS* passou de quatro para **cinco módulos** em
+`Metodologia/05_Placas.tex`: acrescentado o NVM, com um parágrafo curto
+(restaura na partida; grava quando o operador confirma uma calibração pela
+aplicação de supervisão; na SAME guarda também os parâmetros do observador).
+A `fig:Metodologia_Vcore` ganhou o bloco, e as figuras de camadas das duas
+placas (`fig:blocos_siba` e `fig:blocos_same`) ganharam o quinto módulo na
+fileira do Vcore — a largura das camadas foi de 9,2 cm para 11,2 cm para
+acomodá-lo.
+
+Conforme instrução do autor, **não se detalhou o módulo** (layout do EEPROM,
+CRC, contagem de gravações ficaram de fora). A metodologia da SAME será
+revista em conversa própria.
+
+### Figuras removidas (pedido do autor)
+
+`fig:native_sim` e `fig:sniffer_pacote` (eram as Figuras 37 e 38, ambas em
+espaço reservado) foram apagadas de `Metodologia/04_Ferramentas.tex`,
+**junto com o parágrafo que as apresentava** — regra do autor: figura que sai
+leva o texto dela junto. A `tab:modos_conexao`, logo acima, continua e ainda
+cobre o *native\_sim* como modo de validação.
+
+### Referências acrescentadas
+
+Cinco entradas novas em `abntex2-ref_UDESC_2020.bib`, todas com dados
+conferidos:
+
+| Chave | Referência | Onde entra |
+|---|---|---|
+| `Utkin1992` (já existia, nunca citada) | Utkin, *Sliding Modes in Control and Optimization*, Springer, 1992 | teoria de estrutura variável; função sinal como caso limite |
+| `SlotineLi1991` | Slotine & Li, *Applied Nonlinear Control*, Prentice Hall, 1991 | camada limite / saturação |
+| `EdwardsSpurgeon1998` | Edwards & Spurgeon, *Sliding Mode Control: Theory and Applications*, Taylor & Francis, 1998 | família de funções admissíveis |
+| `Young1999` | Young, Utkin & Özgüner, IEEE Trans. Control Syst. Technol., 7(3):328–342, 1999, DOI 10.1109/87.761053 | *chattering* |
+| `Kim2011` | Kim, Son & Lee, IEEE Trans. Ind. Electron., 58(9):4069–4077, 2011, DOI 10.1109/TIE.2010.2098357 | sigmoide/tanh em SMO de máquina de ímã permanente |
+| `Qiao2013` | Qiao et al., IEEE Trans. Ind. Electron., 60(2):710–719, 2013, DOI 10.1109/TIE.2012.2206359 | idem |
+
+`OkLee2022` (que já estava na bib sem uso) também passou a ser citada, junto
+de `AbKaf2024`, como exemplo de aplicação em BLDC.
+
+**Defeito corrigido de passagem:** a bib tinha **três chaves duplicadas**
+(`Utkin1992`, `Chiasson2005`, `Perera2003`), cada uma definida duas vezes com
+conteúdo diferente. O bibtex acusava `Repeated entry` assim que `Utkin1992`
+passou a ser citada. As segundas cópias — nenhuma delas referenciada em lugar
+nenhum — foram removidas. A segunda `Utkin1992` era, na verdade, outro livro
+(*Sliding Mode Control in Electro-Mechanical Systems*, que é de 1999 e de
+Utkin, Guldner & Shi): **se o orientador quiser esse livro na bibliografia,
+ele precisa entrar com chave própria e metadados corretos.**
+
+### Precisa de revisão do orientador
+
+1. Propagar (ou não) a notação `an/bn/cn` até a seção de Clarke — item 2.
+2. Recalcular a `tab:rain_max` para ADCCLK de 12 MHz — item 5.
+3. Confirmar se o texto deve nomear a tangente hiperbólica (o que o código
+   roda) em vez da notação genérica `Sat` — item 4.
+4. Decidir se o livro de Utkin/Guldner/Shi entra na bibliografia.
+
+---
+
+## ✅ Botão de emergência exercitado no firmware da SIBA (26/09/2026)
+
+Origem: ao conferir a tabela de pinagem contra o devicetree, PE15 e PD2
+apareceram declarados mas **nunca usados pelo firmware** — `ready_pin` e
+`gpio_pd2_and_out` só existiam no `.dts`. O autor confirmou a função
+pretendida e pediu a implementação.
+
+### Contradição resolvida
+
+Três fontes discordavam sobre a direção do PD2: o commit original e o
+`SIBA/Readme.md` diziam **entrada**; o comentário mais recente do `.dts`
+dizia "saída da porta AND" e ao mesmo tempo "PD2 é a outra entrada" — não
+fechava. **Decisão do autor: PD2 é entrada, é o botão de parada de
+emergência, com lógica invertida (0 = apertado, 1 = solto). PE15 é saída e
+acende um LED externo.**
+
+### Firmware (repositório `Codigos/`, não este)
+
+- `boards/wch/siba_board/siba_board.dts` — nó `gpio_pd2_and_out` virou
+  `emergency_button`, com `GPIO_ACTIVE_LOW`: a inversão fica declarada no
+  devicetree, e a API lógica do Zephyr já devolve "apertado" em lógica
+  positiva. Comentário do PE15 reescrito (LED externo de pronto).
+- `lib/OS/HAL.c` / `HAL.h` — novo bloco com `HAL_Emergency_Init`,
+  `HAL_Emergency_Is_Pressed` e `HAL_Ready_Led_Set`, com o par
+  real/`native_sim` no mesmo padrão dos relés. PD2 entra como entrada com
+  pull-up interno. Falha de leitura do pino é tratada como botão apertado.
+  `HAL_Init` passou a chamar `HAL_Emergency_Init`.
+- `lib/SYS/Security_Manager.c` — `Security_Manager_Check` lê o botão a cada
+  despacho de sensor, **antes** do filtro por `sensor_id` (senão só rodaria
+  para os três sensores críticos), e aciona o LED externo.
+  `Security_Manager_Trigger_Emergency` passou a **abrir os dois relés**
+  (potência e depois pré-carga) além de desarmar o ESC, via
+  `Battery_Manager_Set_Relay(false)` — não direto no HAL, para que o estado
+  publicado na telemetria acompanhe o hardware.
+  Acrescentado `Security_Manager_Clear_Emergency`: **soltar o botão encerra a
+  emergência sem reiniciar a placa**. Não reenergiza nada — o ESC segue
+  desarmado e os relés abertos; reenergizar e rearmar continuam sendo ato
+  explícito do operador pela aplicação de supervisão. Um sinalizador interno
+  registra que foi o botão quem disparou, de modo que soltá-lo **não** encerra
+  uma emergência levantada por temperatura ou por faixa de sensor.
+
+**Compilação:** `make build` (siba_board, ROM 90,6 %) e `make native_sim`
+passam. O `native_sim` **já estava quebrado no HEAD** — `Security_Manager.c`
+e `NCI.c` referenciam `led_red`/`led_green` sem guarda de POSIX e o overlay
+não declarava os nós. Corrigido em `boards/native_sim.overlay` com os dois
+LEDs sobre o GPIO emulado. Boot do simulado conferido, sem emergência falsa.
+
+### Texto do TCC ajustado junto
+
+- `tab:pinagem_siba`: a linha "PE15 e PD2 | GPIO saída | duas entradas da
+  porta lógica" virou duas linhas — PD2 entrada (botão, nível baixo =
+  acionado) e PE15 saída (LED externo de sistema pronto).
+- Descrição do *Security Manager* em `07_SIBA.tex`: acrescentado o botão, o
+  fato de o desarme ficar retido e o acionamento do LED externo.
+
+### Precisa de revisão do orientador
+
+1. **Falha segura do botão.** Com pull-up interno e contato contra o terra,
+   **cabo rompido lê 1 (solto)** — a bancada continuaria liberada. Um botão
+   de emergência normalmente fechado (pull-down + contato para 3,3 V)
+   inverteria isso: fio partido cairia para 0 e desarmaria. A convenção
+   atual foi a informada pelo autor; **vale confirmar se o botão físico é
+   NA ou NF** antes do ensaio.
+2. **Sem bit de erro próprio.** O acionamento reusa
+   `ERROR_SEC_EMERGENCY_ACTIVE`, que é o mesmo do corte por comando e por
+   limite de sensor — a GUI não distingue a origem. Um bit novo exige mexer
+   no `SIBA.yaml` (o `Error_Codes.h` é gerado), o que mexe também na
+   aplicação de supervisão. Não foi feito.
+3. **Leitura por varredura, não por interrupção.** O botão é lido junto do
+   despacho de sensores (centenas de vezes por segundo). Uma interrupção de
+   borda no PD2 seria mais imediata, mas exigiria publicar o evento pelo
+   OSSI, e a taxa atual já é folgada para um ensaio de bancada.
+4. **Resolvido pelo autor:** não existe SSR nem porta AND — o projeto mudou.
+   PD2 é só a entrada do botão de emergência, e a potência é chaveada pelos
+   **dois relés** (pré-carga em PB13 e potência em PB12) que o Security
+   Manager agora abre na emergência. Os comentários antigos do `.dts` que
+   citavam o intertravamento externo foram apagados.
+5. **Comentário errado no `HAL.c` da SIBA:** o cabeçalho do arquivo diz
+   "ADC2 slave PC0/PC1/PC2", que é a pinagem da **SAME**; na SIBA o ADC2 é
+   PC3/PC4/PC2. Só comentário, não afeta o código — mas confunde quem ler.
+
+### Correção da mesma rodada — sem retenção, relés na emergência
+
+O autor descartou duas coisas da primeira versão:
+
+1. **Nada de reiniciar a placa.** A emergência deixou de ser retida; ver o
+   item do `Security_Manager.c` acima.
+2. **Ownership dos relés — a decidir.** Hoje quem é dono do estado do relé é
+   o `Battery_Manager` (`Battery_Manager_Set_Relay`, chamado pelo `CMD_Core`
+   no `FUNC_BATTERY`); o Security Manager comanda **através** dele na
+   emergência, para não deixar o estado publicado na telemetria mentindo.
+   Mover a propriedade dos relés de vez para o Security Manager mexeria no
+   `CMD_Core` e no protocolo com a aplicação de supervisão — **não foi feito,
+   e é decisão do autor.**
+
+**Texto da camada revertido:** a descrição do *Security Manager* na lista de
+módulos da camada *System* (`07_SIBA.tex`) voltou ao original, a pedido do
+autor. O capítulo 3 não menciona botão de emergência, LED externo nem relés
+na emergência — só a tabela de pinagem registra PD2 e PE15.
+
+### Correção — alarme de contato colado durante a energização
+
+O autor apontou que a checagem de contato colado (`ERROR_BATT_RELAY_MISMATCH`)
+estava rígida demais: **enquanto qualquer um dos dois contatos estiver
+fechado, corrente é esperada** — inclusive durante a pré-carga, ou seja,
+enquanto a bancada está sendo armada.
+
+- `HAL.c`/`HAL.h` — o HAL passou a acompanhar cada linha separadamente
+  (`hal_relay_precharge_closed` e `hal_relay_power_closed`), além do
+  `hal_relay_energized` que já existia e só vira verdadeiro com a sequência
+  inteira concluída. Novo `HAL_Relay_Any_Closed()`.
+- `Battery_Manager.c` — a checagem passou a exigir os **dois** contatos
+  abertos (`!HAL_Relay_Any_Closed()`) em vez de olhar o `relay_state`, que
+  só reflete o último comando completo e ficava falso durante os segundos de
+  pré-carga.
+- `HAL.c` (trecho de `native_sim`) — o estímulo sintético injetava corrente de
+  bateria desde o boot, independentemente do relé, e o simulado acusava
+  contato colado em **toda** execução. Agora a corrente sintética só existe
+  com algum contato fechado.
+
+**Verificado no simulado:** no boot, dois contatos abertos e sem corrente, o
+alarme não aparece; com `batt relay on`, a corrente passa a circular e o
+alarme continua sem aparecer. `make build` (ROM 90,75 %) e `make native_sim`
+passam.
+
+**Precisa de revisão do orientador:** logo após uma parada de emergência os
+dois contatos abrem, mas os capacitores do ESC ainda descarregam — se essa
+corrente residual passar de \SI{1}{\ampere} (`BATTERY_RELAY_MISMATCH_CURRENT_A`)
+por tempo suficiente, o alarme de contato colado vai disparar sem que haja
+falha. Uma janela de carência de alguns décimos de segundo após a abertura
+resolveria; **não foi implementada porque o valor da carência é decisão de
+bancada.**
+
+### Tempo de pré-carga virou parâmetro de Kconfig
+
+A sequência de energização já tinha o intervalo entre fechar a pré-carga
+(PB13) e fechar a potência (PB12) — era `HAL_RELAY_PRECHARGE_MS`, fixo em
+\SI{3}{\second} dentro do `HAL.h`. A pedido do autor, o valor saiu do
+cabeçalho e virou parâmetro de projeto:
+
+- `Kconfig` — novo `SIBA_RELAY_PRECHARGE_MS`, inteiro em milissegundos,
+  padrão \num{3000}, faixa \numrange{0}{60000}, com texto de ajuda explicando
+  que deve cobrir alguns múltiplos da constante RC do barramento do ESC e que
+  a sequência bloqueia a fila de trabalho durante todo o intervalo.
+- `prj.conf` — a linha `CONFIG_SIBA_RELAY_PRECHARGE_MS=3000` deixa o ajuste
+  visível junto dos demais parâmetros de bancada; também dá para mexer por
+  `make menuconfig`.
+- `HAL.h` — `HAL_RELAY_PRECHARGE_MS` virou apenas um apelido do símbolo do
+  Kconfig.
+- `HAL.c` — o log de fechamento da pré-carga passou a imprimir o tempo que
+  vai esperar, para conferência em bancada.
+
+Propagação verificada: trocando o valor no `prj.conf` para \num{1500} o
+`autoconf.h` gerado acompanha, e voltando para \num{3000} também. Os dois
+alvos compilam (ROM 90,76 %).
+
+**DIVERGÊNCIA ENCONTRADA — precisa de decisão do autor.** O firmware usa
+\SI{3}{\second}, mas a metodologia **já especifica outro valor**. Na subseção
+"Dimensionamento do Resistor de Pré-carga" (`06_Bancada.tex`), o critério
+adotado é o carregamento atingir regime permanente em \SI{1}{\second}:
+
+- $t_{pc} = 5\tau = \SI{1}{\second}$ (`eq:tau_valor`), logo
+  $\tau = \SI{0,2}{\second}$;
+- com $C_{ESC} = \SI{2000}{\micro\farad}$, isso fixa
+  $R_{pc} = \SI{100}{\ohm}$ (`eq:rpc_valor`).
+
+Ou seja, **o projeto diz \SI{1}{\second} e o firmware espera \SI{3}{\second}**
+--- \num{15} constantes de tempo em vez de \num{5}. Conservador, mas
+incoerente com o texto. Duas saídas, e a escolha é do autor:
+
+1. **Alinhar o firmware ao projeto:** `CONFIG_SIBA_RELAY_PRECHARGE_MS=1000`.
+   É o que torna o Capítulo 3 verdadeiro sem reescrever nada.
+2. **Manter \SI{3}{\second} e justificar no texto** a margem sobre o critério
+   de cinco constantes de tempo.
+
+**Não alterei o padrão por conta própria** --- \SI{3}{\second} é o que a placa
+vem rodando, e baixar para \SI{1}{\second} muda o comportamento do hardware.
+
+### HAL sem poder de decisão, `arm`/`disarm` de bancada e shell opcional
+
+Três pedidos do autor na sequência.
+
+**1. O tempo de pré-carga não é decisão do HAL.**
+`HAL_Relay_Energize()` passou a receber `precharge_ms` por argumento — o HAL
+só garante a ordem dos contatos. O `HAL_RELAY_PRECHARGE_MS` saiu do `HAL.h`.
+Quem é dono do valor é o `Battery_Manager` (camada *System*), que o lê do
+Kconfig e o passa a cada energização.
+
+**Valor revisto para \SI{5}{\second}** (era \num{3000}, padrão herdado).
+O autor confirmou que o resistor de pré-carga continua em \SI{100}{\ohm} ---
+ou seja, a \autoref{eq:rpc_valor} do Capítulo 3 segue válida --- e que o tempo
+maior é margem deliberada, a refinar em bancada. Com $\tau = \SI{0,2}{\second}$,
+\SI{5}{\second} são \num{25} constantes de tempo contra as \num{5} do critério
+de projeto.
+
+**2. `arm` e `disarm` viraram a sequência de bancada inteira.**
+Antes chamavam só `HAL_ESC_Arm`/`Disarm`. Agora:
+
+- `arm`: recusa se o botão de emergência estiver apertado; encerra uma
+  emergência já em vigor se o botão estiver solto; energiza (pré-carga →
+  espera → potência) se a potência ainda não estiver fechada; arma o ESC;
+  imprime o estado final dos três.
+- `disarm`: desarma o ESC, depois abre os relés (potência → pré-carga).
+
+O `arm` encerrar a emergência cobre um furo que só apareceu no teste: uma
+parada vinda de `estop` ou de `FUNC_STOP` **não** é do botão, então não se
+encerrava sozinha e exigia reiniciar a placa --- justamente o que o autor
+não queria.
+
+**3. Estado da cadeia de potência no `tele`.** Duas linhas novas:
+
+```
+  reles: pre-carga=FECHADO  potencia=FECHADO  (espera de 5000 ms)
+  emergencia: botao=solto  parada=livre
+```
+
+Para isso foram expostos `HAL_Relay_Precharge_Closed`,
+`HAL_Relay_Power_Closed`, `Battery_Manager_Get_Precharge_Ms` e
+`Security_Manager_Is_Emergency_Active`.
+
+**4. Shell fora do produto final.** Novo `SIBA_TEST_SHELL` no `Kconfig`
+(`depends on SHELL`, padrão `y`), e o `CMakeLists.txt` passou a compilar
+`Test_Shell.c` por esse símbolo em vez de por `CONFIG_SHELL`. O texto de ajuda
+diz o que o autor definiu: é ferramenta de bancada, dá acesso direto ao ESC e
+aos relés pela UART sem passar pela aplicação de supervisão nem por
+autenticação, e não faz parte do produto.
+
+**Medido:** com `CONFIG_SHELL=n`, `CONFIG_SHELL_BACKEND_SERIAL=n` e
+`CONFIG_SIBA_TEST_SHELL=n`, a imagem cai de **\SI{91,29}{\percent} para
+\SI{67,57}{\percent} da ROM** (\SI{185}{\kilo\byte} → \SI{137}{\kilo\byte}) e a
+RAM de \SI{71,8}{\percent} para \SI{68,0}{\percent}. Os três ficaram em `y` no
+`prj.conf`, com comentário dizendo para zerar os três no produto.
+
+**Verificado no simulado** (`-uart_stdinout`), ciclo completo:
+`arm` → energiza e arma → `estop` → relés abrem, ESC desarma, parada ATIVA →
+`arm` → encerra a emergência, reenergiza e arma → estado limpo. Sem
+reinicialização. Os dois alvos compilam.
+
+### Precisa de revisão do orientador
+
+1. **O Capítulo 3 não menciona nada disso.** Botão de emergência, LED externo,
+   comando dos relés pelo Security Manager, tempo de pré-carga de
+   \SI{5}{\second} e o shell como ferramenta descartável no produto --- nada
+   foi escrito no texto, a pedido do autor (o texto da camada foi revertido ao
+   original). Só a tabela de pinagem registra PD2 e PE15. **Se algo disso deve
+   entrar na metodologia, é decisão a tomar.**
+2. **\SI{5}{\second} contra o critério de \SI{1}{\second}.** A
+   \autoref{eq:tau_valor} declara $t_{pc} = 5\tau = \SI{1}{\second}$ e é dela
+   que sai o $R_{pc} = \SI{100}{\ohm}$. O firmware espera \SI{5}{\second}. O
+   resistor não muda, mas o texto e o firmware declaram tempos diferentes ---
+   convém uma frase no Capítulo 3 dizendo que a espera implementada é
+   conservadora frente ao critério.
+3. **Armar não passa pelo Propeller Manager.** O `arm` chama `HAL_ESC_Arm`
+   direto, como o comando antigo já fazia; o limite de corrente do
+   `Propeller_Manager` só atua sobre pedidos de \textit{throttle}, não sobre a
+   armação. Mantido como estava.
+
+### Armar pela rede: duas condições + sobrescrita do botão
+
+Pedido do autor depois de constatar que **o único caminho para armar o ESC em
+todo o firmware era o comando `arm` do shell** --- que ele acabara de mandar
+tirar do produto final. Os dois pedidos se anulavam.
+
+Dois comentários do código mentiam sobre isso e foram a origem da confusão:
+`CMD_Core.c` dizia que o `Propeller_Manager` "arma o ESC" (não arma --- recusa
+o \textit{throttle} se não estiver armado) e o aviso do `Propeller_Manager`
+mandava "armar via CMD de rede", que não existia.
+
+**Protocolo (`Aplicacao_Pi/Config/SIBA.yaml`).** A pedido do autor, em vez de
+sobrecarregar `default_action`, os comandos novos viraram valores de
+`status_type` --- **acrescentados no fim da lista**, para não deslocar os
+índices que a GUI já usa:
+
+| `action_or_status` | Efeito |
+|---|---|
+| `STATUS_OK` | "tudo certo, pode armar": pré-carga → espera → potência → arma o ESC |
+| `STATUS_ERROR` | desligar: desarma o ESC e abre os dois relés |
+| `STATUS_EMERGENCY_OVERRIDE` | passa a ignorar o botão físico |
+| `STATUS_EMERGENCY_RESTORE` | volta a respeitar o botão |
+
+Todos como `FUNC_START` / `INSTR_WRITE` / `TARGET_DEFAULT`. `generate.py`
+rodado: só `SIBA/lib/OS/Common_Types.h` mudou (SAME, SPMM e a aplicação
+Python saíram idênticos).
+
+**Firmware.** A sequência saiu do shell e foi para a camada *System*:
+`Security_Manager_Arm_Bench()` e `Security_Manager_Shutdown_Bench()`, mais
+`Security_Manager_Set_Emergency_Override()` e
+`Security_Manager_Button_Pressed()` (estado do botão já descontada a
+sobrescrita --- é este que a varredura de segurança usa). Armar exige as
+**duas** condições: o supervisório ter mandado `STATUS_OK` **e** o botão
+liberado, ou explicitamente sobrescrito. O `CMD_Core` roteia; o `arm`/`disarm`
+do shell viraram cascas finas sobre as mesmas funções, de modo que tirar o
+shell não tira mais nenhuma capacidade.
+
+A sobrescrita vive **só em RAM** --- reiniciar a placa devolve o botão ao
+comando.
+
+**Gancho de teste (só `native_sim`).** O stub do botão reportava "solto"
+sempre, o que tornava a recusa impossível de exercitar. Foi acrescentado
+`HAL_Emergency_Sim_Set_Pressed()` e o comando de shell `btn on|off`, ambos
+sob `#ifdef CONFIG_ARCH_POSIX` --- conferido que não entram no binário da
+placa (ausentes do `zephyr.map`).
+
+**Verificado no simulado**, os quatro cenários:
+
+1. Botão apertado → emergência, ESC desarmado, relés abertos; `arm` recusado.
+2. Botão solto → emergência encerra sozinha; `arm` arma.
+3. Rede: `STATUS_OK` → arma; `STATUS_ERROR` → desliga.
+4. Botão apertado + `STATUS_OK` sozinho → **recusado**; depois
+   `EMERGENCY_OVERRIDE` + `STATUS_OK` → **arma**, com o estado reportando
+   `botao=APERTADO parada=livre sobrescrita=SIM`.
+
+Os dois alvos compilam (ROM 91,52 %).
+
+### Precisa de revisão do orientador
+
+1. **Nada disso está no Capítulo 3.** A metodologia não descreve o botão, o
+   LED externo, a sobrescrita por comando, as duas condições para armar, nem o
+   shell como ferramenta fora do produto. Foi decisão do autor manter o texto
+   da camada como estava; **se algo disso tem de entrar, é escrita a fazer.**
+2. **A GUI ainda não manda esses comandos.** O protocolo os define e o
+   firmware os atende, mas a aplicação Python não tem botão para eles ---
+   sem isso, na prática só o shell arma.
+3. **A sobrescrita é um desvio de segurança sem trava.** Qualquer pacote UDP
+   `FUNC_START/INSTR_WRITE/TARGET_DEFAULT/STATUS_EMERGENCY_OVERRIDE` desabilita
+   o botão de emergência físico, sem autenticação (o protocolo não tem
+   nenhuma). Fica registrado em log, e some ao reiniciar. **Convém decidir se
+   isso é aceitável para ensaio com hélice acoplada.**
+4. **Os dois comentários errados** (`CMD_Core.c` e `Propeller_Manager.c`)
+   descrevem um caminho de rede que agora existe de verdade --- mas o texto
+   deles continua impreciso e merece revisão.
+
+### Interface: botões de bancada, reset no gerenciador e banco de teste CLI
+
+**Gerenciador de Placas** (`GUI/BoardManagerDialog.py`) ganhou um botão
+**⟳ Reiniciar** por linha, que manda `FUNC_RESET`. Habilitado para SIBA e
+SAME; desabilitado para a SPMM, que fala texto por Telnet e tem caminho
+próprio. Pede confirmação, avisando que o ESC e os relés voltam ao estado de
+boot.
+
+**Janela principal** (`GUI/mainAlbatrozGUI.py`): menu **Bancada → SIBA** com
+"Armar bancada" e "Desligar bancada", e os mesmos dois como **botões** num
+grupo no fim do painel central. O armar pede confirmação. O helper
+`_send_board_cmd` passou a aceitar `status`, que faltava para carregar o
+`action_or_status`.
+
+**A sobrescrita do botão de emergência ficou fora da tela de propósito**, a
+pedido do autor: é comando de terminal, `siba force on|off`, em
+`GUI/TinyTerminal.py` e documentado no `Config/commands.yaml` como
+`admin_only`. Desvio de segurança não vira clique de menu.
+
+**`native_cli.py`** (novo, raiz da `Aplicacao_Pi`): banco de teste por linha
+de comando. Sobe o `zephyr.exe` da SIBA ou da SAME e conversa por UDP em
+loopback usando `registry`/`codecs`/`native_sim` — mesmo caminho da GUI, sem
+interface gráfica. Comandos: `arm`, `off`, `force on|off`, `estop`, `esc`,
+`reset`, `tele`, `watch`, `shell`, `raw`, `sleep`. Como sobe o firmware com
+`-uart_stdinout`, o `shell` alcança o shell do próprio firmware.
+
+### `native_sim` da SAME estava quebrado no HEAD
+
+Mesma classe de problema já encontrada na SIBA nesta rodada, mais uma:
+
+- `boards/native_sim.overlay` não declarava `led_red`, `led_green` nem
+  `i2c2` --- usados sem guarda de POSIX por `Security_Manager.c`, `NCI.c` e
+  `src/main.c`. Acrescentados sobre os emuladores (`gpio_emul`,
+  `zephyr,i2c-emul-controller`).
+- `boards/native_sim.conf` trazia `CONFIG_GPIO=n` com o comentário "não há
+  periférico GPIO na SAME" --- desatualizado, a placa tem os LEDs de status.
+  Religado, com `CONFIG_EMUL`/`CONFIG_I2C_EMUL` junto.
+
+Agora a SAME compila e sobe em `native_sim`; a placa real segue compilando
+(ROM 66,81 %).
+
+**Verificado pelo CLI**, roteiro completo na SIBA: botão apertado pelo
+`shell btn on` → emergência e relés abertos; `arm` → **recusado**;
+`force on` → sobrescrita; `arm` → **energiza e arma**; `tele` → 41 pacotes de
+telemetria decodificados; `off` → desliga. E na SAME: telemetria decodificada
+e `reset` chegando ao firmware (`CMD RESET: reiniciando sistema...`).
+
+**Respondendo ao autor:** o reinício da SAME **já existia** --- `FUNC_RESET`
+está no `SAME.yaml` e o `handle_func_reset` do `CMD_Core.c` chama
+`sys_reboot(0)`, ignorando o resto do comando. O que faltava era caminho na
+interface, que agora é o botão do Gerenciador de Placas.
+
+### Precisa de revisão do orientador
+
+1. **BUG ABERTO na aplicação:** conectar, desconectar e conectar de novo
+   deixa os gráficos sem voltar ao normal. Registrado em
+   `Aplicacao_Pi/CLAUDE.md` (Observações em aberto). Ainda não investigado ---
+   a suspeita é o buffer/curva do \textit{pyqtgraph} não ser rearmado no
+   segundo `start_link`, ou o timer de replot ficar preso ao worker antigo.
+   Reiniciar a aplicação contorna.
+2. **Posição dos botões de bancada na tela.** Eles entram numa linha nova do
+   \textit{grid} do painel central, abaixo do que já existia --- escolha
+   segura, que não disputa célula com nenhum widget do `.ui`. **Vale o autor
+   olhar se é onde ele quer.**
+3. **Nada disso está no Capítulo 3** --- continua valendo o que já ficou
+   registrado nas rodadas anteriores.

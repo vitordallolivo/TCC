@@ -74,41 +74,6 @@ Simulador Python (\textit{mock}) & \textit{Thread} que finge o protocolo por cor
 \end{tabular}
 \end{table}
 
-A \autoref{fig:native_sim} mostra a aplicação de supervisão conectada ao
-\textit{firmware} rodando em \textit{native\_sim}, e a
-\autoref{fig:sniffer_pacote} mostra a captura de um pacote real trafegando
-na rede de aquisição, usada para conferir que o formato enviado pela placa
-corresponde byte a byte ao que a aplicação espera receber.
-
-\begin{figure}[H]
-    \centering
-    \caption{Aplicação de supervisão conectada ao \textit{firmware} compilado em \textit{native\_sim} (espaço reservado)}
-    \label{fig:native_sim}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=\textwidth,
-              minimum height=6cm, text width=0.85\textwidth, font=\small]
-              {Captura de tela: interface de supervisão exibindo dados em
-               tempo real recebidos do \textit{firmware} rodando em
-               \textit{native\_sim}};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \caption{Captura de um pacote de telemetria na rede de aquisição (espaço reservado)}
-    \label{fig:sniffer_pacote}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.9\textwidth,
-              minimum height=5cm, text width=0.8\textwidth, font=\small]
-              {Captura de tela: analisador de rede mostrando um pacote de
-               telemetria (ou de comando) trafegando entre a placa e o PC};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
 Por fim, todo o código do trabalho --- projetos de \textit{hardware} (KiCad),
 \textit{firmware} (C/Zephyr) e aplicação de supervisão (Python) --- é mantido
 em um único repositório Git, o que simplifica a rastreabilidade de mudanças

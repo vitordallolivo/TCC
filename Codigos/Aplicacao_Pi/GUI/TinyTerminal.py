@@ -457,6 +457,49 @@ class TinyTerminal(QWidget):
         else:
             self.append_log("ERR", f"Falha ao iniciar native_sim para {board} (ver console).", "#FF4500")
 
+    def _cmd_siba_force_on(self, args):  self._emergency_override_flow(True)
+    def _cmd_siba_force_off(self, args): self._emergency_override_flow(False)
+
+    def _emergency_override_flow(self, on):
+        """Sobrescreve (ou restaura) o botão físico de emergência da SIBA.
+
+        Fica só aqui, no terminal, e não como botão de tela: é desvio de
+        segurança, não operação de rotina. Vale só até a placa reiniciar.
+        """
+        status = "STATUS_EMERGENCY_OVERRIDE" if on else "STATUS_EMERGENCY_RESTORE"
+        cfg = self.eth.configs.get("SIBA", {})
+        if "siba" in cfg:
+            cfg = cfg["siba"]
+        enums = cfg.get("enums", {})
+
+        def idx(cat, name, default=0):
+            lst = enums.get(cat, [])
+            return lst.index(name) if name in lst else default
+
+        if status not in enums.get("status_type", []):
+            self.append_log("ERR", f"{status} não existe no SIBA.yaml — "
+                                   "regere o protocolo (Config/generate.py).",
+                            "#FF4500")
+            return
+
+        cmd = struct.pack(
+            "<BBBfb",
+            idx("func_type", "FUNC_START"),
+            idx("instruct_type", "INSTR_WRITE", 1),
+            idx("target_type", "TARGET_DEFAULT", 11),
+            0.0,
+            idx("status_type", status),
+        )
+        self.append_log("NET", f"CMD -> [{cmd.hex(' ').upper()}]", "#00FFFF")
+        if on:
+            self.append_log("WARN", "Botao de emergencia SOBRESCRITO — a SIBA "
+                                    "vai ignorar o botao fisico ate 'siba force "
+                                    "off' ou ate reiniciar a placa.", "#FFA500")
+        else:
+            self.append_log("SYS", "Botao de emergencia restaurado.", "#ADFF2F")
+        if hasattr(self, 'eth'):
+            self.eth.send_command("SIBA", cmd)
+
     def _cmd_siba_test_io(self, args): self._test_io_flow("SIBA")
     def _cmd_same_test_io(self, args): self._test_io_flow("SAME")
 

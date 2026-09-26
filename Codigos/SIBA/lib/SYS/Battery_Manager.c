@@ -35,6 +35,12 @@ static bool relay_state = false; /* espelha o último Set_Relay — ver Error_De
 #define BATTERY_LOW_VOLTAGE_VC_THRESHOLD   3.5f  /* V/célula — abaixo disso, alerta    */
 #define BATTERY_RELAY_MISMATCH_CURRENT_A   1.0f  /* corrente fluindo com relé OFF      */
 
+/* Tempo entre fechar a pré-carga e fechar a potência. É parâmetro de
+ * bancada, não de driver: fica aqui, na camada System, e desce ao HAL como
+ * argumento a cada energização. Valor de projeto no Kconfig da aplicação
+ * (CONFIG_SIBA_RELAY_PRECHARGE_MS, ajustável em prj.conf/menuconfig). */
+static uint32_t precharge_ms = (uint32_t)CONFIG_SIBA_RELAY_PRECHARGE_MS;
+
 /* Faixa "plausível" de tensão por célula para LiPo — usada para detectar
  * se o polinômio do SOC está produzindo valores absurdos (ver eval_soc) */
 #define BATTERY_POLY_PLAUSIBLE_VC_MIN      2.5f
@@ -194,10 +200,13 @@ void Battery_Manager_Update(uint32_t sensor_id, float value)
     if (sensor_id == SENSOR_ID_I_BATT) {
         i_batt = value;
 
-        /* Corrente fluindo com o relé de potência desligado — indica
-         * falha do próprio relé (contatos colados) ou leitura de corrente
-         * incoerente com o estado comandado. */
-        if (i_batt > BATTERY_RELAY_MISMATCH_CURRENT_A && !relay_state) {
+        /* Corrente fluindo com os DOIS contatos abertos — indica falha do
+         * relé (contatos colados) ou leitura incoerente. Enquanto qualquer um
+         * deles estiver fechado a corrente é esperada, inclusive durante a
+         * pré-carga da sequência de energização: por isso a checagem olha o
+         * estado real das duas linhas (HAL_Relay_Any_Closed) e não o
+         * `relay_state`, que só reflete o último comando completo. */
+        if (i_batt > BATTERY_RELAY_MISMATCH_CURRENT_A && !HAL_Relay_Any_Closed()) {
             if (Security_Manager_Error_Detect(ERROR_BATT_RELAY_MISMATCH)) {
                 LOG_ERR("Battery: corrente de %.1fA com rele desligado — possivel falha no rele",
                         (double)i_batt);
@@ -274,15 +283,16 @@ uint8_t Battery_Manager_Get_Cell_Count(void)
 
 /**
  * @brief Liga/desliga o relé de potência da bateria via HAL.
- * Energizar executa a sequência de pré-carga (precharge → 3 s → power),
- * bloqueando a thread chamadora durante esse tempo.
+ * Energizar executa a sequência de pré-carga (precharge → espera → power),
+ * bloqueando a thread chamadora durante toda a espera. A duração é a deste
+ * módulo (`precharge_ms`), não uma constante do HAL.
  * @param on true = energizar, false = desenergizar
  */
 void Battery_Manager_Set_Relay(bool on)
 {
     relay_state = on;
     if (on) {
-        HAL_Relay_Energize();
+        HAL_Relay_Energize(precharge_ms);
         /* Relay energizado — bancada pronta para operar */
         Security_Manager_Error_Erase(ERROR_MCU_POWER_READY);
         LOG_INF("Battery: relé energizado (sequência de pré-carga concluída)");
@@ -292,6 +302,12 @@ void Battery_Manager_Set_Relay(bool on)
         Security_Manager_Error_Detect(ERROR_MCU_POWER_READY);
         LOG_INF("Battery: relé desenergizado");
     }
+}
+
+/** @brief Tempo de pré-carga em vigor. @return milissegundos. */
+uint32_t Battery_Manager_Get_Precharge_Ms(void)
+{
+    return precharge_ms;
 }
 
 /** @brief Último estado comandado do relé. @return true = ligado. */

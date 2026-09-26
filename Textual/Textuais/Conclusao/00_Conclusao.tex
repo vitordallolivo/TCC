@@ -12,8 +12,11 @@ específicos estabelecidos na Introdução é retomado à luz do que foi executa
 
     \item \textbf{Sistema de medição elétrica do motor BLDC (SAME):}
     a placa foi projetada e fabricada com sensores de corrente por núcleo
-    toroidal (SS49E), condicionamento de tensão por divisor resistivo e
-    condicionamento de corrente por seguidor de tensão. O sensor de corrente
+    toroidal (SS49E) e condicionamento de tensão e de corrente por divisores
+    resistivos com filtro \textit{antialiasing} --- \SI{130}{\kilo\ohm} e
+    \SI{7,5}{\kilo\ohm} no caminho de tensão (\autoref{fig:cond_tensao}),
+    \SI{2,0}{\kilo\ohm} e \SI{18}{\kilo\ohm} no de corrente
+    (\autoref{fig:cond_corrente}). O sensor de corrente
     foi caracterizado em bancada, com linearidade confirmada até
     \SI{516}{\gauss} e sensibilidade dentro da faixa de catálogo. A escala de
     cada canal está definida e o zero do caminho de corrente é levantado a

@@ -18,7 +18,7 @@ import shutil
 
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QInputDialog,
                                QMenu, QComboBox, QLabel, QWidget, QHBoxLayout,
-                               QGridLayout)
+                               QGridLayout, QPushButton, QGroupBox)
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile, Slot, QTimer, QThread, Signal, Qt
 from PySide6.QtGui import QAction
@@ -230,6 +230,7 @@ class AlbatrozGUI(QMainWindow):
 
         # Reorganiza a barra de menus (tudo em português, menus de topo).
         self._build_menus()
+        self._build_bench_buttons()
         # Seletor "Modo de Operação" (canto direito da barra de menus).
         self._build_mode_selector()
 
@@ -447,6 +448,10 @@ class AlbatrozGUI(QMainWindow):
         self.action_calib_load_cell.triggered.connect(self.open_load_cell_calib)
         self.action_spmm_ensaio = QAction("Ensaios SPMM (B, τc, J)", self)
         self.action_spmm_ensaio.triggered.connect(self.open_spmm_ensaio)
+        self.action_bench_arm = QAction("Armar bancada (SIBA)", self)
+        self.action_bench_arm.triggered.connect(self.bench_arm)
+        self.action_bench_off = QAction("Desligar bancada (SIBA)", self)
+        self.action_bench_off.triggered.connect(self.bench_shutdown)
 
         # Traduz as ações existentes do .ui para português.
         for attr, txt in [("actionLoad", "Carregar"), ("actionCreate", "Criar"),
@@ -499,6 +504,18 @@ class AlbatrozGUI(QMainWindow):
         self.action_error_panel.triggered.connect(self.open_error_panel)
         self.action_info = QAction("Guia do Usuário (Sobre)", self)
         self.action_info.triggered.connect(self.open_info)
+
+        # --- Bancada (topo) — cadeia de potência da SIBA. Os mesmos comandos
+        #     estão nos botões do painel central; o reinício de placa fica no
+        #     Gerenciador de Placas. A sobrescrita do botão de emergência NÃO
+        #     está aqui de propósito: é comando de terminal (`siba force on`),
+        #     para não virar um clique de menu.
+        self.menu_bench = QMenu("Bancada", mb)
+        self.submenu_bench_siba = QMenu("SIBA", self.menu_bench)
+        self.submenu_bench_siba.addAction(self.action_bench_arm)
+        self.submenu_bench_siba.addAction(self.action_bench_off)
+        self.menu_bench.addMenu(self.submenu_bench_siba)
+        mb.addMenu(self.menu_bench)
 
         self.menu_options = QMenu("Opções", mb)
         self.menu_options.addAction(self.action_sensor_config)
@@ -1193,8 +1210,70 @@ class AlbatrozGUI(QMainWindow):
             print("[Motor] SIBA ESC parado (throttle 1000 + stop).")
         self.ui.Motor_action.setValue(0)
 
+    def _build_bench_buttons(self):
+        """Dois botões de bancada no fim do painel central: armar e desligar.
+
+        Acrescentados numa linha NOVA do QGridLayout (rowCount()), abaixo do
+        que já existe no .ui — não disputa célula com nenhum widget existente.
+        """
+        grid = self.ui.centralwidget.layout()
+        if grid is None:
+            return
+
+        self.btn_bench_arm = QPushButton("⚡ Armar bancada")
+        self.btn_bench_arm.setToolTip(
+            "Fecha a pré-carga, espera os capacitores do ESC e fecha a "
+            "potência; depois arma o ESC. A SIBA recusa se o botão de "
+            "emergência estiver apertado."
+        )
+        self.btn_bench_arm.clicked.connect(self.bench_arm)
+
+        self.btn_bench_off = QPushButton("⏻ Desligar bancada")
+        self.btn_bench_off.setToolTip(
+            "Desarma o ESC e abre os dois relés (potência, depois pré-carga)."
+        )
+        self.btn_bench_off.clicked.connect(self.bench_shutdown)
+
+        box = QGroupBox("Bancada (SIBA)")
+        h = QHBoxLayout(box)
+        h.addWidget(self.btn_bench_arm)
+        h.addWidget(self.btn_bench_off)
+        h.addStretch()
+
+        cols = max(grid.columnCount(), 1)
+        grid.addWidget(box, grid.rowCount(), 0, 1, cols)
+
+    @Slot()
+    def bench_arm(self):
+        """Manda a SIBA armar a bancada (FUNC_START/STATUS_OK).
+
+        O firmware só obedece com o botão de emergência liberado — ou
+        sobrescrito por `siba force on` no terminal.
+        """
+        if QMessageBox.question(
+            self, "Armar bancada",
+            "Energizar e armar a bancada?\n\n"
+            "A pré-carga fecha, os capacitores do ESC carregam, a potência "
+            "fecha e o ESC é armado. A partir daí o motor responde a "
+            "throttle.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        if "SIBA" not in self.eth.workers:
+            self.eth.start_link("SIBA")
+        self._send_board_cmd("SIBA", "FUNC_START", 1.0,
+                             instr="INSTR_WRITE", status="STATUS_OK")
+        print("[Bancada] SIBA: comando de armar enviado.")
+
+    @Slot()
+    def bench_shutdown(self):
+        """Manda a SIBA desligar a bancada (FUNC_START/STATUS_ERROR)."""
+        self._send_board_cmd("SIBA", "FUNC_START", 0.0,
+                             instr="INSTR_WRITE", status="STATUS_ERROR")
+        print("[Bancada] SIBA: comando de desligar enviado.")
+
     def _send_board_cmd(self, board, func_name, value, target="TARGET_DEFAULT",
-                        instr="INSTR_NONE"):
+                        instr="INSTR_NONE", status=None):
         """Monta e envia um CMD para `board` usando os enums do <board>.yaml, e
         LOGA a quebra no terminal (hex + decode) — o usuário vê exatamente os 8
         bytes e o que cada campo significa."""
@@ -1205,11 +1284,13 @@ class AlbatrozGUI(QMainWindow):
             return lst.index(name) if name in lst else default
 
         fi, ii, ti = idx("func_type", func_name, 0), idx("instruct_type", instr, 2), idx("target_type", target, 0)
-        cmd = codecs.encode_cmd(fi, ii, ti, value, 0)
+        ai = idx("status_type", status, 0) if status else 0
+        cmd = codecs.encode_cmd(fi, ii, ti, value, ai)
         # Log da quebra: hex dos 8 bytes + tradução dos campos.
         print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
         print(f"[DECODE] [{board}] {func_name}(f={fi}) | {instr}(i={ii}) | "
-              f"{target}(t={ti}) | VAL: {value:.4f} | ACT: 0")
+              f"{target}(t={ti}) | VAL: {value:.4f} | ACT: {ai}"
+              f"{f' ({status})' if status else ''}")
         self.eth.send_command(board, cmd)
 
     def start_mock_with_target(self, target, quiet=False):
