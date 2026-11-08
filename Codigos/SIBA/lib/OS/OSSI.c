@@ -9,6 +9,7 @@
 #include "Security_Manager.h"
 #include "CMD_Core.h"
 #include "CMD.h"
+#include "HAL_prm.h"         /* HAL_ENABLE_ADC */
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -51,10 +52,14 @@ static void sensor_dispatch_fn(struct k_work *w)
 
         Log_Manager_Update(id, val);
 
+#if HAL_ENABLE_ADC
+        /* Alarmes da bateria (SOC baixo, temperatura) dependem do ADC —
+         * desligados junto com ele (HAL_DISABLE_ADC). */
         if (id == SENSOR_ID_V_BATT || id == SENSOR_ID_I_BATT ||
             id == SENSOR_ID_TEMPERATURE_BATTERY) {
             Battery_Manager_Update(id, val);
         }
+#endif
 
         if (id == SENSOR_ID_I_BATT || id <= SENSOR_ID_LOAD_CELL_5) {
             Propeller_Manager_Update(id, val);

@@ -811,33 +811,41 @@ MCU: **CH32V307VTC6** (RISC-V, 144 MHz). A tabela abaixo reflete o
 esquemático real da placa, já aplicado ao arquivo de descrição de hardware
 do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 
-| Pino | Periférico | Função |
-|--------|-------------------|---------------------------------|
-| PA0 | ADC1 canal 0 | Tensão da bateria (`v_batt`) |
-| PA1 | ADC1 canal 1 | Corrente da bateria (`i_batt`) |
-| PA2 | ADC1 canal 2 | Velocidade do ar — tubo de Pitot (`air_speed`) |
-| PA3 | ADC1 canal 3 | Canal de uma bancada de ensaio de bateria à parte — não entra na telemetria de voo |
-| PA4 | ADC1 canal 4 | Idem (bancada de ensaio de bateria) |
-| PA5 | DAC1 saída 1 | Saída analógica de uso geral |
-| PA6 | ADC1 canal 6 | Temperatura da bateria (`temperature_battery`) — o mesmo circuito físico também serve à bancada de ensaio de bateria |
-| PA7 | ADC1 canal 7 | Canal da bancada de ensaio de bateria |
-| PA8 | GPIO reservado | Fora do alcance físico do ADC1/ADC2 — função ainda não definida |
-| PA9 / PA10 | USART1 TX / RX | Console de log e shell de diagnóstico (115200 8N1) |
-| PB0 | TIM3 canal 3, captura | Contador de pulsos de RPM |
-| PB6 | TIM4 canal 1, PWM | Sinal do ESC (50 Hz, 1000–2000 µs) |
-| PB8 / PB9 | I2C1 SCL / SDA | Barramento I2C de uso geral (100 kHz) |
-| PB11–PB14 | GPIO saída | Relés genéricos — função individual ainda não definida |
-| PB15 | GPIO saída | Relé de potência da bateria |
-| PC6–PC9 | Ethernet (MAC interno) | Pinos fixos do transceptor Ethernet embutido no chip |
-| PD2 | GPIO entrada reservada | Realimentação de um circuito de segurança externo (porta lógica AND que habilita o contator de 100A da bateria) |
-| PE2–PE7 | GPIO saída | Clock (`PD_SCK`) de cada uma das 6 células de carga |
-| PE8–PE13 | GPIO entrada | Dado (`DOUT`) de cada uma das 6 células de carga |
-| PE15 | GPIO saída | LED indicador de "sistema pronto" (também alimenta a mesma porta lógica AND ligada ao PD2) |
+| Pino | Periférico | Função | Tipo / lógica |
+|------|------------|--------|---------------|
+| PA0 | ADC1 canal 0 | Velocidade do ar — tubo de Pitot (`air_speed`) | analógico |
+| PA1 | ADC1 canal 1 | Termistor da bateria (`temperature_battery`) | analógico |
+| PA3 | ADC1 canal 3 | Termistor do motor (`temperature_motor`) | analógico |
+| PC2 | ADC2 canal 12 | Reserva | analógico |
+| PC3 | ADC2 canal 13 | Tensão da bateria (`v_batt`) | analógico |
+| PC4 | ADC2 canal 14 | Corrente da bateria (`i_batt`) | analógico |
+| PD1 | GPIO entrada | Leitura do botão de emergência via divisor 12 V→3 V (0 V = desliga, 3 V = liga); o corte dos relés é físico | ativa alta, pull-down interno (fio solto = emergência) |
+| PB12 | GPIO saída | Relé de potência | **invertida** (0 = liga) |
+| PB13 | GPIO saída | Relé de pré-carga | **invertida** (0 = liga) |
+| PE0–PE5 | GPIO saída | Clock (`PD_SCK`) do HX711 das células 1–6 | saída |
+| PE6–PE11 | GPIO entrada | Dado (`DOUT`) do HX711 das células 1–6 | entrada, sem pull |
+| PB0 | TIM3 canal 3, captura | Contador de pulsos de RPM | entrada, sem pull |
+| PB6 | TIM4 canal 1, PWM | Sinal do ESC (50 Hz, 1000–2000 µs) | saída PWM |
+| PE15 | GPIO saída | LED externo de "sistema pronto" | ativa alta |
+| PB4 | GPIO saída | LED verde de status | ativa alta |
+| PA15 | GPIO saída | LED vermelho de status | ativa alta |
+| PB10 / PB11 | I2C2 SCL / SDA | EEPROM FT24C32A (0x50) | open-drain, pull-up externo |
+| PA9 / PA10 | USART1 TX / RX | Console de log e shell (115200 8N1) | push-pull / entrada com pull-up |
+| PC6–PC9 | Ethernet (PHY interno) | RX+ / RX− / TX+ / TX− | pinos fixos |
+| PA2, PA5, PA6, PA7 | SPI1 (desligado) | Reserva para flash W25Q | — |
 
-O ADC1 só alcança fisicamente os pinos PA0–PA7 (é uma limitação do mux
-analógico interno do chip, não de configuração) — por isso as 6 células de
-carga foram colocadas na Porta E em vez de competir por pinos na Porta A,
-deixando PA0-PA7 inteiramente livres para o ADC.
+> **ADC desativado nesta versão da placa.** Por tempo de montagem, os
+> circuitos analógicos (Pitot, termistores, tensão e corrente da bateria)
+> não foram montados. O firmware desliga o uso do ADC em
+> `lib/OS/HAL_prm.h` (`HAL_DISABLE_ADC`); esses campos saem zerados na
+> telemetria e ficam desligados a checagem de faixa de tensão/corrente da
+> bateria (`Security_Manager`) e os alarmes do `Battery_Manager`. Os nós continuam no `.dts` — religar é comentar uma
+> linha.
+
+As saídas dos relés são **invertidas** no módulo de relés (0 no pino =
+relé fechado). A inversão é declarada no `.dts` (`GPIO_ACTIVE_LOW`), de modo
+que o código continua escrevendo 1 para "fechar"; no boot os pinos vão a 1
+(relés abertos).
 
 ---
 

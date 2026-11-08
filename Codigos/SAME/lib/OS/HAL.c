@@ -2,7 +2,7 @@
  * @file HAL.c
  * @brief HAL da SAME: só aquisição elétrica, não aciona motor.
  *
- * ADC1 = V_a,V_b,V_c | ADC2 = i_a,i_b,i_c. Thread única bloqueia no ADC,
+ * ADC1 = i_a,i_b,i_c | ADC2 = V_a,V_b,V_c. Thread única bloqueia no ADC,
  * faz Clarke + Observer_Step, publica telemetria. native_sim: sintetiza
  * tensões/correntes senoidais em vez de ler ADC real.
  */
@@ -191,17 +191,20 @@ static void hal_publish_telemetry(float Va, float Vb, float Vc,
 static const struct device *adc1_dev = DEVICE_DT_GET(ADC1_NODE);
 static const struct device *adc2_dev = DEVICE_DT_GET(ADC2_NODE);
 
-/* ADC1: PA0=CH0(V_a), PA1=CH1(V_b), PA3=CH3(V_c). PA2 reservado para W25Q. */
+/* A ordem de setup = ordem de varredura (RSQR). No modo dual o slot k do
+ * ADC1 é convertido junto com o slot k do ADC2, então as duas tabelas são
+ * ordenadas por fase (a, b, c) para manter i_x e V_x simultâneos. */
+/* ADC1 (mestre): PA3=CH3(i_a), PA1=CH1(i_b), PA0=CH0(i_c). PA2 = W25Q. */
 static const struct adc_channel_cfg adc1_ch_cfg[HAL_ADC1_NUM_CH] = {
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0  },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 1  },
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 3  },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 1  },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0  },
 };
-/* ADC2: PC0=CH10(i_a), PC1=CH11(i_b), PC2=CH12(i_c). */
+/* ADC2 (escravo): PC2=CH12(V_a), PC1=CH11(V_b), PC0=CH10(V_c — conexão solta). */
 static const struct adc_channel_cfg adc2_ch_cfg[HAL_ADC2_NUM_CH] = {
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 10 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 11 },
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 12 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 11 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 10 },
 };
 
 static inline float raw_to_mv(uint16_t raw)
@@ -268,12 +271,13 @@ static void hal_batch_work_fn(struct k_work *w)
     for (uint32_t f = 0; f < HAL_BATCH_FRAMES; f++) {
         const uint32_t *fr = &buf[f * HAL_ADC1_NUM_CH];
 
-        float rVa = raw_to_mv(hal_adc_raw_cal(fr[0] & 0xFFFU,         cal_m));
-        float rVb = raw_to_mv(hal_adc_raw_cal(fr[1] & 0xFFFU,         cal_m));
-        float rVc = raw_to_mv(hal_adc_raw_cal(fr[2] & 0xFFFU,         cal_m));
-        float ria  = raw_to_mv(hal_adc_raw_cal((fr[0] >> 16) & 0xFFFU, cal_s));
-        float rib  = raw_to_mv(hal_adc_raw_cal((fr[1] >> 16) & 0xFFFU, cal_s));
-        float ric  = raw_to_mv(hal_adc_raw_cal((fr[2] >> 16) & 0xFFFU, cal_s));
+        /* [15:0] = ADC1 (correntes), [31:16] = ADC2 (tensões). */
+        float ria  = raw_to_mv(hal_adc_raw_cal(fr[0] & 0xFFFU,         cal_m));
+        float rib  = raw_to_mv(hal_adc_raw_cal(fr[1] & 0xFFFU,         cal_m));
+        float ric  = raw_to_mv(hal_adc_raw_cal(fr[2] & 0xFFFU,         cal_m));
+        float rVa = raw_to_mv(hal_adc_raw_cal((fr[0] >> 16) & 0xFFFU, cal_s));
+        float rVb = raw_to_mv(hal_adc_raw_cal((fr[1] >> 16) & 0xFFFU, cal_s));
+        float rVc = raw_to_mv(hal_adc_raw_cal((fr[2] >> 16) & 0xFFFU, cal_s));
 
         if (hal_cal_phase != HAL_CAL_READY) {
             if (hal_cal_phase != HAL_CAL_FAILED) {

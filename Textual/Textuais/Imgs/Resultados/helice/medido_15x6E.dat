@@ -1,0 +1,6 @@
+# Ensaio estático em bancada — preencher uma linha por patamar.
+# rpm: rotação do patamar | Te_Nm: torque médio (correntes medidas, ângulo do observador)
+# rho: densidade do ar do ensaio [kg/m3] (Eq. da densidade, P e T do ambiente)
+# O C_Q é calculado na própria figura, descontando as perdas a vazio B*w + tau_c.
+rpm Te_Nm rho
+nan nan nan

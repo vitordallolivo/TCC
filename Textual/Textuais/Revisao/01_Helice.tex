@@ -55,21 +55,21 @@ Para condições da bancada estática é possível considerar que $V_\infty \app
 Usando da \autoref{eq:bldc_mecanica} e considerando que a aceleração angular é nula, é possível deduzir $\hat{C_{Q_{max}}}$ e  $\hat{C_{T_{max}}}$ conforme apresentado nas \autoref{eq:Prop_coeff1} e \autoref{eq:Prop_coeff2}.
 
 \[
-\hat{T_e} - B \cdot \hat{\omega} - Q_{prop} = 0 
+\hat{T_e} - B \cdot \hat{\omega} - \tau_c - Q_{prop} = 0
 \]
 \[
-Q_{prop} = \hat{T_e} - B \cdot \hat{\omega} = C_Q (J_{prop}) \cdot \rho \hat{n}^2_{prop} {D}^5_{prop}
+Q_{prop} = \hat{T_e} - B \cdot \hat{\omega} - \tau_c = C_Q (J_{prop}) \cdot \rho \hat{n}^2_{prop} {D}^5_{prop}
 \]
 
-E como $V_{\infty} \approx 0 \rightarrow \ J_{prop} = \frac{V_{\infty}}{n_{prop}D_{prop}} \approx 0$ e também $\hat{n}_{prop} = \frac{2\pi}{60} \hat{\omega}$
+E como $V_{\infty} \approx 0 \rightarrow \ J_{prop} = \frac{V_{\infty}}{n_{prop}D_{prop}} \approx 0$ e também $\hat{n}_{prop} = \frac{\hat{\omega}}{2\pi}$, com $\hat{\omega}$ em \si{\radian\per\second} e $\hat{n}_{prop}$ em rotações por segundo
 
 \begin{equation}
-    \hat{C_{Q_{max}}} (\hat{\omega})= \frac{3600 \cdot (\hat{T_e}- B\cdot \hat{\omega}) }{4\pi^2\rho \hat{\omega}^2D_{prop}^5}
+    \hat{C_{Q_{max}}} (\hat{\omega})= \frac{4\pi^2 \, (\hat{T_e}- B\cdot \hat{\omega} - \tau_c) }{\rho \hat{\omega}^2D_{prop}^5}
     \label{eq:Prop_coeff1}
 \end{equation}
 
 \begin{equation}
-    \hat{C_{T_{max}}} (\hat{\omega}) = \frac{3600 \cdot T_{prop}}{4\pi^2\rho \hat{\omega}^2D_{prop}^4}
+    \hat{C_{T_{max}}} (\hat{\omega}) = \frac{4\pi^2 \, T_{prop}}{\rho \hat{\omega}^2D_{prop}^4}
     \label{eq:Prop_coeff2}
 \end{equation}
 

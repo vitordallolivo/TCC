@@ -209,14 +209,14 @@ void Security_Manager_Shutdown_Bench(void)
  */
 void Security_Manager_Check(uint32_t sensor_id, float value)
 {
-    /* Botão de parada de emergência (PD2), lido a cada despacho de sensor —
+    /* Sinal de parada de emergência (PD1, 0 V = emergência), lido a cada despacho de sensor —
      * antes de qualquer filtro por sensor_id, para que a varredura aconteça
      * em todo item da fila e não só nos três sensores críticos.
      * Soltar o botão encerra a emergência (ver Clear_Emergency) — sem
      * reenergizar nada, e sem exigir que a placa seja reiniciada. */
     if (Security_Manager_Button_Pressed()) {
         if (!emergency_active) {
-            LOG_ERR("SECURITY: botao de emergencia acionado (PD2)");
+            LOG_ERR("SECURITY: sinal de emergencia acionado (PD1)");
             emergency_by_button = true;
             Security_Manager_Trigger_Emergency();
         }
@@ -235,8 +235,13 @@ void Security_Manager_Check(uint32_t sensor_id, float value)
      * não mais de #defines locais. Assim mudar um limite é editar UMA linha. */
     siba_error_bit_t bit;
     switch (sensor_id) {
+#if HAL_ENABLE_ADC
         case SENSOR_ID_V_BATT: bit = ERROR_SEC_VOLTAGE_OUT_OF_RANGE; break;
         case SENSOR_ID_I_BATT: bit = ERROR_SEC_CURRENT_EXCESSIVE;    break;
+#endif
+        /* Com o ADC desligado (HAL_DISABLE_ADC em HAL_prm.h) v_batt/i_batt
+         * não são medidos: a checagem de faixa da bateria fica desabilitada
+         * para não disparar emergência sobre um valor que não existe. */
         case SENSOR_ID_RPM:    bit = ERROR_SEC_RPM_EXCESSIVE;        break;
         default: return;   /* sensor não é crítico de segurança */
     }

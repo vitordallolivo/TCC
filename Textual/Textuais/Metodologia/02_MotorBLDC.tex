@@ -137,9 +137,8 @@ Os ensaios de atrito e de inércia descritos nesta subseção foram conduzidos
 sem a hélice acoplada ao eixo, de modo que $B$, $\tau_c$ e $J$ correspondem
 exclusivamente ao conjunto girante do próprio motor (rotor, eixo e
 rolamentos). Com a hélice montada para os ensaios aerodinâmicos
-(\autoref{sec:coef_aero_bancada}), o diâmetro e o passo do modelo utilizado
-propagam-se para $D_{prop}$ nas Equações~\eqref{eq:Prop_coeff1} e
-\eqref{eq:Prop_coeff2}, conforme a nomenclatura $D \times P$ da
+(\autoref{sec:coef_aero_bancada}), o diâmetro do modelo utilizado
+entra como $D_{prop}$ na \autoref{eq:Prop_coeff1}, conforme a nomenclatura $D \times P$ da
 \autoref{sec:helice_aerodinamica}.
 
 Para a caracterização experimental, o motor BLDC é acionado por um Controlador Eletrônico de Velocidade (ESC) comercial. O torque eletromagnético ($T_e$) é proporcional à corrente de eixo em quadratura ($I_q$), e os ensaios foram conduzidos com as correntes e tensões de fase adquiridas diretamente por osciloscópio. O esquema de aquisição e as formas de onda resultantes estão ilustrados na Figura~\ref{fig:circuito_esc_correntes}.
@@ -274,92 +273,63 @@ Para extrair os coeficientes de atrito ($B$ e $\tau_c$) \footnote{O parâmetro $
 
 Os parâmetros $B$ e $\tau_c$ são obtidos através de uma regressão linear sobre os pontos experimentais médios $(\omega_{m,k}, T_{e,k})$ para cada patamar de rotação, o $\omega_{m,k}$ é medido através de um tacômetro digital para validação.
 
-\subsection{Identificação dos Coeficientes Aerodinâmicos da Hélice em Bancada}
+\subsection{Identificação do Coeficiente de Torque da Hélice em Bancada}
 \label{sec:coef_aero_bancada}
 
-Com a hélice já montada no eixo, o motor é levado por patamares de
-aceleração crescente, do menor ponto em que ele ainda gira de forma estável
-até a rotação máxima permitida. A \autoref{fig:fluxo_ensaio_helice} resume
-o ensaio: em cada patamar, o motor permanece tempo suficiente para
-estabilizar a rotação, seguindo o critério de regime permanente
-formalizado no \autoref{alg:kq_identificacao}; só então são registrados a rotação, a
-tração medida pela célula de carga, o torque estimado pelo observador e a
+São ensaiadas duas hélices APC, 15x6E e 17x10E. O objetivo é verificar a
+bancada pela curva de torque, que o fabricante não fornece diretamente em forma
+de coeficiente; a curva de tração fica para os ensaios da equipe. Com a hélice
+montada no eixo e sem vento incidente ($J = 0$), o motor é levado por patamares
+de rotação crescente, até no máximo \num{10000} RPM, seguindo o fluxo da
+\autoref{fig:fluxo_ensaio_helice}. Em cada patamar, depois que a rotação
+estabiliza, registram-se a rotação, o torque eletromagnético e a
 densidade do ar, calculada pela \autoref{eq:densidade_calculo} a partir da
 pressão e da temperatura do ambiente.
 
 \begin{figure}[H]
     \centering
-    \caption{Fluxo do ensaio de identificação dos coeficientes da hélice}
+    \caption{Fluxo do ensaio de identificação do coeficiente de torque da hélice}
     \label{fig:fluxo_ensaio_helice}
     \begin{tikzpicture}[
         font=\small,
         box/.style={draw, rounded corners, align=center, minimum height=1cm, minimum width=3.1cm, text width=2.9cm},
         arrow/.style={-{Latex}, thick}
     ]
-        \node[box] (duty)  at (0,0)   {Novo patamar\\de aceleração};
+        \node[box] (duty)  at (0,0)   {Novo patamar\\de rotação};
         \node[box] (estab) at (3.6,0) {Aguarda\\estabilizar};
-        \node[box] (reg)   at (7.2,0) {Registra rotação,\\tração e torque};
-        \node[box] (calc)  at (10.8,0){Calcula $C_T$ e\\$C_Q$ do patamar};
+        \node[box] (reg)   at (7.2,0) {Registra rotação,\\torque e $\rho$};
+        \node[box] (calc)  at (10.8,0){Calcula $C_Q$\\do patamar};
 
         \draw[arrow] (duty) -- (estab);
         \draw[arrow] (estab) -- (reg);
         \draw[arrow] (reg) -- (calc);
-        \draw[arrow] (calc.north) to[out=60, in=120, looseness=0.5] node[above, font=\scriptsize]{próximo patamar} (duty.north);
+        \draw[arrow] (calc.south) -- ++(0,-0.45) -| node[pos=0.25, below, font=\scriptsize]{próximo patamar} (duty.south);
     \end{tikzpicture}
 
     Fonte: Autor (2026)
 \end{figure}
 
-O \autoref{alg:kq_identificacao} formaliza o critério de patamar usado
-nesse ensaio: a detecção automática dos intervalos de regime permanente a
-partir do perfil de referência e o cálculo do coeficiente por patamar.
+O torque eletromagnético é calculado com as correntes de fase medidas,
+projetadas no ângulo $\hat{\theta}$ estimado pelo observador:
 
-\begin{algorithm}[H]
-\caption{Identificação do coeficiente aerodinâmico global $k_Q$ por patamar}
-\label{alg:kq_identificacao}
-\begin{algorithmic}[1]
-\Require $\omega_m,\hat{\omega}_e,T_e,\hat{T}_e$ (vetores), $R$ (perfil de RPM), $T_s$, $\tau_{\mathrm{PI}}$, $\mathrm{RPM}_{\min}$
-\Function{DetectaPatamares}{$R$}
-    \State $M \gets (\Delta R = 0) \wedge (R > \mathrm{RPM}_{\min})$
-    \State $P \gets$ pares $(s,e)$ dos blocos contínuos de $M$
-    \State \Return $P$
-\EndFunction
-\Statex
-\Function{CalculaKQ}{$\omega_m,\hat{\omega}_e,T_e,\hat{T}_e,P$}
-    \State $n \gets \tau_{\mathrm{PI}}/T_s$
-    \ForAll{$(s,e) \in P$}
-        \If{$e-s \le n$}
-        \State \textbf{continue}
-        \EndIf
-        \State $i,j \gets s+n,\ e-1$
-        \State $k_1 \gets \overline{T_e[i:j]} \,/\, \overline{\omega_m[i:j]}^{\,2}$
-        \State $k_2 \gets \overline{\hat{T}_e[i:j]} \,/\, \overline{\hat{\omega}_e[i:j]}^{\,2}$
-        \State guarda $(k_1,k_2)$ em $K$
-    \EndFor
-    \State $\bar{k}_1,\bar{k}_2 \gets$ médias de $K$
-    \State $\epsilon \gets 100\,|\bar{k}_2-k_{Q,\mathrm{nom}}|/k_{Q,\mathrm{nom}}$
-    \State \Return $K,\ \bar{k}_1,\ \bar{k}_2,\ \epsilon$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
+\begin{equation}
+    \hat{T}_e = \tfrac{3}{2}\,K_e\,p\,\big(f_\alpha(\hat{\theta})\,i_\alpha
+               + f_\beta(\hat{\theta})\,i_\beta\big),
+    \label{eq:torque_corrente_medida}
+\end{equation}
 
-Como o ensaio é feito parado, sem vento incidente sobre a hélice
-($V_\infty \approx 0$), os coeficientes de tração ($C_T$) e de torque
-($C_Q$) de cada patamar são calculados diretamente pelas
-Equações~\eqref{eq:Prop_coeff2} e \eqref{eq:Prop_coeff1}.
-
-A referência de comparação são as tabelas de desempenho publicadas pelo
-próprio fabricante da hélice (APC) \cite{apc_performance_data}, que
-fornecem $C_T$ e $C_P$ em função da razão de avanço $J$ e já incluem a
-condição parada, convertendo-se $C_P$ para $C_Q$ pela
-\autoref{eq:cq_from_cp}. O banco de dados de hélices da
-\textit{University of Illinois Urbana-Champaign} (UIUC) entra como segunda
-referência, para hélices da categoria \textit{Thin Electric} equivalentes
-\cite{SeligPropDB}.
-
-Como o comportamento aerodinâmico da hélice muda com a rotação (efeito do
-número de Reynolds), os coeficientes são reportados por patamar de rotação,
-e não como um valor único para toda a faixa de operação.
+\noindent em que $f_{\alpha\beta}$ é a forma normalizada da força
+contraeletromotriz. O observador entra apenas com o ângulo e a velocidade; as
+correntes são as medidas, e não as estimadas, porque o \textit{chattering} das
+correntes estimadas não tem média nula e se acumularia na média do patamar,
+em que o torque da hélice é muito menor que a ondulação do acionamento em seis
+passos. Descontadas as perdas a vazio do motor,
+$B\,\omega + \tau_c$, o coeficiente de cada patamar sai da
+\autoref{eq:Prop_coeff1}. A referência são as tabelas de desempenho do
+fabricante \cite{apc_performance_data} na condição $J = 0$, convertendo-se
+$C_P$ para $C_Q$ pela \autoref{eq:cq_from_cp}. Como o coeficiente varia com a
+rotação (efeito do número de Reynolds), ele é comparado por patamar, e não
+como um valor único.
 
 \subsection{Parametrização do SMO}
 \label{sec:param_smo}
@@ -435,26 +405,38 @@ sinais fixos, escrevendo $\Gamma=(+1,-1,+1)\odot 10^{\mathbf{x}}$, o que
 normaliza as três ordens de grandeza distintas e impõe por construção as
 restrições de sinal $\Gamma_{s1}>0$, $\Gamma_{s2}<0$ e $\Gamma_{t}>0$. A
 minimização emprega o algoritmo de Evolução Diferencial
-(\autoref{alg:autotuning}), executando a simulação em um horizonte reduzido que
+(\autoref{fig:fluxo_autotuning}), executando a simulação em um horizonte reduzido que
 cobre os patamares mais exigentes.
 
-\begin{algorithm}[H]
-\caption{Ajuste automático de ganhos (offline)}
-\label{alg:autotuning}
-\begin{algorithmic}[1]
-\Require ponto inicial $\mathbf{x}_0$, limites $\mathcal{B}$, perfil reduzido
-\Function{Custo}{$\mathbf{x}$}
-    \State $\Gamma \gets (+1,-1,+1)\odot 10^{\mathbf{x}}$
-    \State $(K_{s1},K_{s2},K_t) \gets \Gamma / T_s$
-    \State $\textbf{out} \gets$ \Call{Simular}{$K_{s1},K_{s2},K_t$}
-    \If{$\textbf{out}$ não é finito} \State \Return penalidade elevada \EndIf
-    \State \Return $J(\textbf{out})$ \Comment{Eq.~\eqref{eq:custo_autotuning}}
-\EndFunction
-\State $\mathbf{x}^{\star} \gets \displaystyle\operatorname*{arg\,min}_{\mathbf{x}\in\mathcal{B}}\ \textsc{Custo}(\mathbf{x})$
-    \Comment{Evolução Diferencial}
-\State \Return $\Gamma^{\star} = (+1,-1,+1)\odot 10^{\mathbf{x}^{\star}}$
-\end{algorithmic}
-\end{algorithm}
+\begin{figure}[H]
+    \centering
+    \caption{Fluxo do ajuste automático dos ganhos do observador}
+    \label{fig:fluxo_autotuning}
+    \begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=1cm, text width=2.7cm},
+        dec/.style={draw, diamond, aspect=2, align=center, inner sep=1pt, font=\footnotesize},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[box] (pop)  at (0,0)    {População de\\candidatos $\mathbf{x}$};
+        \node[box] (gan)  at (3.5,0)  {$\Gamma = (+,-,+)\,10^{\mathbf{x}}$\\$K = \Gamma/T_s$};
+        \node[box] (sim)  at (7.0,0)  {Simula planta\\e observador};
+        \node[box] (cus)  at (10.5,0) {Custo $J$\\(\autoref{eq:custo_autotuning})};
+        \node[dec] (conv) at (10.5,-2.2) {Convergiu?};
+        \node[box] (de)   at (5.25,-2.2) {Evolução Diferencial\\gera novos candidatos};
+        \node[box, fill=black!5] (fim) at (10.5,-4.2) {Ganhos $\Gamma^{\star}$};
+
+        \draw[arrow] (pop) -- (gan);
+        \draw[arrow] (gan) -- (sim);
+        \draw[arrow] (sim) -- (cus);
+        \draw[arrow] (cus) -- (conv);
+        \draw[arrow] (conv) -- node[above, font=\scriptsize]{não} (de);
+        \draw[arrow] (de) -| (pop);
+        \draw[arrow] (conv) -- node[right, font=\scriptsize]{sim} (fim);
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 A natureza não-convexa de $J$, decorrente do \textit{chattering} e das saturações
 da planta, justifica a adoção de um método de otimização livre de gradiente. Os

@@ -70,30 +70,39 @@ MCU: **CH32V307VTC6** (RISC-V, 144 MHz).
 |------|-----------|--------|--------|
 | PA0 | ADC1 CH0 | air_speed (Pitot) | `adc1` group1 |
 | PA1 | ADC1 CH1 | temperature_battery (termistor bateria) | `adc1` group2 |
-| PA2 | SPI1 CS | W25Q flash chip-select | `spi1` |
+| PA2 | (SPI1 CS) | reserva W25Q — SPI1 desligado | `spi1` (disabled) |
 | PA3 | ADC1 CH3 | temperature_motor (termistor motor) | `adc1` group3 |
-| PA5 | SPI1 SCK | W25Q flash clock | `spi1` |
-| PA6 | SPI1 MISO | W25Q flash dado saída | `spi1` |
-| PA7 | SPI1 MOSI | W25Q flash dado entrada | `spi1` |
+| PA5 | (SPI1 SCK) | reserva W25Q — SPI1 desligado | `spi1` (disabled) |
+| PA6 | (SPI1 MISO) | reserva W25Q — SPI1 desligado | `spi1` (disabled) |
+| PA7 | (SPI1 MOSI) | reserva W25Q — SPI1 desligado | `spi1` (disabled) |
 | PA9 | USART1 TX | Console / shell / log | `usart1` |
 | PA10 | USART1 RX | Console / shell / log | `usart1` |
-| PB0 | TIM3 CH3 (capture) | Contador de pulsos RPM | `rpm_capture_pin` |
+| PA15 | GPIO (saída) | LED vermelho de status (ativa alta) | `led_red` |
+| PB0 | TIM3 CH3 (capture) | Contador de pulsos RPM (sem pull) | `rpm_capture_pin` |
+| PB4 | GPIO (saída) | LED verde de status (ativa alta) | `led_green` |
 | PB6 | TIM4 CH1 (PWM) | Sinal ESC (50 Hz, 1000-2000 µs) | `pwm4` / `esc_motor` |
 | PB10 | I2C2 SCL | I2C2 — EEPROM FT24C32A (0x50) | `i2c2` |
 | PB11 | I2C2 SDA | I2C2 — EEPROM FT24C32A (0x50) | `i2c2` |
-| PB12 | GPIO (saída) | Relay principal de potência | `relay_power` |
-| PB13 | GPIO (saída) | Relay de pré-carga (soft-start) | `relay_precharge` |
+| PB12 | GPIO (saída) | Relay principal de potência — **invertido** (0 = liga) | `relay_power` |
+| PB13 | GPIO (saída) | Relay de pré-carga — **invertido** (0 = liga) | `relay_precharge` |
 | PC0 | reservado | PHY LINK LED interno — não usar como ADC | — |
 | PC1 | reservado | PHY ACT LED interno — não usar como ADC | — |
 | PC2 | ADC2 CH12 | spare (não mapeado no TELEMETRY_LOG) | `adc2` group3 |
 | PC3 | ADC2 CH13 | v_batt (tensão bateria) | `adc2` group1 |
 | PC4 | ADC2 CH14 | i_batt (corrente bateria) | `adc2` group2 |
 | PC6-PC9 | ETH (MAC) | RXP/RXN/TXP/TXN | `mac` |
+| PD1 | GPIO (entrada) | Sinal de emergência: 0 V = desliga, 3 V = liga (pull-down) | `emergency_button` |
 | PE0-PE5 | GPIO (saída) | HX711[0-5] PD_SCK | `hx711_sck_pins` |
-| PE6-PE11 | GPIO (entrada) | HX711[0-5] DOUT | `hx711_dout_pins` |
+| PE6-PE11 | GPIO (entrada) | HX711[0-5] DOUT (sem pull) | `hx711_dout_pins` |
 | PE15 | GPIO (saída) | LED "rede online" / MCU_Sig_Ready | `led0` (alias) |
 
 ### ADC — dual simultâneo via DMA
+
+> ⚠ **Desativado nesta versão da placa** (circuitos analógicos não montados
+> por tempo de montagem): `#define HAL_DISABLE_ADC` em `lib/OS/HAL_prm.h`,
+> vale para HW e native_sim. v_batt/i_batt/temperaturas/air_speed saem 0 na
+> telemetria e o `Security_Manager` não checa a faixa da bateria. A
+> descrição abaixo vale quando for religado.
 
 Driver out-of-tree `drivers/adc/adc_ch32v307.c` (MMIO direto, DMA circular,
 12 bits). ADC1 é master (com DMA), ADC2 é slave simultâneo. Cada word DMA
@@ -151,6 +160,9 @@ Input capture, janela 100 ms. `(pulsos / 14) * 600 = RPM`. MMIO direto (sem driv
 
 ### Relay — PB12 (power) / PB13 (precharge)
 
+Saídas **invertidas** (0 no pino = relé fechado), declaradas como
+`GPIO_ACTIVE_LOW` no DTS — o HAL segue escrevendo 1 para fechar.
+
 Sequência obrigatória:
 - **Energizar:** PB13 ON → `k_sleep(3000 ms)` → PB12 ON
 - **Desenergizar:** PB12 OFF → PB13 OFF (sem delay)
@@ -173,7 +185,16 @@ removido — era tentativa de fix sem efeito.
 - Link UP → PE15 HIGH
 - Link DOWN → PE15 LOW
 
-PE15 também alimenta a porta AND que habilita o SSR de 100 A (junto com PD2).
+### Emergência — PD1
+
+O botão de emergência fica no caminho de 12 V que alimenta as bobinas dos
+relés (12 V → botão → relés) — o corte é **físico**, sem porta AND nem
+participação do micro. O PD1 só **lê** a saída do botão através de um divisor
+12 V → 3 V: **0 V = desliga (apertado), 3 V = liga**. O PE15 virou apenas LED.
+DTS `GPIO_ACTIVE_LOW` (o nó descreve a *emergência*), pull-down interno — fio
+solto cai em emergência. `HAL_Emergency_Is_Pressed()` → 1 quando o pino está
+em 0 V; o `Security_Manager` lê a cada despacho de sensor (HX711/RPM, já que o
+ADC está desligado), dispara a parada e a libera quando o sinal volta a 3 V.
 
 ### SPI1 / W25Q Flash — PA5/PA6/PA7/PA2
 

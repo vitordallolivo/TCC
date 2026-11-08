@@ -298,7 +298,20 @@ diálogos da aplicação.
 
 Para que essa parametrização interativa e o monitoramento operem com alta confiabilidade, mitigando erros de interpretação de dados entre diferentes plataformas, o sistema adota uma estratégia de padronização baseada na linguagem de serialização YAML (\textit{YAML Ain't Markup Language}). A implementação utiliza arquivos de descrição que definem as estruturas fundamentais de telemetria (\textit{logs}), comandos (\textit{CMD}) e configurações da interface.
 
-Como ilustrado na \autoref{fig:yaml_example_config}, essa abordagem padroniza e centraliza a configuração do projeto em cinco arquivos YAML: \textit{commands.yaml} (comandos de texto do \textit{TinyTerminal}), \textit{user\_prefs.yaml} (preferências da janela principal), \textit{plots.yaml} (mapeamento das variáveis de telemetria para os gráficos) e os arquivos de cada placa, \textit{SIBA.yaml} e \textit{SAME.yaml}. Os arquivos de placa alimentam dois caminhos independentes: em tempo de compilação, o \textit{script} auxiliar \textit{generate.py} os processa para gerar os cabeçalhos C compartilhados pelo \textit{firmware}; em tempo de execução, o \textit{TinyTerminal} os lê para resolver comandos de texto no mesmo formato binário. Um terceiro caminho é particular à SAME: os diálogos de calibração e estimação (motor, hélice, ganhos do observador) não só leem o \textit{SAME.yaml} como também escrevem de volta nele os resultados obtidos --- diferente da calibração de sensor via comando de rede (\autoref{fig:seq_calibracao}), que fica só na memória volátil da placa, esses parâmetros do motor persistem em disco entre sessões. Garante-se, assim, que \textit{firmware} e aplicação \textit{desktop} compartilhem a mesma fonte de dados, e que o ajuste feito numa sessão da interface esteja disponível na próxima.
+A configuração do projeto fica em cinco arquivos YAML, e a
+\autoref{fig:yaml_example_config} mostra quem usa cada um. Os arquivos das
+placas, \textit{SIBA.yaml} e \textit{SAME.yaml}, descrevem o protocolo e são
+usados em dois momentos: na compilação, o \textit{script} \textit{generate.py}
+gera a partir deles os cabeçalhos C do \textit{firmware}; na execução, o
+\textit{TinyTerminal} os lê para converter um comando de texto no mesmo
+pacote binário. Como o \textit{firmware} e a interface partem do mesmo arquivo,
+os dois lados interpretam os pacotes da mesma forma. Os demais arquivos são só
+da interface: \textit{commands.yaml} define os comandos do
+\textit{TinyTerminal}, \textit{plots.yaml} associa as variáveis de telemetria
+aos gráficos e \textit{user\_prefs.yaml} guarda as preferências da janela
+principal. Os diálogos de calibração e estimação também gravam no
+\textit{SAME.yaml} os parâmetros obtidos (motor, hélice e ganhos do
+observador), que assim ficam disponíveis na sessão seguinte.
 
 O pacote de telemetria (\texttt{TELEMETRY\_LOG}) enviado em sentido inverso
 segue a mesma lógica de geração, com campos específicos por placa.
@@ -307,48 +320,44 @@ segue a mesma lógica de geração, com campos específicos por placa.
     \centering
     \caption{Fluxo de uso dos arquivos YAML para configuração integrada da GUI e do \textit{firmware}.}
     \label{fig:yaml_example_config}
-    \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-        font=\small,
-        caller/.style={draw, rounded corners, align=center, minimum width=3.4cm, minimum height=1cm},
-        yamlitem/.style={align=left, font=\small\itshape},
-        outbox/.style={align=left, text width=4.2cm, font=\small},
-        arrow/.style={-{Latex}, thick},
-        barrow/.style={{Latex}-{Latex}, thick},
-        elabel/.style={font=\scriptsize, align=center, text width=2.6cm}
-    ]
-        % Caixa única "Config" (centro), com os 5 YAMLs listados dentro
-        \node[draw, thick, rounded corners, minimum width=4.2cm, minimum height=10.4cm] (cfgbox) at (5.5,3) {};
-        \node[font=\bfseries] at (5.5,7.6) {Config};
-        \node[yamlitem] at (5.5,6.4) {commands.yaml};
-        \node[yamlitem] at (5.5,5.2) {user\_prefs.yaml};
-        \node[yamlitem] at (5.5,4) {plots.yaml};
-        \node[yamlitem] at (5.5,2.8) {SIBA.yaml};
-        \node[yamlitem] at (5.5,1.6) {SAME.yaml};
-
-        % Chamadores (coluna esquerda)
-        \node[caller] (tiny) at (0,7.5) {\textit{TinyTerminal}\\(execução)};
-        \node[caller] (main) at (0,4.5) {Janela principal};
-        \node[caller] (gen)  at (0,1.5) {\textit{generate.py}\\(compilação)};
-        \node[caller] (dial) at (0,-1.5) {Diálogos de\\calibração/estimação};
-
-        % Resultados (coluna direita)
-        \node[outbox] (out_tiny) at (10.3,7.5) {Resolução de comando de texto para \texttt{CMD} binário};
-        \node[outbox] (out_main) at (10.3,4.5) {Preferências e gráficos configurados};
-        \node[outbox] (out_gen)  at (10.3,1.5) {Cabeçalhos C por placa: \texttt{Common\_Types.h}, \texttt{CMD.h}, \texttt{Log\_Manager.h}, \texttt{CMD\_Core\_prm.h}};
-        \node[outbox] (out_dial) at (10.3,-1.5) {Motor, hélice e ganhos do SMO gravados de volta};
-
-        % Chamador -> Config, com rótulo de quais YAMLs cada um usa
-        \draw[arrow] (tiny) -- (cfgbox.west |- tiny) node[elabel, midway, above]{lê \textit{commands}, \textit{SIBA}, \textit{SAME}};
-        \draw[barrow] (main) -- (cfgbox.west |- main) node[elabel, midway, above]{lê/escreve \textit{user\_prefs}; lê \textit{plots}};
-        \draw[arrow] (gen) -- (cfgbox.west |- gen) node[elabel, midway, above]{lê \textit{SIBA}, \textit{SAME}};
-        \draw[barrow] (dial) -- (cfgbox.west |- dial) node[elabel, midway, above]{lê/escreve \textit{SAME}};
-
-        % Config -> Resultado
-        \draw[arrow] (cfgbox.east |- tiny) -- (out_tiny);
-        \draw[arrow] (cfgbox.east |- main) -- (out_main);
-        \draw[arrow] (cfgbox.east |- gen)  -- (out_gen);
-        \draw[arrow] (cfgbox.east |- dial) -- (out_dial);
+    \resizebox{0.92\textwidth}{!}{%
+    \begin{tikzpicture}[font=\small, >=Latex,
+        arq/.style={draw, fill=yellow!15, rounded corners=2pt, minimum width=3.0cm, minimum height=0.75cm, font=\small\itshape},
+        uso/.style={draw, thick, rounded corners, align=center, minimum width=4.4cm, minimum height=1.2cm, fill=white},
+        le/.style={->, thick},
+        lg/.style={<->, thick, densely dashed}]
+        % arquivos (centro)
+        \node[arq] (same) at (0,4)   {SAME.yaml};
+        \node[arq] (siba) at (0,2.9) {SIBA.yaml};
+        \node[arq] (cmds) at (0,1.8) {commands.yaml};
+        \node[arq] (plot) at (0,0.7) {plots.yaml};
+        \node[arq] (pref) at (0,-0.4){user\_prefs.yaml};
+        % compilação (esquerda)
+        \node[uso] (gen) at (-5.2,3.45) {\textit{generate.py}\\{\footnotesize gera os cabeçalhos C}};
+        \node[uso, fill=black!5] (fw) at (-5.2,1.2) {\textit{Firmware} SIBA e SAME};
+        \draw[le] (same.west) -- (gen.east |- 0,3.65);
+        \draw[le] (siba.west) -- (gen.east |- 0,3.25);
+        \draw[le] (gen) -- (fw);
+        % execução (direita)
+        \node[uso] (dial) at (5.6,4.6) {Diálogos de calibração\\e estimação};
+        \node[uso] (tiny) at (5.6,2.5) {\textit{TinyTerminal}\\{\footnotesize texto $\to$ CMD binário}};
+        \node[uso] (main) at (5.6,0.3) {Janela principal\\{\footnotesize gráficos e preferências}};
+        \draw[lg] (same.east) -- (dial.west);
+        \draw[le] (same.east) -- ([yshift=3mm]tiny.west);
+        \draw[le] (siba.east) -- (tiny.west);
+        \draw[le] (cmds.east) -- ([yshift=-3mm]tiny.west);
+        \draw[le] (plot.east) -- ([yshift=2mm]main.west);
+        \draw[lg] (pref.east) -- ([yshift=-2mm]main.west);
+        % grupos
+        \begin{scope}[on background layer]
+            \node[draw=gray, dashed, rounded corners, fill=blue!3, fit=(gen)(fw), inner sep=8pt,
+                  label={[font=\small\bfseries]above:Compilação}] {};
+            \node[draw=gray, dashed, rounded corners, fill=green!4, fit=(dial)(tiny)(main), inner sep=8pt,
+                  label={[font=\small\bfseries]above:Execução (interface)}] {};
+        \end{scope}
+        % legenda
+        \draw[le] (-2.2,-1.6) -- ++(0.8,0) node[right, font=\footnotesize] {lê};
+        \draw[lg] (0.2,-1.6) -- ++(0.8,0) node[right, font=\footnotesize] {lê e grava};
     \end{tikzpicture}%
     }
 

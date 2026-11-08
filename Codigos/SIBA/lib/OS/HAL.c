@@ -1392,10 +1392,11 @@ bool HAL_Relay_Power_Closed(void)
     return hal_relay_power_closed;
 }
 
-/* ── Botão de emergência (PD2) + LED externo de pronto (PE15) ───────────
- * PD2 é entrada com pull-up interno: 0 no pino = apertado, 1 = solto. A
- * inversão está no DTS (GPIO_ACTIVE_LOW), então gpio_pin_get_dt devolve 1
- * para "apertado" e o código aqui não inverte nada de novo.
+/* ── Sinal de emergência (PD1) + LED externo de pronto (PE15) ───────────
+ * PD1 é entrada com pull-down interno: 0 V no pino = emergência (desliga),
+ * 3 V = pode rodar (liga). A inversão está no DTS (GPIO_ACTIVE_LOW), então
+ * gpio_pin_get_dt devolve 1 para "emergência" e o código aqui não inverte
+ * nada de novo. O pull-down faz fio solto cair em emergência (falha segura).
  * PE15 é saída e acende o LED externo de "sistema pronto".
  * Quem consome os dois é o Security_Manager, a cada despacho de sensor.
  * native_sim: stubs — botão sempre solto, LED só loga a transição. */
@@ -1412,7 +1413,7 @@ int HAL_Emergency_Init(void)
     int r;
 
     if (!device_is_ready(emergency_btn.port)) {
-        LOG_ERR("botao de emergencia (PD2): GPIO nao pronto");
+        LOG_ERR("sinal de emergencia (PD1): GPIO nao pronto");
         return -ENODEV;
     }
     if (!device_is_ready(ready_led.port)) {
@@ -1420,9 +1421,9 @@ int HAL_Emergency_Init(void)
         return -ENODEV;
     }
 
-    r = gpio_pin_configure_dt(&emergency_btn, GPIO_INPUT | GPIO_PULL_UP);
+    r = gpio_pin_configure_dt(&emergency_btn, GPIO_INPUT | GPIO_PULL_DOWN);
     if (r) {
-        LOG_ERR("PD2 configure falhou: %d", r);
+        LOG_ERR("PD1 configure falhou: %d", r);
         return r;
     }
     r = gpio_pin_configure_dt(&ready_led, GPIO_OUTPUT_INACTIVE);
@@ -1431,7 +1432,7 @@ int HAL_Emergency_Init(void)
         return r;
     }
 
-    LOG_INF("HAL Emergencia: PD2(botao, 0=apertado) + PE15(LED pronto) init OK");
+    LOG_INF("HAL Emergencia: PD1(0V=emergencia, 3V=liga) + PE15(LED pronto) init OK");
     return 0;
 }
 
@@ -1439,10 +1440,10 @@ bool HAL_Emergency_Is_Pressed(void)
 {
     int v = gpio_pin_get_dt(&emergency_btn);
     if (v < 0) {
-        LOG_ERR("leitura de PD2 falhou (%d) — tratando como apertado", v);
+        LOG_ERR("leitura de PD1 falhou (%d) — tratando como emergencia", v);
         return true;
     }
-    return v == 1;   /* lógico: 1 = ativo = apertado (DTS marca ACTIVE_LOW) */
+    return v == 1;   /* lógico: 1 = ativo = emergência (DTS marca ACTIVE_LOW) */
 }
 
 void HAL_Ready_Led_Set(bool on)

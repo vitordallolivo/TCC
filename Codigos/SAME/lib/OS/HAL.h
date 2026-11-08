@@ -6,8 +6,8 @@
 #include "HAL_prm.h"
 #include "Common_Types.h"   /* target_type */
 
-/* HAL da SAME — só aquisição, não aciona o motor. ADC1=V_a,V_b,V_c,
- * ADC2=i_a,i_b,i_c. A thread do ADC calibra, faz Clarke, roda um passo do
+/* HAL da SAME — só aquisição, não aciona o motor. ADC1=i_a,i_b,i_c,
+ * ADC2=V_a,V_b,V_c. A thread do ADC calibra, faz Clarke, roda um passo do
  * observador e publica telemetria via OSSI_Submit_Sensor. */
 
 #define HAL_ADC_PRIO     7      /* > prio da same_wq (5): o passo do SMO não espera */
@@ -18,8 +18,8 @@
 #define HAL_ADC_FULL_SCALE  4096U
 
 /* Índice do canal na sequência de cada ADC (ver adc_ch_cfg em HAL.c). */
-#define HAL_ADC1_NUM_CH   3    /* tensões */
-#define HAL_ADC2_NUM_CH   3    /* correntes */
+#define HAL_ADC1_NUM_CH   3    /* correntes */
+#define HAL_ADC2_NUM_CH   3    /* tensões */
 
 /* @brief Inicializa ADCs e sobe a thread de aquisição. @return 0 ou erro. */
 int  HAL_Init(void);

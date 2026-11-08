@@ -1,47 +1,36 @@
 \section{SAME - Sistema de Aquisição do Motor Elétrico}
 \label{sec:same}
 
-O desenvolvimento do Sistema de Aquisição do Motor Elétrico (SAME) teve como
-foco o projeto de um \textit{hardware} dedicado para medição elétrica e a execução
-embarcada do Observador por Modos Deslizantes (SMO). A seleção de componentes e
-o roteamento da placa de circuito impresso (PCB) foram orientados por três
-critérios metodológicos fundamentais:
-
-\begin{enumerate}
-    \item \textbf{Custo global da solução:} priorizou-se a seleção de
-    componentes com alto grau de integração, reduzindo a necessidade de
-    circuitos de condicionamento externos e minimizando o número de camadas da
-    PCB, o que viabilizou a prototipagem iterativa.
-
-    \item \textbf{Espaço ocupado (\textit{Footprint}):} as restrições de área na
-    bancada exigiram a adoção de componentes de montagem em superfície (SMD) e
-    roteamento de alta densidade. O módulo precisava ser compacto o suficiente
-    para ser posicionado próximo às fases do motor sem interferir no escoamento
-    de ar gerado pela hélice.
-
-    \item \textbf{Disponibilidade de mercado:} a consolidação da lista de
-    materiais (BOM --- \textit{Bill of Materials}) foi atrelada aos estoques
-    ativos de fornecedores e linhas de montagem (PCBA), mitigando o risco de
-    atrasos por escassez de silício ou componentes passivos críticos.
-\end{enumerate}
+O Sistema de Aquisição do Motor Elétrico (SAME) mede as tensões e correntes de
+fase do motor e executa embarcado o Observador por Modos Deslizantes (SMO).
 
 A cadeia de medição foi dividida em dois caminhos independentes --- corrente e
 tensão de fase ---, cada um projetado para entregar ao conversor
 analógico-digital (ADC) do CH32V307 um sinal na faixa de entrada do periférico,
 preservando a coerência de fase entre os dois caminhos exigida pelo observador
-(\autoref{sec:same_condicionamento}). O esquemático e o roteamento
-resultantes estão na \autoref{fig:pcb_same}.
+(\autoref{sec:same_condicionamento}). Os dois caminhos ficam numa placa de
+condicionamento própria, a AQ1, por onde passam as três fases do motor; o
+roteamento dela está na \autoref{fig:pcb_same}. As seis saídas da AQ1 chegam
+à placa de desenvolvimento do microcontrolador, montada sobre placa
+perfurada como na SIBA, com a pinagem da \autoref{fig:pinagem_same}: o
+primeiro conversor lê as três correntes e o segundo as três tensões,
+pareados por fase, de modo que a corrente e a tensão de uma mesma fase são
+amostradas no mesmo instante.
 
 \begin{figure}[H]
     \centering
-    \caption{Esquemático e roteamento da placa SAME (espaço reservado)}
+    \caption{Roteamento da placa de condicionamento AQ1 da SAME}
     \label{fig:pcb_same}
-    \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=\textwidth,
-              minimum height=7cm, text width=0.85\textwidth, font=\small]
-              {Exportação do KiCad: esquemático elétrico e vista de
-               roteamento da placa SAME};
-    \end{tikzpicture}
+    \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/placa aq1 SAME.png}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Pinagem da SAME na placa de desenvolvimento do CH32V307VCT6}
+    \label{fig:pinagem_same}
+    \resizebox{\textwidth}{!}{\input{Textuais/Metodologia/Figuras/pinagem_same}}
 
     Fonte: Autor (2026)
 \end{figure}
@@ -50,29 +39,69 @@ resultantes estão na \autoref{fig:pcb_same}.
 \label{sec:same_tensao}
 \label{sec:same_condicionamento}
 
-A aquisição emprega os dois conversores do CH32V307 em modo dual simultâneo: o
-primeiro converte as três tensões de fase e o segundo, as três correntes,
-ambos disparados pelo mesmo instante de amostragem. Cada par tensão--corrente
-de uma mesma fase é, portanto, amostrado junto --- condição necessária para a
-transformada de Clarke e para o observador, que confrontam tensão e corrente
-instante a instante. Como só o primeiro conversor dispõe de linha de
-requisição de acesso direto à memória, o resultado dos dois é entregue em uma
-única transferência de \num{32} bits, com o segundo conversor ocupando a
-metade superior da palavra.
+A aquisição usa os dois conversores do CH32V307 em modo dual simultâneo: o
+primeiro converte as três correntes de fase e o segundo, as três tensões,
+disparados pelo mesmo evento. A corrente e a tensão de uma mesma fase são
+amostradas no mesmo instante, condição para a transformada de Clarke e para o
+observador, que as confrontam amostra a amostra.
 
-O divisor do \textit{clock} do conversor admite apenas as razões \num{2},
-\num{4}, \num{6} e \num{8} sobre o barramento de periféricos, que opera a
-\SI{144}{\mega\hertz}: o menor valor alcançável sem intervir nesse barramento é
-\SI{18}{\mega\hertz}, acima do teto de \SI{14}{\mega\hertz} da
-\autoref{tab:adc_specs}. O ponto de projeto adotado é \SI{12}{\mega\hertz},
-obtido reduzindo o barramento de periféricos à metade. Com tempo de amostragem
-de \num{28,5} ciclos e três canais por conversor, um quadro completo --- as três
-tensões e as três correntes --- consome $(28{,}5+11)\times 3 = 118{,}5$ ciclos,
-ou \SI{9,875}{\micro\second}. A taxa de quadro resultante é de
-\SI{101}{\kilo\hertz}, e é ela que define o período de amostragem $T_s$ do
-observador. A banda útil vai até \SI{50}{\kilo\hertz} por Nyquist
-\cite{oppenheim2009}, bem acima da frequência de chaveamento do ESC, de
-\SI{8}{\kilo\hertz}.
+A taxa de amostragem parte do critério de Nyquist: para que um sinal de banda
+limitada a $f_{max}$ possa ser reconstruído sem rebatimento, a amostragem deve
+ocorrer a $f_s > 2 f_{max}$ \cite{oppenheim2009}. O conteúdo que interessa ao
+observador é a fundamental elétrica e as raias de chaveamento do ESC, em
+\SI{8}{\kilo\hertz}; portanto, a taxa de quadro precisa ficar bem acima de
+\SI{16}{\kilo\hertz}.
+
+A \autoref{fig:adc_clock_quadro} mostra como essa taxa é obtida. O
+\textit{clock} do conversor é limitado a \SI{14}{\mega\hertz}
+(\autoref{tab:adc_specs}) e deriva do barramento de periféricos por um
+divisor que admite apenas as razões \num{2}, \num{4}, \num{6} e \num{8}. Com o
+barramento a \SI{144}{\mega\hertz}, o menor valor possível seria
+\SI{18}{\mega\hertz}, acima do limite; reduzindo o barramento à metade
+(\SI{72}{\mega\hertz}) e dividindo por \num{6}, o conversor opera a
+\SI{12}{\mega\hertz}. Cada canal gasta \num{28,5} ciclos de amostragem e
+\num{11} de conversão, e o quadro com as três fases soma \num{118,5} ciclos,
+ou \SI{9,875}{\micro\second}. A taxa de quadro é de \SI{101}{\kilo\hertz}
+(banda útil de \SI{50}{\kilo\hertz}), e é ela que define o período $T_s$ do
+observador.
+
+\begin{figure}[H]
+    \centering
+    \caption{Cadeia de \textit{clock} do conversor e temporização de um quadro de aquisição}
+    \label{fig:adc_clock_quadro}
+    \begin{tikzpicture}[font=\small, >=Stealth,
+        blk/.style={draw, rounded corners=2pt, align=center, minimum height=0.9cm, inner sep=3pt},
+        amo/.style={draw, fill=cyan!25, minimum height=0.55cm, inner sep=0pt},
+        conv/.style={draw, fill=orange!35, minimum height=0.55cm, inner sep=0pt}]
+        % cadeia de clock
+        \node[blk] (sys) at (0,0) {Sistema\\\SI{144}{\mega\hertz}};
+        \node[blk] (apb) at (3.6,0) {Barramento de\\periféricos \SI{72}{\mega\hertz}};
+        \node[blk] (adc) at (7.6,0) {\textit{Clock} do ADC\\\SI{12}{\mega\hertz}};
+        \node[blk] (con) at (11.2,0) {ADC1 + ADC2\\(dual)};
+        \draw[->, thick] (sys) -- node[above, font=\scriptsize] {$\div 2$} (apb);
+        \draw[->, thick] (apb) -- node[above, font=\scriptsize] {$\div 6$} (adc);
+        \draw[->, thick] (adc) -- (con);
+        % temporização do quadro (39,5 ciclos por fase -> 3,6 cm)
+        \def\ua{2.597}\def\ub{1.003}
+        \foreach \k/\i/\v in {0/a/a,1/b/b,2/c/c} {
+            \pgfmathsetmacro{\xo}{\k*3.6}
+            \node[amo, minimum width=\ua cm, anchor=west] at (\xo,-2.0) {$i_\i$};
+            \node[conv, minimum width=\ub cm, anchor=west] at (\xo+\ua,-2.0) {};
+            \node[amo, minimum width=\ua cm, anchor=west] at (\xo,-2.75) {$v_\v$};
+            \node[conv, minimum width=\ub cm, anchor=west] at (\xo+\ua,-2.75) {};
+        }
+        \node[anchor=east, font=\scriptsize] at (-0.1,-2.0) {ADC1};
+        \node[anchor=east, font=\scriptsize] at (-0.1,-2.75) {ADC2};
+        \draw[decorate, decoration={brace, mirror, amplitude=5pt}] (0,-3.15) -- (10.8,-3.15)
+            node[midway, below=6pt, font=\scriptsize] {quadro: \num{118,5} ciclos $=\SI{9,875}{\micro\second}=T_s$ \quad ($f_s\approx\SI{101}{\kilo\hertz}$)};
+        \draw[decorate, decoration={brace, amplitude=4pt}] (0,-1.6) -- (\ua,-1.6)
+            node[midway, above=4pt, font=\scriptsize] {amostragem: \num{28,5} ciclos};
+        \draw[decorate, decoration={brace, amplitude=4pt}] (\ua,-1.6) -- (3.6,-1.6)
+            node[midway, above=14pt, font=\scriptsize] {conversão: \num{11}};
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
 
 \begin{table}[h]
 \centering
@@ -84,73 +113,32 @@ observador. A banda útil vai até \SI{50}{\kilo\hertz} por Nyquist
 \hline
 Frequência de clock ADC & $f_{ADC}$ & -- & -- & 14 & MHz \\
 Taxa de amostragem & $f_S$ & 0,05 & -- & 1 & MHz \\
-Tensão de referência & $V_{REF+}$ & 2,4 & -- & $V_{DDA}$ & V \\
 Faixa de conversão & $V_{AIN}$ & 0 & -- & $V_{REF+}$ & V \\
-Corrente de referência & $I_{VREF}$ & 160 & 220 & -- & $\mu$A \\
-Corrente de alimentação & $I_{DDA}$ & 480 & 530 & -- & $\mu$A \\
 Impedância de entrada externa & $R_{AIN}$ & -- & -- & 50 & k$\Omega$ \\
-Tempo de calibração & $t_{CAL}$ & -- & 40 & -- & $1/f_{ADC}$ \\
 Tempo de amostragem & $t_s$ & 1,5 & -- & 239,5 & $1/f_{ADC}$ \\
 Tempo total de conversão & $t_{CONV}$ & 14 & -- & 252 & $1/f_{ADC}$ \\
+Erro de \textit{offset} & $E_O$ & -- & -- & ±2 & LSB \\
+Não-linearidade integral & $E_L$ & -- & -- & ±4 & LSB \\
 \hline
 \multicolumn{6}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
 \end{tabular}
 \end{table}
 
-Com o \textit{clock} de \SI{12}{\mega\hertz}, uma conversão isolada leva de
-\SI{1,17}{\micro\second} (\num{14} ciclos) a \SI{21}{\micro\second}
-(\num{252} ciclos). O tempo de amostragem $t_s$ é, assim, o que fixa a taxa de
-quadro, e não uma folga a ser preenchida: \num{28,5} ciclos é o maior valor
-tabelado que ainda mantém o quadro em \SI{10}{\micro\second}. O assentamento do
-sinal na entrada fica a cargo do capacitor do filtro \textit{antialiasing} de
-cada canal, que é quem entrega a carga exigida pelo capacitor de amostragem do
-conversor no instante da aquisição.
-
-A impedância de entrada externa $R_{AIN}$ deve ser limitada para garantir que o erro de amostragem permaneça abaixo de 1/4 LSB, conforme a \autoref{eq:rain_max} \cite{ch32v307_datasheet}.
+Os \num{28,5} ciclos de amostragem são o maior valor tabelado que mantém o
+quadro em \SI{10}{\micro\second}. Esse tempo também limita a impedância da
+fonte ligada ao conversor, para que o erro de amostragem fique abaixo de
+$1/4$ LSB \cite{ch32v307_datasheet}:
 
 \begin{equation}
-R_{AIN} < \frac{t_s}{f_{ADC} \cdot C_{ADC} \cdot \ln(2^{N+2})} - R_{ADC}
+R_{AIN} < \frac{t_s}{f_{ADC} \cdot C_{ADC} \cdot \ln(2^{N+2})} - R_{ADC},
 \label{eq:rain_max}
 \end{equation}
 
-onde $N = 12$~bits, $C_{ADC} = 8$~pF e $R_{ADC} \approx 0{,}8$~k$\Omega$. Esta relação é determinante para o projeto do divisor de tensão: a impedância equivalente de Thévenin vista pela entrada do ADC ($R_1 \parallel R_2$) deve respeitar os limites da Tabela~\ref{tab:rain_max}. Adotando $t_s = 55{,}5$~ciclos (3,96~$\mu$s), $R_{AIN}$ pode chegar a 50~k$\Omega$, relaxando a escolha dos resistores; já com $t_s = 13{,}5$~ciclos, o divisor precisa apresentar impedância abaixo de 11,4~k$\Omega$ sob pena de erro de conversão.
-
-\begin{table}[h]
-\centering
-\caption{Impedância máxima de entrada externa em função do tempo de amostragem.}
-\label{tab:rain_max}
-\begin{tabular}{ccc}
-\hline
-\textbf{$t_s$ (ciclos)} & \textbf{$t_s$ ($\mu$s)} & \textbf{$R_{AIN}^{\text{máx}}$ (k$\Omega$)} \\
-\hline
-1,5 & 0,11 & 0,4 \\
-7,5 & 0,54 & 5,9 \\
-13,5 & 0,96 & 11,4 \\
-28,5 & 2,04 & 25,2 \\
-41,5 & 2,96 & 37,2 \\
-55,5 & 3,96 & 50,0 \\
-\hline
-\multicolumn{3}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
-\end{tabular}
-\end{table}
-
-Os erros inerentes ao ADC de 12 bits são especificados na Tabela~\ref{tab:adc_error}. O \textit{offset} de ±2~LSB é tipicamente removível via calibração, enquanto as não-linearidades diferenciais e integrais representam limitações do circuito integrado. Para $R_{AIN} < 10$~k$\Omega$, o erro total esperado é de aproximadamente ±4~LSB em condição de pior caso.
-
-\begin{table}[h]
-\centering
-\caption{Erros de conversão do ADC 12-bit em operação típica.}
-\label{tab:adc_error}
-\begin{tabular}{lccc}
-\hline
-\textbf{Parâmetro} & \textbf{Símbolo} & \textbf{Typ.} & \textbf{Máx.} \\
-\hline
-Erro de \textit{offset} & $E_O$ & 0 & ±2 LSB \\
-Não-linearidade diferencial & $E_D$ & -- & ±3 LSB \\
-Não-linearidade integral & $E_L$ & -- & ±4 LSB \\
-\hline
-\multicolumn{4}{l}{\small \textit{Fonte: WCH CH32V307 Datasheet \cite{ch32v307_datasheet}}} \\
-\end{tabular}
-\end{table}
+\noindent com $N = 12$~bits, $C_{ADC} = \SI{8}{\pico\farad}$ e
+$R_{ADC} \approx \SI{0,8}{\kilo\ohm}$, o que dá
+$R_{AIN} < \SI{25,2}{\kilo\ohm}$ para \num{28,5} ciclos. O erro de
+\textit{offset} é removido na calibração; a não-linearidade, de até
+±4~LSB, é limitação do próprio conversor.
 
 \subsubsection{Medição de Tensão de Fase}
 \label{sec:same_divisor_tensao}
@@ -199,15 +187,11 @@ pouco mais do dobro da tensão de barramento, folga adotada para o sobressinal d
 comutação --- e a resolução em \SI{14,8}{\milli\volt} por LSB.
 
 A resistência equivalente do divisor é de \SI{7,09}{\kilo\ohm}, abaixo do limite
-de \SI{25,2}{\kilo\ohm} que a Tabela~\ref{tab:rain_max} impõe ao tempo de
+de \SI{25,2}{\kilo\ohm} que a \autoref{eq:rain_max} impõe ao tempo de
 amostragem adotado, de \num{28,5} ciclos.
 
-O capacitor fica em aberto nesta etapa. Fixadas as resistências, ele é o único
-grau de liberdade que resta, e seu valor decorre da frequência de corte
-adotada. Essa escolha não se resolve pelo projeto do divisor: depende do ruído
-medido no sensor, do rebatimento no conversor e da banda que o observador
-efetivamente aproveita, e por isso é tratada com os dados de bancada na
-\autoref{sec:resultado_fc}.
+Fixadas as resistências, o capacitor é o único grau de liberdade que resta, e
+seu valor decorre da frequência de corte adotada.
 
 O divisor consome \SI{218}{\micro\ampere} com o
 barramento em \SI{30}{\volt}, dissipando \SI{6,2}{\milli\watt} em $R_1$.
@@ -265,9 +249,9 @@ ilustra essa topologia.
         (100:2.0) arc (100:440:2.0) -- (80:1.3) arc (80:-260:1.3) -- cycle;
     \draw[->, thick, blue!55!black] (200:1.65) arc (200:260:1.65);
     \draw[->, thick, blue!55!black] (280:1.65) arc (280:340:1.65);
-    \node[blue!55!black] at (270:1.95) {$\Phi$};
-    \draw[thick, ->] (-2.6,0) -- (2.6,0) node[right] {$i(t)$};
-    \node[below] at (0,-2.3) {condutor de potência};
+    \node[blue!55!black] at (0,-1.62) {$\Phi$};
+    \draw[thick, ->] (-2.6,0) -- (4.7,0) node[right] {$i(t)$};
+    \node[above, font=\footnotesize] at (3.45,0.02) {condutor de potência};
     \fill[black] (-0.15,1.48) rectangle (0.15,1.82);
     \draw[gray] (0.15,1.68) -- (1.1,2.15);
     \node[right] at (1.1,2.15) {Sensor Hall};
@@ -489,44 +473,18 @@ conversão e ao mesmo tempo estabelece o filtro \textit{antialiasing}.
     Fonte: Autor (2026)
 \end{figure}
 
-A topologia é a mesma do caminho de tensão, e valem as
-\autoref{eq:cond_k} e \autoref{eq:cond_fc}. Com $R_1 = \SI{2,0}{\kilo\ohm}$ e
-$R_2 = \SI{18}{\kilo\ohm}$ resulta $k = 0{,}900$, o que leva a faixa de
-$\pm\SI{60}{\ampere}$ para \SIrange{1,225}{3,250}{\volt}, com corrente nula em
-\SI{2,238}{\volt}; o topo da janela de conversão só é atingido em
-$+\SI{62,9}{\ampere}$. A resistência equivalente é
-$R_1 \parallel R_2 = \SI{1,8}{\kilo\ohm}$. O capacitor, como no caminho de
-tensão, fica em aberto nesta etapa: os dois ramos recebem a mesma frequência de
-corte, de modo que o atraso do filtro seja comum a ambos e se cancele na
-comparação entre tensão e corrente exigida pelo observador. O valor adotado é
-justificado na \autoref{sec:resultado_fc}.
+Com $R_1 = \SI{2,0}{\kilo\ohm}$ e $R_2 = \SI{18}{\kilo\ohm}$, $k = 0{,}900$:
+a faixa de $\pm\SI{60}{\ampere}$ ocupa de \SI{1,225}{\volt} a
+\SI{3,250}{\volt}, com corrente nula em \SI{2,238}{\volt}. A frequência de
+corte é a mesma do caminho de tensão, para que o atraso do filtro seja igual
+nos dois ramos. A carga imposta ao sensor, \SI{181}{\micro\ampere} em fundo de
+escala, fica abaixo da corrente de saída mínima de \SI{1}{\milli\ampere}, e o
+erro de ganho da \autoref{eq:cond_ganho} cai para \SI{0,15}{\percent},
+absorvido na calibração.
 
-Duas correntes precisam ser verificadas nessa topologia, já que não há
-amplificador isolando o sensor do ADC. A primeira é a carga que o divisor impõe
-ao sensor: \SI{181}{\micro\ampere} em fundo de escala, aos quais se soma o pico
-que carrega o capacitor na frequência de chaveamento. O valor de $C$ é escolhido
-de modo que a soma permaneça abaixo da corrente de saída mínima de catálogo,
-\SI{1}{\milli\ampere}. A segunda é a
-corrente de amostragem do próprio ADC, cujo erro de ganho neste caminho é o da
-\autoref{eq:cond_ganho_i}. Esse erro é absorvido na calibração, que por isso é
-feita sobre a cadeia completa, com o divisor montado, e não sobre o sensor
-isolado.
-
-\begin{equation}
-\varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
-= \SI{1,8}{\kilo\ohm} \times \SI{101}{\kilo\hertz} \times \SI{8}{\pico\farad}
-= \SI{0,15}{\percent}
-\label{eq:cond_ganho_i}
-\end{equation}
-
-O ganho da cadeia resulta em
-$\SI{18,75}{\milli\volt\per\ampere} \times 0{,}900 =
-\SI{16,88}{\milli\volt\per\ampere}$, o que dá uma resolução de
-\SI{47,7}{\milli\ampere} por LSB no ADC de 12~bits. A corrente é reconstruída
-em \textit{firmware} pela razão entre a tensão convertida menos o
-\textit{offset} e esse ganho, com o \textit{offset} levantado no início de cada
-ensaio a corrente nula --- o que absorve conjuntamente a tolerância de $V_O$, a
-deriva da alimentação do sensor e a fuga estática da entrada do ADC.
+O ganho da cadeia é de \SI{16,88}{\milli\volt\per\ampere}, ou
+\SI{47,7}{\milli\ampere} por LSB. O \textit{offset} é medido a corrente nula
+no início de cada ensaio.
 
 
 \subsection{Arquitetura de \textit{Firmware} do Observador}

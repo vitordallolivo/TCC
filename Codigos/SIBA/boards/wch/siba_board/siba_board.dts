@@ -47,33 +47,41 @@
         };
     };
 
-    /* PD2 — entrada: BOTÃO DE PARADA DE EMERGÊNCIA.
-     * Nível físico no pino: 0 = apertado (emergência), 1 = solto (pode
-     * rodar). GPIO_ACTIVE_LOW declara essa inversão, de modo que a API
-     * lógica do Zephyr (gpio_pin_get_dt) devolve 1 quando apertado — o
-     * HAL não repete a inversão em código. Configurado com pull-up
-     * interno, já que o botão fecha contra o terra. */
+    /* PD1 — entrada: SINAL DE EMERGÊNCIA (circuito externo).
+     * Nível físico no pino: 0 V = desliga (emergência), 3 V = liga (pode
+     * rodar) — o sinal de "liga" é ativo alto. O nó descreve a EMERGÊNCIA,
+     * então GPIO_ACTIVE_LOW: a API lógica do Zephyr (gpio_pin_get_dt)
+     * devolve 1 quando o pino está em 0 V — o HAL não repete a inversão.
+     * Configurado com pull-DOWN interno: fio rompido/solto = 0 V =
+     * emergência (falha segura). */
     emergency_button: emergency-button {
         compatible = "siba,gpio-array";
-        gpios = <&gpiod 2 GPIO_ACTIVE_LOW>;
+        gpios = <&gpiod 1 GPIO_ACTIVE_LOW>;
     };
 
     /* ── Relés de potência ─────────────────────────────────────────────── *
      * Sequência de energização obrigatória (ver Security_Manager):         *
      *   LIGAR:   relay_precharge ON → espera 3 s → relay_power ON         *
      *   DESLIGAR: relay_power OFF → relay_precharge OFF                   *
-     * A pré-carga limita a corrente de inrush nos capacitores do ESC.    */
+     * A pré-carga limita a corrente de inrush nos capacitores do ESC.    *
+     * Lógica INVERTIDA no driver dos relés: 0 no pino = relé fechado.    *
+     * GPIO_ACTIVE_LOW absorve a inversão — o HAL continua usando         *
+     * gpio_pin_set_dt(…, 1) para "fechar" e GPIO_OUTPUT_INACTIVE (pino   *
+     * em 1) para abrir no boot.                                          */
     relay_power: relay-power {
         compatible = "siba,gpio-array";
-        gpios = <&gpiob 12 GPIO_ACTIVE_HIGH>;
+        gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
     };
 
     relay_precharge: relay-precharge {
         compatible = "siba,gpio-array";
-        gpios = <&gpiob 13 GPIO_ACTIVE_HIGH>;
+        gpios = <&gpiob 13 GPIO_ACTIVE_LOW>;
     };
 
     /* ── ADC dual simultâneo (master=ADC1, slave=ADC2) ─────────────────── *
+     * ⚠ NÃO MONTADO nesta versão da placa (tempo de montagem): o uso está  *
+     * desligado em lib/OS/HAL_prm.h (HAL_DISABLE_ADC). Os nós ficam aqui   *
+     * para religar sem mexer no DTS.                                       *
      * ADC1 master: PA0=Pitot, PA1=termistor_bat, PA3=termistor_motor       *
      * ADC2 slave:  PC3=v_batt, PC4=i_batt, PC2=reserva                    *
      * ADC2 não tem linha DMA própria no CH32V307 — o resultado sai pela    *
@@ -243,10 +251,10 @@
         };
     };
 
+    /* PB0 sem pull — o sensor de RPM define o nível. */
     tim3_ch3_pb0: tim3_ch3_pb0 {
         group1 {
             pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 0, TIM3, 0)>;
-            bias-pull-up;
         };
     };
 

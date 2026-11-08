@@ -194,7 +194,20 @@ out = m.run_sim_core(N, Ts, RPM_target_profile, m.PHASE_TEST_MODE,
 w_m_rad   = out[0] * (math.pi / 30.0)     # vel. real  [rad/s]
 w_est_rad = out[1] * (math.pi / 30.0)     # vel. estimada
 tq_real   = out[2]                        # torque real
-tq_est    = out[3]                        # torque estimado (SMO)
+tq_smo    = out[3]                        # torque do SMO (correntes ESTIMADAS)
+
+# Torque para a identificação: correntes MEDIDAS projetadas no ângulo do
+# observador.  T = 1,5*Ke*p*(f_a(th)*i_a + f_b(th)*i_b).  O torque interno do
+# SMO usa as correntes estimadas, cuja trepidação (chattering) não tem média
+# nula e enviesa a média do patamar (+44 % a +115 % com hélices reais, onde o
+# torque médio é ~20x menor que a ondulação do acionamento em seis passos).
+# Com a corrente medida o viés some (erro < 0,5 %); é o mesmo critério do
+# ensaio de bancada (corrente medida projetada no ângulo estimado).
+_fs = np.vectorize(lambda th: m.f_shape(th, m.SMO_BEMF))
+th_hat = out[5]
+f_al = _fs(th_hat)
+f_be = (1.0/math.sqrt(3.0)) * (_fs(th_hat - 2*math.pi/3) - _fs(th_hat - 4*math.pi/3))
+tq_est = 1.5 * m.Ke * m.p * (f_al*out[19] + f_be*out[20])
 
 target_diff = np.append(np.diff(RPM_target_profile), 0)
 mascara = (target_diff == 0) & (RPM_target_profile > RPM_MIN)
@@ -222,8 +235,11 @@ for s, e in zip(starts, ends):
 
     tq_real_avg = np.mean(tr_v)
     tq_smo_rms  = np.mean(ts_v)
-    k_r = tq_real_avg / (np.mean(w_v)**2)
-    k_s = tq_smo_rms  / (np.mean(w_s_v)**2)
+    # desconta as perdas a vazio (B*w + tau_c) antes de atribuir o torque à
+    # hélice — zero se o simulador roda sem perdas (SMO_B_LOSS/SMO_TAU_C)
+    B_l, tau_c = getattr(m, "B_loss", 0.0), getattr(m, "TAU_C", 0.0)
+    k_r = (tq_real_avg - B_l*np.mean(w_v)   - tau_c) / (np.mean(w_v)**2)
+    k_s = (tq_smo_rms  - B_l*np.mean(w_s_v) - tau_c) / (np.mean(w_s_v)**2)
 
     k_real_list.append(k_r); k_smo_list.append(k_s)
     rpm_patamares.append(RPM_target_profile[idx_s])
@@ -243,12 +259,10 @@ print("=" * len(hdr))
 # ----------------------------------------------------------------------
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
 
-ax1.plot(t, tq_real, color='silver', alpha=0.3, label='Te Real (Bruto)')
-ax1.plot(t, tq_est,  color='green',  alpha=0.3, label='Te SMO (Bruto)')
 fs = 1.0 / Ts
 b, a = butter(1, LP_HZ / (0.5 * fs), btype='low')
-ax1.plot(t, lfilter(b, a, tq_real), 'b',   lw=2,   label='Te Real (Tendência Média)')
-ax1.plot(t, lfilter(b, a, tq_est),  'r--', lw=1.5, label='Te SMO (Tendência Filtrada)')
+ax1.plot(t, lfilter(b, a, tq_real), 'b',   lw=2,   label='Te real (filtrado)')
+ax1.plot(t, lfilter(b, a, tq_est),  'r--', lw=1.5, label='Te estimado (filtrado)')
 ax1.set_title("Comparativo de Torque: Dinâmica Real vs Estimada")
 ax1.set_ylabel("Torque [N.m]"); ax1.legend(loc='upper right'); ax1.grid(True)
 
@@ -256,7 +270,8 @@ ax2.axhline(y=k_load, color='k', ls='--', label='k Nominal (Teórico)')
 if rpm_patamares:
     ax2.scatter(rpm_patamares, k_real_list, c='blue', s=100, label='k Real')
     ax2.scatter(rpm_patamares, k_smo_list, c='red', marker='x', s=100, label='k SMO')
-    ax2.set_ylim(k_load*0.8, k_load*1.2)
+    _todos = list(k_real_list) + list(k_smo_list) + [k_load]
+    ax2.set_ylim(min(_todos)*0.9, max(_todos)*1.1)
 ax2.set_title(f"Identificação do Coeficiente k (Erro Final: {erro_pct:.2f}%)")
 ax2.set_ylabel("Coeficiente k"); ax2.set_xlabel("Velocidade [RPM]")
 ax2.legend(); ax2.grid(True)

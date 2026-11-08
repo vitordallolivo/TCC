@@ -7,6 +7,133 @@ Legenda de status: ✅ escrito · ⏳ não iniciado
 
 ---
 
+## ✅ Pinagem, barramento e fotos da montagem (07/11/2026)
+
+- **Pinagem das placas como diagrama** (aba "micro" do `Imgs/Montagem croqui.xlsx`):
+  `Metodologia/Figuras/pinagem_siba.tex` e `pinagem_same.tex`, TikZ desenhado
+  na posição real dos dois conectores da placa de desenvolvimento, cor por
+  função. Substitui a antiga `tab:pinagem_siba` (removida) e entra como
+  `fig:pinagem_siba` (07_SIBA) e `fig:pinagem_same` (08_SAME). Pinagem
+  atualizada: emergência em PD1; SAME com correntes no ADC1 (PA3/PA1/PA0) e
+  tensões no ADC2 (PC2/PC1/PC0). O xlsx também foi corrigido nesses pontos.
+- **ADC da SIBA não montado**: um parágrafo em 07_SIBA diz que Pitot,
+  termistores e tensão/corrente da bateria não foram montados nesta versão
+  e que o \textit{firmware} desliga a leitura e as verificações ligadas a ela.
+  O circuito do botão (divisor de leitura) **não** entra no texto, a pedido
+  do autor.
+- **Barramento** (aba "barramento" do xlsx), depois fundido com o croqui em
+  `fig:gabinete` (ver abaixo), numa subseção nova, `sec:montagem_gabinete`, em 06_Bancada.
+  Os parágrafos de 06_Bancada que estavam errados foram reescritos: Pitot
+  "via I2C", "dois buck para 12 V e 5 V", "tensão de linha" na SAME.
+- **Fotos**: `placa aq1 SAME.png` substitui o espaço reservado
+  `fig:pcb_same`. `pcb_feita_aq1`, `processo montagem` (1 e 2, em
+  subfiguras), `montagem_finalizada` e `gabinete` entram em
+  `sec:resultado_montagem_final`, que perdeu o "(placeholder)" do título e o
+  espaço reservado de "conexões internas". As fotos entram como cópias `.jpg`
+  (2000 px) geradas a partir dos `.png`, porque os PNG de 9--10 MB levavam o
+  PDF de 13 para 95 MB; com os JPG ele fica em 15,7 MB.
+
+- **3.8.1 enxugada** (08_SAME, abertura de `sec:same_condicionamento`):
+  texto reduzido a três parágrafos: modo dual (ADC1 lê as correntes e ADC2
+  as tensões, pareados por fase), critério de Nyquist com
+  `\cite{oppenheim2009}` e cadeia de *clock* 144 → 72 → 12 MHz, com o motivo
+  (razões 2/4/6/8 e teto de 14 MHz). Figura TikZ nova
+  `fig:adc_clock_quadro` (cadeia de *clock* + temporização do quadro).
+  `tab:rain_max` e `tab:adc_error` removidas: o limite de 25,2 kΩ ficou no
+  texto e os erros de *offset*/INL entraram na `tab:adc_specs`. Removido o
+  trecho "Essa escolha não se resolve pelo projeto do divisor..." da
+  subseção de tensão de fase.
+- **`fig:topologia_sensor_corrente`**: Φ subiu para a altura do fim da seta
+  de fluxo, e "condutor de potência" passou para cima da seta de $i(t)$.
+- **`fig:diagrama_blocos`** simplificada: a fonte CA/CC vai em 12 V direto ao
+  *buck* de 5 V. Saíram a chave, o *buck* da bateria e os diodos de saída.
+
+- **Caminho de corrente (08_SAME)** enxugado para dois parágrafos curtos: o
+  método já foi mostrado no caminho de tensão, então ficaram só os valores (k,
+  faixa, carga no sensor, erro de ganho de 0,15 % e ganho da cadeia). Saíram a
+  equação duplicada `eq:cond_ganho_i` e a remissão a `sec:resultado_fc`.
+- **Φ** na `fig:topologia_sensor_corrente` voltou ao x original (centro) e
+  subiu até a altura das setas de fluxo.
+- **`fig:yaml_example_config` refeita**: cada arquivo YAML liga direto a quem
+  o usa, separado em "Compilação" (*generate.py* → *firmware*) e "Execução"
+  (diálogos, *TinyTerminal*, janela principal), com seta simples para leitura
+  e tracejada dupla para leitura e gravação. O parágrafo que a apresenta foi
+  reescrito para seguir a figura.
+
+- **Croqui + barramento numa figura só** (`fig:gabinete`, em
+  `Metodologia/Figuras/gabinete.tex`): gabinete em TikZ com as fotos
+  recortadas do `croqui-tcc.drawio.png` (motor, ESC, fonte, *buck*, trilho DIN;
+  recortes em `Imgs/Metodologia/croqui/`), com a régua de 13 bornes e as
+  ligações de potência, fases, 12/5 V, emergência, comando dos relés e
+  Ethernet. Substitui `fig:croqui_gabinete` e `fig:barramento` (o arquivo
+  `barramento.tex` foi apagado e as referências redirecionadas). A figura
+  flutua (`[htbp]`) porque não cabe numa página junto com `fig:diagrama_blocos`.
+
+- **`fig:bancada_fisica` removida** (espaço reservado): a foto já existe na
+  Introdução; o texto de 03_ModelagemFisica agora aponta para
+  `fig:CMP_concepcao` (Figura 2).
+- **Conclusão removida** para ser reescrita: apagados `Conclusao/00_Conclusao.tex`
+  e `Conclusao/01_Limitacoes.tex`. O capítulo mantém só "Sugestões para
+  Trabalhos Futuros", com o item novo sobre o impacto da temperatura da
+  bateria na tração.
+- **`fig:diagrama_blocos` e `fig:gabinete` fixadas com `[H]`**, para ficarem
+  no lugar do texto. Sobra um espaço em branco no fim da página anterior.
+
+- **Rodada de 07/11 (tarde):**
+  - ESC fica em 8 kHz. A 3.8 perdeu a lista de critérios de PCB industrial,
+    porque a AQ1 é de fenolite feita à mão. No xlsx, o resistor de pré-carga
+    passou para o contato do relé de pré-carga.
+  - Removidas as figuras reservadas `fig:resultado_motor_helice_montado` e
+    `fig:resultado_bancada_operacao`, junto com a frase que as citava.
+  - "Ensaios de Bancada com o Motor" passou para depois de SIBA e SAME
+    (ordem em `Conclusao.tex`).
+  - A abertura de "Modelagem do SMO" (Resultados) virou um parágrafo só.
+  - **Todos os `algorithm` foram removidos** (sim_core, pi, planta, smo, pll,
+    autotuning, kq_identificacao). Onde já havia diagrama equivalente, o texto
+    passou a citar a figura; para o *autotuning* entrou o fluxograma
+    `fig:fluxo_autotuning`. Na `fig:fluxo_ensaio_helice`, a seta de "próximo
+    patamar" agora volta por baixo, rente aos blocos.
+  - `fig:Metodologia_SystemManager_Siba` refeita em TikZ, com os 4
+    gerenciadores do firmware (o PNG tinha um "LoadCells_Manager" que não
+    existe).
+  - **Hélices**: APC 15x6E e 17x10E, só torque e $C_Q$ (a tração fica para a
+    equipe), até 10000 RPM. A Metodologia `sec:coef_aero_bancada` foi
+    reescrita. Nos Resultados, `sec:resultado_coef_aero_bancada` traz a
+    `tab:apc_estatico` e as figuras `fig:helice_torque` e `fig:helice_cq`, com
+    a curva da APC em J = 0. Os dados estão em `Imgs/Resultados/helice/`:
+    `extrai_apc.py` gera `apc_*_estatico.dat` a partir dos `PER3_*.dat`, e
+    `medido_*.dat` é onde entram os patamares medidos (rpm, Te, rho); a figura
+    calcula Q e C_Q descontando $B\omega+\tau_c$.
+  - **Correção na Revisão**: a `eq:Prop_coeff1`/`eq:Prop_coeff2` tinha a
+    conversão de rotação errada ($3600/4\pi^2$ com $n = 2\pi\omega/60$).
+    Agora $n = \omega/2\pi$, $C_Q = 4\pi^2 Q/(\rho\omega^2D^5)$, e o
+    $\tau_c$ entra junto com $B\omega$.
+
+- **Simulação com as hélices reais** ($k_Q$ = 1,00e-6 na 15x6E e 2,61e-6 na
+  17x10E, a partir do $C_Q$ da APC entre 1000 e 3000 RPM). `autotune_cost.py`
+  rodou para cada hélice: os ganhos estão na `tab:ganhos_helices`, os arquivos
+  em `Scripts/smo_gains_<hélice>.json`, e as figuras do observador (17x10E)
+  foram para `Imgs/Desenvolvimento`.
+  **Método do coeficiente trocado**: o torque passa a ser calculado com as
+  correntes medidas projetadas no ângulo estimado
+  (`eq:torque_corrente_medida`, em 02_MotorBLDC), em vez do torque interno do
+  SMO feito com as correntes estimadas. O $k_Q$ fica a 0,17 % e 0,23 % do
+  nominal (`tab:resultado_identificacao_cq`, `fig:patamar_coeff_CQ` com uma
+  subfigura por hélice). Os diagramas do observador agora mostram a corrente
+  medida entrando no cálculo de torque. A rodada com as perdas $B\omega+\tau_c$
+  na planta dá 0,30 % e 0,18 % e não entrou no texto.
+  `test_coeff_auto.py` aceita `SMO_K_LOAD`, `SMO_B_LOSS` e `SMO_TAU_C`
+  (padrão: sem mudança); `helice_coeff.py` usa a corrente medida e desconta as
+  perdas.
+- **Firmware SAME**: `Observer_Manager.c` ainda calcula o torque com as
+  correntes estimadas, o mesmo viés que o script tinha (+44 % a +115 % com
+  hélices reais). Decidir se muda para a corrente medida.
+
+**Pendências para o orientador/autor:**
+- Continua pendente a seção "SIBA (placeholder)" dos Resultados.
+
+---
+
 ## ✅ Ajustes pontuais pedidos ao vivo (revisão desta rodada)
 
 Cinco pedidos pequenos e independentes, todos aplicados e compilados juntos

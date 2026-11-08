@@ -113,7 +113,7 @@ bool HAL_Relay_Any_Closed(void);
 bool HAL_Relay_Precharge_Closed(void);
 bool HAL_Relay_Power_Closed(void);
 
-/* Botão de emergência (PD2, entrada) + LED externo de pronto (PE15, saída).
+/* Sinal de emergência (PD1, entrada; 0 V = emergência) + LED externo de pronto (PE15, saída).
  * A inversão do botão (0 = apertado) está declarada no DTS como
  * GPIO_ACTIVE_LOW; HAL_Emergency_Is_Pressed já devolve lógica positiva.
  * Falha de leitura do pino é reportada como "apertado" (falha segura). */

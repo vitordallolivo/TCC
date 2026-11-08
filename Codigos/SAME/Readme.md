@@ -307,7 +307,7 @@ faixa o `target_id` cai:
    entre gravar o ganho, gravar o offset, restaurar o padrão, ou só gravar
    um limite mínimo/máximo de validade.
 
-O ADC1 lê **três** tensões de fase (`V_a`, `V_b`, `V_c`) e cada uma tem sua
+O ADC2 lê **três** tensões de fase (`V_a`, `V_b`, `V_c`) e cada uma tem sua
 **própria** calibração (`TARGET_VOLTAGE_A/B/C`) — mesmo esquema das 3
 correntes. (Versão anterior deste protocolo só definia calibração para
 duas tensões de linha e reusava uma delas para a terceira fase; substituído
@@ -718,10 +718,11 @@ os que, um dia, entrarão na conta de `torque_helice` mencionada acima.
 
 ## Decisões em aberto / a confirmar em bancada
 
-- **Mapa de pinos real**: hoje o firmware assume ADC1 em PA0/PA1/PA2
-  (tensões `V_a/V_b/V_c`) e ADC2 em PA3/PA4/PA5 (correntes `i_a/i_b/i_c`)
-  — precisa ser confirmado contra o esquemático definitivo dos shunts de
-  corrente e divisores de tensão de fase.
+- **Mapa de pinos** (placa montada): ADC1 em PA3/PA1/PA0 (correntes
+  `i_a/i_b/i_c`, canais 3/1/0) e ADC2 em PC2/PC1/PC0 (tensões `V_a/V_b/V_c`,
+  canais 12/11/10). LEDs em PB4 (verde) e PA15 (vermelho), EEPROM no I2C2
+  (PB10/PB11), console no USART1 (PA9/PA10). **PC0 (`V_c`) está com conexão
+  solta** — a leitura de `V_c` não é confiável até o reparo.
 - ~~**DMA do ADC2**...~~ resolvido: confirmado no manual de referência
   (Table 11-2, cap. 11.2.3) que o ADC2 do CH32V307 **não tem canal de DMA
   próprio** (mesma limitação da família STM32F1) — o driver customizado

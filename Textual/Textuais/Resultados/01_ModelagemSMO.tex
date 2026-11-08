@@ -1,31 +1,16 @@
 \section{Modelagem do SMO}
 
-A validação do observador seguiu um \textit{pipeline} em três etapas: primeiro a simulação do modelo matemático com parâmetros do motor, depois o ajuste automático dos ganhos por otimização numérica, e por fim a aplicação nos registros reais da bancada. Cada etapa usa os resultados da anterior como ponto de partida.
-
-Durante a modelagem do controle \textit{sensorless}, a implementação da
-topologia clássica do Observador por Modos Deslizantes (SMO) apresentou falhas
-de convergência em ambiente de simulação sob dinâmicas de desaceleração. O
-método convencional, que extrai a posição angular via função arco-tangente
-($\arctan2$) diretamente das forças contraeletromotrizes (BEMF) estimadas,
-demonstrou alta sensibilidade ao \textit{chattering} numérico. A aplicação de
-filtros passa-baixas para atenuar esse ruído introduziu atrasos de fase que
-corromperam o sincronismo do estimador durante as rampas negativas de
-velocidade, resultando em erros de inversão de torque estimado e instabilidade
-no rastreamento do RPM sintético.
-
-Diferentemente das etapas preliminares, em que o modelo operou sobre
-parâmetros arbitrados, esta validação emprega os coeficientes obtidos na
-caracterização experimental do motor (\autoref{tab:parametros_simulacao}). A
-arquitetura geral do sistema é apresentada na \autoref{fig:diagrama_blocos_smo}.
-A \autoref{fig:diagrama_planta} detalha a planta computacional do inversor de
-seis passos, responsável por gerar os dados de referência. Para fins de
-distinção gráfica, os resultados provenientes desta planta física simulada são
-denominados ``dados reais'', enquanto as variáveis de \textit{software} são tratadas
-como estimativas. A malha de estimação de corrente do SMO, ilustrada na
-\autoref{fig:diagrama_smo}, fornece as componentes brutas da BEMF
-($\hat{e}_{raw}$), enquanto os ganhos deslizantes ($K_{s1}$, $K_{s2}$) e o polo
-do estimador ($K_t$) foram determinados pelo procedimento de ajuste automático
-descrito na \autoref{sec:autotuning}.
+A validação do observador seguiu três etapas: simulação com os parâmetros
+medidos do motor (\autoref{tab:parametros_simulacao}), ajuste automático dos
+ganhos e aplicação aos registros de bancada (\autoref{sec:ensaios_bancada}).
+Na simulação (\autoref{fig:diagrama_blocos_smo}), a planta do inversor de seis
+passos (\autoref{fig:diagrama_planta}) gera as grandezas de referência,
+chamadas aqui de ``dados reais''. O SMO (\autoref{fig:diagrama_smo}) estima a
+força contraeletromotriz bruta, e um PLL extrai dela o ângulo e a velocidade,
+a partir dos quais a força contraeletromotriz é reconstruída analiticamente.
+Essa reconstrução substitui a forma clássica, de arco-tangente com filtro
+passa-baixas, cujo atraso de fase fazia o estimador perder o sincronismo nas
+desacelerações.
 
 \begin{table}[htbp]
     \centering
@@ -41,30 +26,23 @@ descrito na \autoref{sec:autotuning}.
         Pares de polos          & $p$      & \num{7} \\
         Constante de velocidade & $K_v$    & \num{310} \si{RPM/V} \\
         Momento de inércia      & $J$      & \num{0,0001} \si{kg.m^2} \\
-        Coef. de carga da hélice\footnotemark
-                                & $k_{Q}$  & \num{2e-5} \si{N.m/(rad/s)^2} \\
+        Coef. de carga --- APC 15x6E\footnotemark
+                                & $k_{Q}$  & \num{1,00e-6} \si{N.m/(rad/s)^2} \\
+        Coef. de carga --- APC 17x10E
+                                & $k_{Q}$  & \num{2,61e-6} \si{N.m/(rad/s)^2} \\
         Tensão do barramento    & $V_{bus}$& \num{30} \si{V} \\
         Período de amostragem   & $T_s$    & \num{10e-6} \si{s} \\
         Tempo de simulação      & $t_{end}$& \num{10} \si{s} \\
         \bottomrule
     \end{tabular}
 
-    \footnotetext{Coeficiente aerodinâmico de carga
-    ($T_{carga}=k_Q\,\omega_m^2$), ajustado ao propulsor efetivamente ensaiado.}
+    \footnotetext{Carga da hélice $T_{carga}=k_Q\,\omega_m^2$, com
+    $k_Q = C_Q\,\rho\,D^5/4\pi^2$ e $C_Q$ médio do fabricante entre
+    \num{1000} e \num{3000} RPM (\autoref{tab:apc_estatico}).}
 
     Fonte: Autor (2026)
 \end{table}
 
-A adoção da estratégia de reconstrução analítica justifica-se pela natureza
-intrínseca do observador por modos deslizantes. Devido à sua característica de
-controle descontínuo, o SMO impõe uma dinâmica semelhante a um chaveamento de
-alta frequência, a fim de forçar a convergência do erro de predição de
-corrente. Esse processo, embora robusto, injeta um espectro harmônico severo no
-sinal da \textit{Back-EMF} estimada ($\hat{e}_{\alpha\beta}$). Diferentemente
-de filtros passa-baixas convencionais, que inseririam atrasos de fase, a
-reconstrução analítica utiliza o erro de estimação estritamente para o
-sincronismo do ângulo elétrico ($\theta_e$) via PLL, o que permite recompor
-amplitudes de \textit{Back-EMF} comparáveis às da dinâmica real.
 
 \begin{figure}[H]
     \centering
@@ -89,35 +67,12 @@ amplitudes de \textit{Back-EMF} comparáveis às da dinâmica real.
         \draw [line] (pll) -- node [above] {$\hat{\theta}, \hat{\omega}$} (recon);
         \draw [line] (recon) -- node [above] {$\hat{e}_{\alpha, cln}, \hat{e}_{\beta, cln}$} (torque);
         \coordinate (mid_clarke_smo) at ($(clarke.east)!0.5!(smo.west)$);
-        \draw [line, dashed] (mid_clarke_smo) -- ++(0,-1.5) -| node [near end, left] {$\hat{i}_{\alpha}, \hat{i}_{\beta}$} (torque.north);
+        \draw [line, dashed] (mid_clarke_smo) -- ++(0,-1.5) -| node [near end, left] {$i_{\alpha}, i_{\beta}$} (torque.north);
     \end{tikzpicture}
     \vspace{0.3cm} \\
     \small Fonte: Autor (2026).
 \end{figure}
 
-O \autoref{alg:sim_core} resume o laço de simulação executado a cada passo
-$T_s$, evidenciando como o controlador de velocidade, a planta do inversor e o
-observador se encadeiam para produzir as séries temporais utilizadas nas
-análises subsequentes.
-
-\begin{algorithm}[H]
-\caption{Algoritmo da simulação planta, controle PI e observador SMO}
-\label{alg:sim_core}
-\begin{algorithmic}[1]
-\Require $N$, $T_s$, perfil $\Omega_{\mathrm{ref}}[\cdot]$, ganhos $(K_{s1},K_{s2},K_t)$, modo de fase
-\State Inicializa estados da planta, do PI, do SMO e do PLL em zero
-\For{$k = 0$ \textbf{to} $N-1$}
-    \State $(V_{\mathrm{cmd}}) \gets$ \Call{ControladorPI}{$\Omega_{\mathrm{ref}}[k]$, $\omega_m$}
-    \State $(i_a,i_b,i_c,\theta_e,\omega_m,u_{\alpha\beta},i_{\alpha\beta}) \gets$ \Call{InversorPlanta}{$V_{\mathrm{cmd}},\theta_e,\omega_m$}
-    \State $(u_{\alpha\beta},i_{\alpha\beta}) \gets$ \Call{FiltroAmpop}{$u_{\alpha\beta},i_{\alpha\beta}$} \Comment{polo de 1ª ordem, se modo $>0$}
-    \State $(\hat{\imath}_{\alpha\beta},\hat{e}_{\alpha\beta}) \gets$ \Call{SMO}{$u_{\alpha\beta},i_{\alpha\beta},\hat{\imath}_{\alpha\beta},\hat{e}_{\alpha\beta}$}
-    \State $(\hat{\theta},\hat{\omega}) \gets$ \Call{PLL}{$\hat{e}_{\alpha\beta}$}
-    \State $\hat{T}_e \gets$ \Call{ReconstroiTorque}{$\hat{\theta},\hat{\omega},\hat{\imath}_{\alpha\beta}$}
-    \State Registra $(\omega_m,\hat{\omega},T_e,\hat{T}_e,\theta_e,\hat{\theta},\dots)$ em $\mathbf{res}[:,k]$
-\EndFor
-\State \Return $\mathbf{res}$
-\end{algorithmic}
-\end{algorithm}
 
 \begin{figure}[htbp]
     \centering
@@ -150,49 +105,11 @@ análises subsequentes.
     \small Fonte: Autor (2026).
 \end{figure}
 
-Na \autoref{fig:inversor_sim} é possível visualizar a dinâmica do controlador
-PI do inversor. Os Algoritmos~\ref{alg:pi} e~\ref{alg:planta} detalham,
-respectivamente, a malha de velocidade com anti-\textit{windup} e a comutação
-de seis passos que alimenta a dinâmica eletromecânica.
-
-\begin{algorithm}[H]
-\caption{ControladorPI — velocidade $\to$ tensão (com anti-windup e PWM)}
-\label{alg:pi}
-\begin{algorithmic}[1]
-\Function{ControladorPI}{$\Omega_{\mathrm{ref}},\ \omega_m$}
-    \State $\Omega_{\mathrm{set}} \gets$ limita rampa de $\Omega_{\mathrm{set}}$ em direção a $\Omega_{\mathrm{ref}}$ \Comment{slew-rate}
-    \State $e_\omega \gets \Omega_{\mathrm{set}} - \omega_m$
-    \State $V_{\mathrm{raw}} \gets K_p\, e_\omega + K_i\, \sigma$ \Comment{$\sigma$: integrador}
-    \State $V_{\mathrm{cmd}} \gets \mathrm{sat}(V_{\mathrm{raw}},\,0,\,V_{\mathrm{bus}})$
-    \State $\sigma \gets \sigma + \big(e_\omega + K_a\,(V_{\mathrm{cmd}}-V_{\mathrm{raw}})\big)\,T_s$ \Comment{anti-windup back-calculation}
-    \State $V_{\mathrm{act}} \gets$ PWM$(V_{\mathrm{cmd}}/V_{\mathrm{bus}})$ \Comment{comutação em $f_{\mathrm{pwm}}$}
-    \State \Return $V_{\mathrm{act}}$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}[H]
-\caption{InversorPlanta — comutação 6 passos e dinâmica eletromecânica}
-\label{alg:planta}
-\begin{algorithmic}[1]
-\Function{InversorPlanta}{$V_{\mathrm{act}},\ \theta_e,\ \omega_m$}
-    \State $e_a,e_b,e_c \gets K_{e,\mathrm{mec}}\,\omega_m \cdot f_{\mathrm{shape}}(\theta_e - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$
-    \State Seleciona setor de $60^\circ$ a partir de $\theta_e \bmod 2\pi$
-    \State Aplica $V_{\mathrm{act}}$ ao par de fases ativas; fase flutuante $\gets 0$
-    \State $\mathrm{d}i/\mathrm{d}t \gets \dfrac{1}{2L_s}\big[(v_x-v_y) - 2R_s i_x - (e_x-e_y)\big]$ \Comment{par ativo $x,y$}
-    \State Atualiza $i_a,i_b,i_c$ por Euler ($i_x \mathrel{+}= \mathrm{d}i\cdot T_s$; $i_y=-i_x$; $i_{\mathrm{flut}}=0$)
-    \State $T_e \gets K_{e,\mathrm{mec}}\sum_{x\in\{a,b,c\}} i_x\, f_{\mathrm{shape}}(\theta_{e,x})$
-    \State $\omega_m \gets \omega_m + \dfrac{1}{J}\big(T_e - k_{\mathrm{load}}\,\omega_m^2\big)T_s$
-    \State $\theta_e \gets (\theta_e + \omega_m\, p\, T_s) \bmod 2\pi$
-    \State Calcula $u_{\alpha\beta}$ (Clarke de $v_{abc}-v_n$) e $i_{\alpha\beta}$ (Clarke de $i_{abc}$)
-    \State \Return $i_a,i_b,i_c,\theta_e,\omega_m,T_e,u_{\alpha\beta},i_{\alpha\beta}$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
+A \autoref{fig:inversor_sim} mostra a resposta do controlador PI de velocidade da planta.
 
 \begin{figure}[H]
     \centering
-    \caption{Controlador PI para o inversor da planta.}
+    \caption{Controlador PI para o inversor da planta (hélice 17x10E).}
     \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/PI_controle_Inversor.png}
     \label{fig:inversor_sim}
 
@@ -230,28 +147,6 @@ de seis passos que alimenta a dinâmica eletromecânica.
     \small Fonte: Autor (2026).
 \end{figure}
 
-O \autoref{alg:smo} formaliza a malha de estimação de corrente ilustrada na
-\autoref{fig:diagrama_smo}: o erro de predição $\varepsilon_{\alpha\beta}$
-alimenta a função de chaveamento, cuja saída realimenta tanto a integração da
-corrente estimada quanto a estimativa bruta da BEMF.
-
-\begin{algorithm}[H]
-\caption{SMO — observador de modo deslizante em $\alpha\beta$}
-\label{alg:smo}
-\begin{algorithmic}[1]
-\Function{SMO}{$u_{\alpha\beta},\ i_{\alpha\beta},\ \hat{\imath}_{\alpha\beta},\ \hat{e}_{\alpha\beta}$}
-    \State $\varepsilon_{\alpha\beta} \gets i_{\alpha\beta} - \hat{\imath}_{\alpha\beta}$
-    \State $s_{\alpha\beta} \gets \Call{FuncaoComutacao}{\varepsilon_{\alpha\beta}/BL}$ \Comment{sat $\vert$ tanh $\vert$ sigmoide}
-    \State $\hat{\imath}_{\alpha\beta} \gets \Phi_i\,\hat{\imath}_{\alpha\beta} + \Gamma_v\,(u_{\alpha\beta}-\hat{e}_{\alpha\beta}) + \Gamma_{s1}\,s_{\alpha\beta}$
-    \State $\hat{e}_{\alpha\beta} \gets \Phi_e\,\hat{e}_{\alpha\beta} + (K_{s2}T_s)\,s_{\alpha\beta}$
-    \State \Return $\hat{\imath}_{\alpha\beta},\ \hat{e}_{\alpha\beta}$
-\EndFunction
-\Statex
-\Function{FuncaoComutacao}{$x$}
-    \State \Return $\mathrm{sat}(x,-1,1)$ \textbf{ou} $\tanh(x)$ \textbf{ou} $x/(1+|x|)$ \Comment{qualquer uma das formas da \autoref{fig:funcoes_chaveamento}}
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
 
 % =====================================================================
 % SUBSEÇÃO — CONDICIONAMENTO ANALÓGICO
@@ -312,7 +207,7 @@ senoidal e permanece válida para formas trapezoidais.
         \draw [line] (pi_pll.south) ++(-1cm,0) -- node [left] {$\hat{\omega}_e$} ($(recon.north) + (2cm,0)$);
         \draw [line] (recon) -- node [right] {$\hat{e}_{\alpha\beta, cln}$} (torque);
         \coordinate (in_i) at ($(torque.west) + (-1.5cm, 0)$);
-        \draw [line, dashed] (in_i) -- node [above] {$\hat{i}_{\alpha\beta}$} (torque.west);
+        \draw [line, dashed] (in_i) -- node [above] {$i_{\alpha\beta}$ medida} (torque.west);
     \end{tikzpicture}
     \vspace{0.3cm} \\
     \small Fonte: Autor (2026).
@@ -321,40 +216,12 @@ senoidal e permanece válida para formas trapezoidais.
 Quando a estimativa do PLL converge para a posição real do rotor, a componente
 ortogonal do produto vetorial é forçada a zero, garantindo que $\hat{\omega}_e$
 e $\hat{\theta}$ reflitam a dinâmica do eixo com forte imunidade ao ruído de
-alta frequência. O \autoref{alg:pll} formaliza essa malha e a etapa de
-reconstrução de torque a partir da BEMF sincronizada. O desempenho do
+alta frequência. O desempenho do
 sincronismo é apresentado na \autoref{fig:PLL_fig_desenvolvimento}.
-
-\begin{algorithm}[H]
-\caption{PLL e reconstrução de posição/torque}
-\label{alg:pll}
-\begin{algorithmic}[1]
-\Function{PLL}{$\hat{e}_{\alpha\beta}$}
-    \State $A_{\hat{e}} \gets \Vert \hat{e}_{\alpha\beta} \Vert_2$
-    \If{$A_{\hat{e}} > A_{\min}$}
-        \State $g_{\alpha\beta} \gets f_{\mathrm{shape}}(\hat{\theta} - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$ \Comment{forma normalizada estimada}
-        \State $e_{\mathrm{fase}} \gets (g_\alpha \hat{e}_\beta - g_\beta \hat{e}_\alpha)/A_{\hat{e}}$
-    \Else
-        \State $e_{\mathrm{fase}} \gets 0$
-    \EndIf
-    \State $\sigma_{\mathrm{pll}} \gets \sigma_{\mathrm{pll}} + e_{\mathrm{fase}}\,T_s$
-    \State $\hat{\omega}_e \gets K_{p,\mathrm{pll}}\,e_{\mathrm{fase}} + K_{i,\mathrm{pll}}\,\sigma_{\mathrm{pll}}$
-    \State $\hat{\theta} \gets (\hat{\theta} + \hat{\omega}_e\,T_s) \bmod 2\pi$
-    \State \Return $\hat{\theta},\ \hat{\omega}_e/p$
-\EndFunction
-\Statex
-\Function{ReconstroiTorque}{$\hat{\theta},\ \hat{\omega}_e,\ \hat{\imath}_{\alpha\beta}$}
-    \State $\hat{f}_{\alpha\beta} \gets f_{\mathrm{shape}}(\hat{\theta} - \{0,\tfrac{2\pi}{3},\tfrac{4\pi}{3}\})$
-    \State $t_{\mathrm{inst}} \gets \tfrac{3}{2}\,K_e\,p\,(\hat{f}_\alpha \hat{\imath}_\alpha + \hat{f}_\beta \hat{\imath}_\beta)$
-    \State $\hat{T}_e \gets$ filtro passa-baixa de $t_{\mathrm{inst}}$ (IIR 1ª ordem, $f_c=10\,\mathrm{kHz}$)
-    \State \Return $\hat{T}_e$
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
 
 \begin{figure}[H]
     \centering
-    \caption{Performance do PLL.}
+    \caption{Performance do PLL (hélice 17x10E).}
     \includegraphics[width=0.7\linewidth]{Textuais/Imgs/Desenvolvimento/PLL_angulos.png}
     \label{fig:PLL_fig_desenvolvimento}
 
@@ -369,44 +236,63 @@ sincronismo é apresentado na \autoref{fig:PLL_fig_desenvolvimento}.
 
 Aplicado o procedimento de \textit{autotuning} formulado na
 \autoref{sec:param_smo}, a \autoref{fig:otim_convergencia} traz o custo de
-cada avaliação e o melhor custo acumulado ao longo da busca. O custo converge nas primeiras dezenas de avaliações e permanece estável até o fim das \num{1278}
-avaliações. Os picos de três a quatro ordens de grandeza acima do patamar
+cada avaliação e o melhor custo acumulado ao longo da busca, para a carga da
+hélice 17x10E. O custo converge nas primeiras dezenas de avaliações e permanece
+estável até o fim das cerca de \num{1000} avaliações. Os picos de três a quatro ordens de grandeza acima do patamar
 correspondem a combinações de ganhos em que o observador diverge, visitadas
-pela evolução diferencial durante a exploração do espaço de busca. O
-\autoref{alg:autotuning} formaliza o procedimento.
+pela evolução diferencial durante a exploração do espaço de busca.
 
 
 \begin{figure}[H]
     \centering
-    \caption{Convergência da otimização dos ganhos do observador.}
+    \caption{Convergência da otimização dos ganhos do observador (hélice 17x10E).}
     \includegraphics[width=0.85\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_convergencia.png}
     \label{fig:otim_convergencia}
 
     Fonte: Autor (2026)
 \end{figure}
 
-A busca resultou nos ganhos $\Gamma_{s1}=\num{31,06}$,
-$\Gamma_{s2}=\num{-5,94}$ e $\Gamma_{t}=\num{0,574}$, na forma invariante ao
-passo, que correspondem, ao passo de simulação
-$T_s=\SI{10}{\micro\second}$, a $K_{s1}=\num{3,11e6}$,
-$K_{s2}=\num{-5,94e5}$ e $K_t=\num{5,74e4}$. A otimização é conduzida sobre
+Os ganhos obtidos para as duas hélices estão na
+\autoref{tab:ganhos_helices}. Eles praticamente coincidem: a carga muda
+pouco o ganho ótimo, e só $\Gamma_t$, ligado ao polo do estimador, varia
+entre as duas.
+
+\begin{table}[H]
+    \centering
+    \caption{Ganhos do observador obtidos pelo ajuste automático, por hélice}
+    \label{tab:ganhos_helices}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Hélice} & $\Gamma_{s1}$ & $\Gamma_{s2}$ & $\Gamma_t$ & \textbf{Custo final / inicial} \\
+        \midrule
+        APC 15x6E  & \num{31,62} & \num{-10,00} & \num{0,154} & \num{1,163} / \num{1,914} \\
+        APC 17x10E & \num{31,56} & \num{-9,78}  & \num{0,190} & \num{1,168} / \num{1,927} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+Ao passo de simulação $T_s=\SI{10}{\micro\second}$, os ganhos da 17x10E
+correspondem a $K_{s1}=\num{3,16e6}$, $K_{s2}=\num{-9,78e5}$ e
+$K_t=\num{1,90e4}$. A otimização é conduzida sobre
 $\Gamma = K\,T_s$ para que o resultado não fique preso ao passo de
 integração: o \textit{firmware} recupera seus próprios ganhos dividindo os
 mesmos $\Gamma$ pelo período de amostragem em que roda.
 
 A \autoref{fig:otim_sensibilidade} apresenta a varredura unidimensional de
-cada ganho em torno do ótimo, mantendo os demais fixos. O perfil se repete nos
-três: um trecho aproximadamente plano à esquerda, em que o custo pouco varia,
-e uma subida abrupta à direita, de várias ordens de grandeza, onde a
-estimação deixa de acompanhar a planta. O ponto encontrado fica ao final do
-trecho plano, pouco antes dessa subida, o que sugere que a busca não devolve
-um mínimo pontual, e sim o maior ganho ainda dentro da região de operação
-estável. Reduzir os ganhos abaixo desse ponto custa pouco em desempenho;
-aumentá-los degrada a estimação rapidamente.
+cada ganho em torno do ótimo, mantendo os demais fixos. Para $\Gamma_{s1}$, o
+ponto encontrado fica no fundo de um vale. Para $\Gamma_{s2}$, fica no trecho
+plano, perto da subida abrupta, de duas ordens de grandeza, que aparece com
+ganhos maiores em módulo, onde a estimação deixa de acompanhar a planta.
+$\Gamma_t$ quase não altera o custo. $\Gamma_{s1}$ e $\Gamma_{s2}$ ficaram no
+limite superior da faixa de busca, mas a varredura sugere que ampliar essa
+faixa traria pouco ganho.
 
 \begin{figure}[H]
     \centering
-    \caption{Sensibilidade da função-custo aos ganhos do observador.}
+    \caption{Sensibilidade da função-custo aos ganhos do observador (hélice 17x10E).}
     \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade.png}
     \label{fig:otim_sensibilidade}
 
@@ -415,7 +301,7 @@ aumentá-los degrada a estimação rapidamente.
 
 Em conjunto, a busca automática partiu de um ponto inicial arbitrário e chegou
 a um conjunto de ganhos utilizável sem intervenção manual, com custo cerca de
-\SI{40}{\percent} menor que o do ponto de partida. Como o procedimento depende
+\SI{39}{\percent} menor que o do ponto de partida. Como o procedimento depende
 apenas da resistência, da indutância e do perfil de velocidade adotado, pode
 ser repetido para outro conjunto motopropulsor caracterizado na bancada.
 % =====================================================================
@@ -425,16 +311,16 @@ ser repetido para outro conjunto motopropulsor caracterizado na bancada.
 Com esses ganhos, a \autoref{fig:desempenho_mecanico} compara a rotação e o
 torque estimados com os da planta ao longo do perfil de velocidade simulado. A
 rotação estimada acompanha os patamares, com atraso perceptível nas
-transições; o torque estimado reproduz o nível médio de cada patamar,
-sobreposto a uma ondulação da ordem da excursão do próprio torque real,
-herdada do acionamento em seis passos. A \autoref{fig:eixos_estaticos} mostra,
+transições. O torque oscila cerca de $\pm\SI{2}{\newton\meter}$, herdado do
+acionamento em seis passos, em torno de uma média de apenas
+\SIrange{0,1}{0,3}{\newton\meter}, que é o torque da hélice. A \autoref{fig:eixos_estaticos} mostra,
 em janela ampliada, as correntes e a força contraeletromotriz nos eixos
 $\alpha$ e $\beta$: as grandezas estimadas seguem as reais, com o
 \textit{chattering} característico do modo deslizante em torno delas.
 
 \begin{figure}[H]
     \centering
-    \caption{Comparação entre RPM e torque real vs. estimado.}
+    \caption{Comparação entre RPM e torque real vs. estimado (hélice 17x10E).}
     \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/Torque_rpm.png}
     \label{fig:desempenho_mecanico}
 
@@ -443,7 +329,7 @@ $\alpha$ e $\beta$: as grandezas estimadas seguem as reais, com o
 
 \begin{figure}[H]
     \centering
-    \caption{Correntes e \textit{Back-EMF} nos eixos $\alpha$ e $\beta$.}
+    \caption{Correntes e \textit{Back-EMF} nos eixos $\alpha$ e $\beta$ (hélice 17x10E).}
     \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/Eixo_alpha_beta.png}
     \label{fig:eixos_estaticos}
 
@@ -464,65 +350,47 @@ bancada, tratados na \autoref{sec:ensaios_bancada}.
 \subsection{Identificação dos Coeficientes Aerodinâmicos Globais}
 \label{sec:coef_aero}
 
-Para simplificar o controle embarcado, a modelagem aerodinâmica clássica agrupa
-a densidade do ar, o diâmetro da hélice e o coeficiente estático em uma única
-constante global ($k_Q$). Com isso, o torque mecânico exigido pela hélice passa
-a ser calculado de forma direta, sendo proporcional ao quadrado da velocidade
-angular do motor, conforme $T = k_Q\,\omega_m^2$.
+O coeficiente de carga agrupa densidade do ar, diâmetro e coeficiente de
+torque da hélice numa constante, $T = k_Q\,\omega_m^2$. Ele é identificado nos
+patamares de rotação constante do perfil simulado, pelo mesmo procedimento do
+ensaio de bancada (\autoref{fig:fluxo_ensaio_helice}), com as duas hélices
+da \autoref{tab:parametros_simulacao}.
 
-O coeficiente é identificado isolando-se os intervalos em que o motor opera em
-rotação constante (regime permanente)\footnote{Nesta etapa de simulação, a razão
-de avanço da hélice e a variação do vento foram desprezadas para simplificar a
-dinâmica.}. Nessas condições, a inércia mecânica do conjunto atua como um filtro
-natural para as oscilações de alta frequência, de modo que a hélice interage
-apenas com o valor médio contínuo do torque. Por essa razão, adota-se o valor
-médio do torque em cada patamar como referência física para o cálculo do
-coeficiente, tanto para a grandeza real da planta quanto para a estimativa do
-observador. O procedimento segue as duas etapas formalizadas no
-\autoref{alg:kq_identificacao} (\autoref{sec:coef_aero_bancada}): a
-detecção automática dos patamares de regime permanente a partir do perfil
-de referência e o cálculo do coeficiente por patamar.
-
-A identificação foi conduzida sob quatro patamares de operação em malha fechada.
-A estimação \textit{sensorless} obteve um erro relativo global de apenas
-\num{3,46}\% em relação ao modelo da planta (\autoref{fig:patamar_coeff_CQ} e
-\autoref{tab:resultado_identificacao_cq}), com os coeficientes estimados por
-patamar concentrados em torno do valor nominal. Na aplicação final, a interface
-gráfica (GUI) integrará essa estimação paramétrica à leitura física da velocidade
-do ar (via tubo de Pitot) e da tração (via célula de carga); o cruzamento desses
-dados permitirá calcular a razão de avanço da hélice e isolar os coeficientes
-aerodinâmicos dinâmicos do conjunto propulsor.
-
-\begin{figure}[H]
-    \centering
-    \caption{Identificação do Coeficiente Global por Patamar}
-    \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Algortimo_Coeficiente_helice.png}
-    \label{fig:patamar_coeff_CQ}
-
-    Fonte: Autor (2026)
-\end{figure}
+O torque de cada patamar é calculado com as correntes medidas projetadas no
+ângulo estimado (\autoref{eq:torque_corrente_medida}), de modo que o
+observador entra só com o ângulo e a velocidade. O coeficiente estimado
+converge para o nominal nas duas hélices, com erro de \SI{0,17}{\percent} na
+15x6E e de \SI{0,23}{\percent} na 17x10E
+(\autoref{tab:resultado_identificacao_cq} e \autoref{fig:patamar_coeff_CQ}),
+mesmo com o torque médio de cada patamar cerca de vinte vezes menor que a
+ondulação do acionamento em seis passos (\autoref{fig:desempenho_mecanico}).
 
 \begin{table}[H]
     \centering
-    \caption{Identificação do Coeficiente Global $k_Q$ por Patamar de RPM}
+    \caption{Identificação do coeficiente $k_Q$ por patamar, com as correntes medidas}
     \label{tab:resultado_identificacao_cq}
-    \begin{tabular}{ccccc}
+    \begin{tabular}{cccc}
         \toprule
-        \textbf{Intervalo (s)} & \textbf{Alvo (RPM)} &
-        \textbf{$\bar{T}$ Real (N.m)} & \textbf{$\hat{\bar{T}}$ SMO (N.m)} &
-        \textbf{$k_{Q,real}$ / $\hat{k}_{Q,smo}$} \\
+        \textbf{Hélice} & \textbf{Patamar [RPM]} &
+        \textbf{$\bar{T}$ real / estimado [\si{\newton\meter}]} &
+        \textbf{$k_{Q}$ real / estimado [$10^{-6}$]} \\
         \midrule
-        1,20 -- 2,40 & 3000 & 1,9570 & 2,0164 & $2,00$ / $2,10 \times 10^{-5}$ \\
-        3,60 -- 4,80 & 2000 & 0,8759 & 0,8986 & $2,00$ / $2,07 \times 10^{-5}$ \\
-        4,80 -- 6,10 & 3000 & 1,9544 & 2,0134 & $2,00$ / $2,07 \times 10^{-5}$ \\
-        6,10 -- 8,00 & 2000 & 0,8761 & 0,8980 & $2,00$ / $2,04 \times 10^{-5}$ \\
+        \multirow{4}{*}{APC 15x6E}
+            & 3000 & \num{0,0983} / \num{0,0980} & \num{0,996} / \num{1,01} \\
+            & 2000 & \num{0,0435} / \num{0,0436} & \num{0,991} / \num{1,00} \\
+            & 3000 & \num{0,0983} / \num{0,0979} & \num{0,996} / \num{0,997} \\
+            & 2000 & \num{0,0435} / \num{0,0434} & \num{0,991} / \num{0,984} \\
         \midrule
-        \multicolumn{2}{l}{\textbf{Valor Nominal (Teórico):}} &
-            \multicolumn{3}{c}{$\mathbf{2,00 \times 10^{-5}}$} \\
-        \multicolumn{2}{l}{\textbf{Média Global ($\hat{k}_{Q,smo}$):}} &
-            \multicolumn{3}{c}{$\mathbf{2,07 \times 10^{-5}}$} \\
-        \multicolumn{2}{l}{\textbf{Erro Relativo Global:}} &
-            \multicolumn{3}{c}{$\mathbf{3,46\%}$} \\
+        \multirow{4}{*}{APC 17x10E}
+            & 3000 & \num{0,2574} / \num{0,2568} & \num{2,61} / \num{2,65} \\
+            & 2000 & \num{0,1142} / \num{0,1141} & \num{2,60} / \num{2,62} \\
+            & 3000 & \num{0,2573} / \num{0,2567} & \num{2,61} / \num{2,62} \\
+            & 2000 & \num{0,1141} / \num{0,1141} & \num{2,60} / \num{2,59} \\
+        \midrule
+        \multicolumn{3}{l}{\textbf{15x6E} --- média estimada / nominal (erro)} &
+            \num{0,999} / \num{1,00} (\SI{0,17}{\percent}) \\
+        \multicolumn{3}{l}{\textbf{17x10E} --- média estimada / nominal (erro)} &
+            \num{2,62} / \num{2,61} (\SI{0,23}{\percent}) \\
         \bottomrule
     \end{tabular}
 
@@ -530,49 +398,125 @@ aerodinâmicos dinâmicos do conjunto propulsor.
     {\small Fonte: Autor (2026)}
 \end{table}
 
-Os resultados obtidos demonstram, em ambiente de simulação, a viabilidade da
-abordagem proposta para a identificação do coeficiente global a partir da
-estimativa de torque do observador. O erro relativo de \num{3,46}\% frente ao
-modelo da planta indica que o método é promissor, servindo como prova de
-conceito do encadeamento entre a estimação \textit{sensorless} e a
-caracterização aerodinâmica. Ressalta-se, contudo, que esta etapa constitui
-apenas uma verificação computacional da lógica de identificação: a confirmação
-definitiva depende dos ensaios com o motor real na bancada, nos quais o
-coeficiente estimado será confrontado com as medições físicas de tração e
-velocidade do escoamento.
+\begin{figure}[H]
+    \centering
+    \caption{Identificação do coeficiente $k_Q$ por patamar, com as correntes medidas}
+    \label{fig:patamar_coeff_CQ}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Desenvolvimento/Algortimo_Coeficiente_helice_15x6E.png}
+        \caption{APC 15x6E}
+    \end{subfigure}
 
-\subsection{Identificação dos Coeficientes $C_T$ e $C_Q$ em Bancada (placeholder)}
+    \vspace{0.3cm}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Desenvolvimento/Algortimo_Coeficiente_helice_17x10E.png}
+        \caption{APC 17x10E}
+    \end{subfigure}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\subsection{Coeficiente de Torque das Hélices em Bancada}
 \label{sec:resultado_coef_aero_bancada}
 
-\textit{Pendente: resultado do ensaio descrito na
-\autoref{sec:coef_aero_bancada} --- depende de ensaio de bancada com a
-hélice montada, ainda não realizado.}
+Foram ensaiadas duas hélices APC, 15x6E e 17x10E, na condição estática do
+procedimento da \autoref{sec:coef_aero_bancada}. A referência é a tabela de
+desempenho do fabricante na razão de avanço nula
+(\autoref{tab:apc_estatico}), com $C_Q$ obtido de $C_P$ pela
+\autoref{eq:cq_from_cp}. O torque aerodinâmico medido é o da
+\autoref{eq:torque_corrente_medida} descontadas as perdas a vazio, $B\,\omega + \tau_c$, levantadas na
+\autoref{sec:resultado_coef_mec}. A \autoref{fig:helice_torque} compara o
+torque com o do fabricante, e a \autoref{fig:helice_cq}, o coeficiente $C_Q$.
 
 \begin{table}[H]
     \centering
-    \caption{Coeficientes $C_T$ e $C_Q$ por patamar de rotação (espaço reservado)}
-    \label{tab:resultado_ct_cq}
-    \begin{tabular}{cccc}
+    \caption{Torque e coeficiente $C_Q$ das hélices na condição estática ($J = 0$), segundo o fabricante}
+    \label{tab:apc_estatico}
+    \begin{tabular}{ccccc}
         \toprule
-        \textbf{Patamar (RPM)} & \textbf{$C_T$} & \textbf{$C_Q$} & \textbf{$\rho$ [kg/m³]} \\
+        & \multicolumn{2}{c}{\textbf{APC 15x6E}} & \multicolumn{2}{c}{\textbf{APC 17x10E}} \\
+        \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+        \textbf{Rotação [RPM]} & \textbf{$Q$ [\si{\newton\meter}]} & \textbf{$C_Q$} &
+        \textbf{$Q$ [\si{\newton\meter}]} & \textbf{$C_Q$} \\
         \midrule
-        \multicolumn{4}{c}{\textit{Pendente: dados por patamar de rotação}} \\
+        \num{1000}  & \num{0,0120} & \num{0,00438} & \num{0,0302} & \num{0,00598} \\
+        \num{2000}  & \num{0,0429} & \num{0,00393} & \num{0,1112} & \num{0,00552} \\
+        \num{3000}  & \num{0,0920} & \num{0,00374} & \num{0,2413} & \num{0,00532} \\
+        \num{4000}  & \num{0,1587} & \num{0,00363} & \num{0,4209} & \num{0,00522} \\
+        \num{5000}  & \num{0,2437} & \num{0,00357} & \num{0,6510} & \num{0,00517} \\
+        \num{6000}  & \num{0,3473} & \num{0,00353} & \num{0,9337} & \num{0,00514} \\
+        \num{7000}  & \num{0,4705} & \num{0,00352} & \num{1,2718} & \num{0,00516} \\
+        \num{8000}  & \num{0,6141} & \num{0,00350} & \num{1,6689} & \num{0,00517} \\
+        \num{9000}  & \num{0,7797} & \num{0,00352} & \num{2,1303} & \num{0,00522} \\
+        \num{10000} & \num{0,9693} & \num{0,00355} & \num{2,6632} & \num{0,00528} \\
         \bottomrule
     \end{tabular}
 
     \vspace{2pt}
-    {\small Fonte: Autor (2026)}
+    {\small Fonte: Adaptado de \citeonline{apc_performance_data}}
 \end{table}
+
+% Pontos medidos: Textuais/Imgs/Resultados/helice/medido_<hélice>.dat
+% (rpm, torque pela Eq. de corrente medida, densidade). Perdas a vazio: B = 32,4e-6
+% N.m.s/rad e tau_c = 15,5e-3 N.m. D^5: 15" = 8,028e-3 m^5; 17" = 1,5011e-2 m^5.
+\pgfplotsset{
+    helice/.style={width=0.85\textwidth, height=6.5cm, grid=both,
+        grid style={dotted,gray!40}, xmin=0, xmax=10000, legend pos=north west,
+        legend style={font=\scriptsize}, tick label style={font=\small},
+        label style={font=\small}, xlabel={Rotação [RPM]},
+        scaled x ticks=false, xticklabel style={/pgf/number format/1000 sep={}}},
+    tabhelice/.style={table/comment chars={\#}},
+}
 
 \begin{figure}[H]
     \centering
-    \caption{$C_T$ e $C_Q$ medidos em bancada frente às tabelas de desempenho da APC e ao banco de dados UIUC (espaço reservado)}
-    \label{fig:resultado_ct_cq_comparacao}
+    \caption{Torque aerodinâmico das hélices na condição estática: fabricante e bancada}
+    \label{fig:helice_torque}
     \begin{tikzpicture}
-        \node[draw, dashed, align=center, minimum width=0.8\textwidth,
-              minimum height=5cm, text width=0.7\textwidth, font=\small]
-              {$C_T(J)$ e $C_Q(J)$ medidos, sobrepostos às curvas de
-               referência do fabricante (APC) e do banco UIUC};
+        \begin{axis}[helice, ylabel={$Q$ [\si{\newton\meter}]}, ymin=0]
+            \addplot[thick, blue!65!black] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
+            \addlegendentry{15x6E --- APC}
+            \addplot[thick, red!65!black, dashed] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
+            \addlegendentry{17x10E --- APC}
+            \addplot[only marks, mark=*, blue!65!black, forget plot] table[tabhelice, x=rpm,
+                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)}]
+                {Textuais/Imgs/Resultados/helice/medido_15x6E.dat};
+            \addplot[only marks, mark=square*, red!65!black, forget plot] table[tabhelice, x=rpm,
+                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)}]
+                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
+            \addlegendimage{only marks, mark=*, blue!65!black}\addlegendentry{15x6E --- bancada}
+            \addlegendimage{only marks, mark=square*, red!65!black}\addlegendentry{17x10E --- bancada}
+        \end{axis}
+    \end{tikzpicture}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \caption{Coeficiente de torque $C_Q$ das hélices na condição estática: fabricante e bancada}
+    \label{fig:helice_cq}
+    \begin{tikzpicture}
+        \begin{axis}[helice, ylabel={$C_Q$}, ymin=0.003, ymax=0.0065,
+                     legend pos=north east, yticklabel style={/pgf/number format/fixed,
+                     /pgf/number format/precision=4}]
+            \addplot[thick, blue!65!black] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
+            \addlegendentry{15x6E --- APC}
+            \addplot[thick, red!65!black, dashed] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
+            \addlegendentry{17x10E --- APC}
+            \addplot[only marks, mark=*, blue!65!black, forget plot] table[tabhelice, x=rpm,
+                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3))
+                        / (\thisrow{rho}*(\thisrow{rpm}/60)^2*8.0283e-3)}]
+                {Textuais/Imgs/Resultados/helice/medido_15x6E.dat};
+            \addplot[only marks, mark=square*, red!65!black, forget plot] table[tabhelice, x=rpm,
+                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3))
+                        / (\thisrow{rho}*(\thisrow{rpm}/60)^2*1.50111e-2)}]
+                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
+            \addlegendimage{only marks, mark=*, blue!65!black}\addlegendentry{15x6E --- bancada}
+            \addlegendimage{only marks, mark=square*, red!65!black}\addlegendentry{17x10E --- bancada}
+        \end{axis}
     \end{tikzpicture}
 
     Fonte: Autor (2026)

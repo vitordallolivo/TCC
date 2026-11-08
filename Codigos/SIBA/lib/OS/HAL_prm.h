@@ -7,7 +7,12 @@
  * ⚠ ADC/I2C são devices Zephyr: desabilitar aqui só impede o USO pelo
  * HAL.c. Para isolar o driver, marcar `status = "disabled"` no .dts. */
 
-// #define HAL_DISABLE_ADC
+/* ADC da SIBA não montado nesta versão da placa (tempo de montagem):
+ * pitot, termistores, v_batt e i_batt não são lidos. Com isso ficam
+ * desabilitados a checagem de faixa de tensão/corrente da bateria no
+ * Security_Manager e os alarmes do Battery_Manager (despacho em OSSI.c).
+ * Vale para HW e native_sim. Comentar a linha para religar. */
+#define HAL_DISABLE_ADC
 // #define HAL_DISABLE_HX711
 // #define HAL_DISABLE_I2C
 

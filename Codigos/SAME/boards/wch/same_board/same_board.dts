@@ -44,8 +44,8 @@
     };
 
     /* ================================================================ *
-     * ADC1 — três TENSÕES de fase (V_a, V_b, V_c)                       *
-     *   CH0 = PA0 = V_a   CH1 = PA1 = V_b   CH3 = PA3 = V_c             *
+     * ADC1 — três CORRENTES de fase (i_a, i_b, i_c) — MESTRE          *
+     *   CH3 = PA3 = i_a   CH1 = PA1 = i_b   CH0 = PA0 = i_c             *
      * PA2 reservado para W25Q (SPI flash) — não usar aqui.              *
      * DMA1 canal 1 (IRQ 27).                                            *
      * ================================================================ */
@@ -64,8 +64,9 @@
     };
 
     /* ================================================================ *
-     * ADC2 — três CORRENTES de fase (i_a, i_b, i_c) — ESCRAVO do ADC1  *
-     *   CH10 = PC0 = i_a   CH11 = PC1 = i_b   CH12 = PC2 = i_c          *
+     * ADC2 — três TENSÕES de fase (V_a, V_b, V_c) — ESCRAVO do ADC1   *
+     *   CH12 = PC2 = V_a   CH11 = PC1 = V_b   CH10 = PC0 = V_c          *
+     *   (PC0/V_c: conexão solta na placa montada — leitura suspeita)    *
      *                                                                    *
      * SEM `dmas` de propósito: o manual de referência (Table 11-2,     *
      * "Peripheral mapping table of each DMA1 channel") confirma que só *
@@ -75,8 +76,8 @@
      * real — native_sim não pegava isso, pois emula por outro caminho).*
      * Por isso o driver (drivers/adc/adc_ch32v307.c) roda os dois em   *
      * modo DUAL SIMULTÂNEO (DUALMOD=Regular Simultaneous, registrador  *
-     * ADC1_CTLR1): ADC1 dispara os dois ADCs ao MESMO TEMPO (V_a com   *
-     * i_a, V_b com i_b, V_c com i_c — pareado por fase, essencial pro  *
+     * ADC1_CTLR1): ADC1 dispara os dois ADCs ao MESMO TEMPO (i_a com   *
+     * V_a, i_b com V_b, i_c com V_c — pareado por fase, essencial pro  *
      * Clarke/SMO), e o resultado combinado sai por UMA transferência   *
      * de DMA de 32 bits no canal do ADC1 (16 bits baixos=ADC1, altos=  *
      * ADC2). O driver detecta esse modo sozinho (via `has_dma` = ADC2  *
@@ -101,15 +102,15 @@
 &pinctrl {
 
     adc1_default: adc1_default {
-        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>; };  /* CH0  - V_a */
-        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>; };  /* CH1  - V_b */
-        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC1, 0)>; };  /* CH3  - V_c (PA2 = W25Q) */
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 3, ADC1, 0)>; };  /* CH3  - i_a (PA2 = W25Q) */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 1, ADC1, 0)>; };  /* CH1  - i_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PA, 0, ADC1, 0)>; };  /* CH0  - i_c */
     };
 
     adc2_default: adc2_default {
-        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 0, ADC2, 0)>; };  /* CH10 - i_a */
-        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 1, ADC2, 0)>; };  /* CH11 - i_b */
-        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 2, ADC2, 0)>; };  /* CH12 - i_c */
+        group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 2, ADC2, 0)>; };  /* CH12 - V_a */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 1, ADC2, 0)>; };  /* CH11 - V_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 0, ADC2, 0)>; };  /* CH10 - V_c (conexão solta) */
     };
 
     usart1_default: usart1_default {
@@ -167,8 +168,7 @@
 
     /* ================================================================ *
      * SPI flash (chip não identificado) — PA2/PA5/PA6/PA7             *
-     * PA2 = ADC1_CH2 (V_c)  PA5 = ADC2_CH5 (i_c)                     *
-     * CONFLITO com ADC1/ADC2 — não pode ser usado na SAME. Ignorar.   *
+     * Não usado na SAME (SPI1 desligado). Pinos livres/reservados.    *
      * ================================================================ */
 };
 

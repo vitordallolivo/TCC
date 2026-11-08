@@ -2,19 +2,25 @@
 
 A arquitetura da bancada de aquisição foi organizada em uma estrutura funcional hierárquica, conforme apresentado no diagrama da Figura~\ref{fig:diagrama_blocos}. O sistema integra cinco camadas complementares: alimentação, controle de carga, condicionamento e medição, sensoriamento distribuído e comunicação em rede.
 
-A energia provém de duas fontes intercambiáveis: uma bateria LiPo para operação em ensaios dinâmicos e uma fonte CA/CC de rede elétrica para operação em bancada estacionária. Ambas alimentam um barramento comum de 12V através de diodos em configuração OR lógica, garantindo que a bateria tenha prioridade automática quando conectada, sem necessidade de comutação manual. Deste barramento, dois estágios reguladores buck reduzem a tensão para 12V (alimentação de placas de controle e relés) e 5V (circuitos analógicos e sensores digitais).
+A eletrônica é alimentada por uma fonte CA/CC de \SI{12}{\volt}, da qual um
+conversor \textit{buck} deriva os \SI{5}{\volt} das placas, do
+\textit{switch} de rede e dos módulos de relé. A bateria LiPo alimenta
+apenas o ESC, através de dois relés em sequência: o relé de pré-carga fecha
+primeiro e insere um resistor de \SI{100}{\ohm} em série com a entrada do
+ESC, limitando a corrente de \textit{inrush} enquanto os capacitores
+internos carregam; em seguida, o relé de potência fecha e conecta o ESC
+diretamente à bateria.
 
-O controle da conexão ao motor é realizado por dois relés em sequência: o relé de pré-carga é acionado inicialmente, inserindo um resistor de 100$\,\Omega$ em série com o barramento de alimentação do ESC, limitando a corrente de inrush durante o carregamento dos capacitores internos. Após este período de estabilização, o relé de carga é acionado, efetuando um \textit{bypass} do resistor de pré-carga e conectando o ESC diretamente ao barramento de potência. Durante esta sequência, um amperímetro registra a corrente total do sistema e um voltímetro monitora continuamente a tensão da bateria.
+O ESC aciona o motor BLDC. A SAME mede as três correntes e as três tensões
+de fase entre o ESC e o motor; a SIBA gera o sinal de comando do ESC,
+aciona os dois relés e lê o sensor de RPM e as seis células de carga.
 
-O ESC comanda o motor BLDC, gerando três fases de corrente ($i_a$, $i_b$, $i_c$). A placa SAME captura os sinais analógicos de corrente, bem como sinais de tensão de linha para posterior reconstrução da componente de tensão neutra via transformação de Clarke.
+Um \textit{switch} Ethernet interno interconecta a SAME, a SIBA e o
+computador de supervisão, e cada placa troca dados com o computador por UDP
+de forma independente.
 
-Simultaneamente, a placa SIBA controle o PPM para acionamento do ESC, os relés de pré-carga e de carga, além das leituras, do RPM, Bateria e Tubo de pitot, via I2C (\textit{Inter-Integrated Circuit}), como também das células de carga, via \textit{bit banging} e das temperaturas da bateria e motor.
-
- Um switch Ethernet interno interconecta as placas SAME, SIBA e um computador externo, viabilizando aquisição sincronizada em tempo real via protocolo NCI transportado por UDP, que permite a transmissão de dados de forma isolada e com multiplos nós de operação.
-
-\begin{figure}[htb]
+\begin{figure}[H]
     \centering
-    % \includegraphics[width=0.85\textwidth]{figuras/diagrama_blocos}
     \caption{Diagrama de blocos da arquitetura de aquisição}
     \label{fig:diagrama_blocos}
 
@@ -58,28 +64,21 @@ Simultaneamente, a placa SIBA controle o PPM para acionamento do ESC, os relés 
 	\node[fourport](N9) at (4.781, 4.994){} node[anchor=center] at (N9.center){$AC/DC$};
 	\draw (1.941, 3.539) -- (2.941, 3.539) -| (3.191, 4.539) -| (3.871, 4.539);
 	\draw (3.871, 5.449) |- (3.191, 5.539) -- (3.191, 6.039) -- (1.941, 6.039);
-	\draw (6.441, 5.449) to[empty diode] (8.191, 5.449);
 	\node[ground] at (6.441, 4.199){};
 	\draw (6.441, 4.199) -| (6.441, 4.449) |- (5.691, 4.539);
 	\draw (5.691, 5.449) -- (6.441, 5.449);
 	\node[fourport](N10) at (17.461, 4.404){} node[anchor=center] at (N10.center){$\text{SIBA}$};
 	\node[fourport, xscale=1.03, yscale=1.03](N11) at (17.383, 6.731){} node[anchor=center] at (N11.center){$\text{SAME}$};
-	\draw (4.986, 6.645) to[empty diode] (6.736, 6.645);
-	\draw (6.736, 6.645) to[sdcdc] (8.986, 6.645);
-	\draw (9.736, 6.645) -- (8.986, 6.645);
-	\node[shape=rectangle, minimum width=0.965cm, minimum height=0.465cm] at (9.121, 6.949){} node[anchor=north west, align=left, text width=0.577cm, inner sep=6pt] at (8.621, 7.199){$12V$};
+	\draw (6.441, 5.449) -- (10.756, 5.449) -- (10.756, 6.645);
+	\node[above] at (8.6, 5.449) {$12V$};
 	\draw (10.756, 6.645) to[sdcdc] (13.006, 6.645);
 	\node[shape=rectangle, minimum width=0.715cm, minimum height=0.465cm] at (15.025, 6.9){} node[anchor=north west, align=left, text width=0.327cm, inner sep=6pt] at (14.65, 7.15){$5V$};
-	\draw (13.006, 6.645) to[empty diode] (14.756, 6.645);
-	\draw (9.736, 6.645) to[normal open switch, l={$\text{Chave}$}] (10.736, 6.645);
-	\draw (4.986, 6.645) -- (4.621, 6.645) -- (4.621, 10.449);
-	\draw (8.191, 5.449) -| (14.756, 6.645);
+	\draw (13.006, 6.645) -- (14.756, 6.645);
 	\draw (16.921, 8.099) -| (16.921, 7.699);
 	\draw (17.421, 7.699) -| (17.421, 8.099);
 	\draw (17.921, 8.099) -| (17.921, 7.699);
 	\draw (16.521, 4.399) -| (15.5, 6.6);
 	\node[circ] at (4.121, 10.449){};
-	\node[circ] at (4.621, 10.449){};
 	\node[circ] at (9.951, 10.374){};
 	\node[circ] at (14.756, 6.645){};
 	\node[circ] at (15.521, 6.599){};
@@ -122,6 +121,27 @@ Simultaneamente, a placa SIBA controle o PPM para acionamento do ESC, os relés 
 
     Fonte: Autor(2026)
 
+\end{figure}
+
+\subsection{Montagem no Gabinete}
+\label{sec:montagem_gabinete}
+
+Todo o conjunto, exceto o motor, foi montado dentro de um gabinete metálico
+de \textit{rack}, com a disposição e as ligações da \autoref{fig:gabinete}. A
+distribuição de energia é feita por uma régua de bornes em trilho DIN: cada
+borne corresponde a uma alimentação ou a um sinal de acionamento, o que permite
+trocar uma placa ou um relé sem refazer a fiação dos demais. O botão de
+emergência fica em série com a alimentação das bobinas dos relés, de modo que
+apertá-lo abre os dois relés por meio físico, independentemente do estado do
+microcontrolador.
+
+\begin{figure}[H]
+    \centering
+    \caption{Disposição e ligações dos componentes no gabinete}
+    \label{fig:gabinete}
+    \resizebox{\textwidth}{!}{\input{Textuais/Metodologia/Figuras/gabinete}}
+
+    Fonte: Autor (2026)
 \end{figure}
 
 \subsection{Dimensionamento do Resistor de Pré-carga}

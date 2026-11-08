@@ -141,7 +141,7 @@ Cada transferência de DMA de 32 bits carrega um par `(V_x, i_x)` da **mesma
 fase, amostrado no mesmo instante** — não há defasagem V↔i entrando no Clarke.
 Um frame completo = **3 transferências**.
 
-- `ADC1_RDATAR[31:16]` = ADC2 (corrente), `[15:0]` = ADC1 (tensão).
+- `ADC1_RDATAR[31:16]` = ADC2 (tensão), `[15:0]` = ADC1 (corrente).
   Separar é `w & 0x0FFF` e `(w >> 16) & 0x0FFF` — ~15–20 ciclos por frame,
   desprezível. **Não existem dois streams para demultiplexar.**
 - `ALIGN = 0` (alinhamento à direita), DMA com *peripheral* e *memory size*
@@ -197,9 +197,12 @@ Bases: **ADC1 = `0x40012400`**, **ADC2 = `0x40012800`** (mesmos offsets).
 SMP0=[2:0]  SMP1=[5:3]  SMP2=[8:6]  SMP3=[11:9]  SMP4=[14:12]  SMP5=[17:15]
 000=1,5  001=7,5  010=13,5  011=28,5  100=41,5  101=55,5  110=71,5  111=239,5
 ```
-Com o mapa atual (PA0–PA2 → CH0–CH2 no ADC1; PA3–PA5 → CH3–CH5 no ADC2), os
-seis campos usados são `SMP0`–`SMP5`, **todos no `SAMPTR2`**, e com o **mesmo
-valor nos dois ADCs**.
+Com o mapa atual (ADC1: PA3/PA1/PA0 → CH3/CH1/CH0 = i_a/i_b/i_c; ADC2:
+PC2/PC1/PC0 → CH12/CH11/CH10 = V_a/V_b/V_c), os campos usados são `SMP0`,
+`SMP1`, `SMP3` no `SAMPTR2` (ADC1) e `SMP10`–`SMP12` no `SAMPTR1` (ADC2), com
+o **mesmo valor nos dois ADCs**. A ordem de varredura (RSQR) segue a ordem
+das tabelas `adc1_ch_cfg`/`adc2_ch_cfg` em `HAL.c`, ordenadas por fase para
+manter i_x e V_x no mesmo slot.
 
 **`RSQR1` (`0x2C`) / `RSQR3` (`0x34`)**
 ```
@@ -209,8 +212,8 @@ RSQR3[4:0]   SQ1      RSQR3[9:5] SQ2      RSQR3[14:10] SQ3
 
 **`RDATAR` (`0x4C`)** — no ADC1, em modo dual:
 ```
-[31:16] ADC2DATA  → corrente (ADC2)
-[15:0]  DATA      → tensão   (ADC1)
+[31:16] ADC2DATA  → tensão   (ADC2)
+[15:0]  DATA      → corrente (ADC1)
 ```
 
 > Se um dia a amostragem for sincronizada ao PWM por timer: em modo dual com
@@ -928,9 +931,10 @@ Codigos/
 ```
 
 ## Decisões em aberto / a validar em bancada
-- **Mapa de pinos** (`same_board.dts`): hoje ADC1=PA0/PA1/PA2 (V_a/V_b/V_c),
-  ADC2=PA3/PA4/PA5 (i_a/i_b/i_c). Confirmar contra o esquemático real dos shunts
-  de corrente e divisores de tensão de fase.
+- **Mapa de pinos** (`same_board.dts`, atualizado em 07/11/2026 conforme a
+  placa montada): ADC1 = PA3/PA1/PA0 (i_a/i_b/i_c), ADC2 = PC2/PC1/PC0
+  (V_a/V_b/V_c). **PC0 (V_c) está com conexão solta** — leitura de V_c
+  suspeita até o reparo (afeta o Clarke de tensão e, portanto, o SMO).
 - ~~**DMA do ADC2 no CH32V307**...~~ resolvido: confirmado no manual de
   referência (CH32FV2x_V3xRM-EN, Table 11-2 "Peripheral mapping table of
   each DMA1 channel", cap. 11.2.3) que **ADC2 não tem linha de DMA própria**

@@ -51,6 +51,14 @@ GAIN_OPAMP = 3.0
 R_s, L_s = 17.3e-3, 7e-6
 P, p = 14, 7
 Kv, J, k_load = 310.0, 0.0001, 20.0e-6
+# Carga da hélice T = k_load*w^2 [N.m/(rad/s)^2]; SMO_K_LOAD sobrescreve
+# (k_Q = C_Q*rho*D^5/(4*pi^2), ex.: APC 15x6E ~1,0e-6 e 17x10E ~2,6e-6).
+import os as _os_kl
+k_load = float(_os_kl.environ.get("SMO_K_LOAD", k_load))
+# Perdas mecânicas a vazio medidas em bancada (T_perdas = B*w + tau_c),
+# desligadas por padrão. Ex.: SMO_B_LOSS=32.4e-6 SMO_TAU_C=15.5e-3
+B_loss = float(_os_kl.environ.get("SMO_B_LOSS", 0.0))
+TAU_C  = float(_os_kl.environ.get("SMO_TAU_C", 0.0))
 V_bus, t_end = 30.0, 10.0
 Ke_mec = 60.0 / (2 * math.pi * Kv)
 Ke = Ke_mec / p
@@ -292,7 +300,8 @@ def run_sim_core(N, Ts, RPM_target, phase_mode, GBW, G_opamp,
             Te = Ke_mec*(i_a*f_shape(theta_e, plant_bemf)
                          + i_b*f_shape(theta_e-2*math.pi/3, plant_bemf)
                          + i_c*f_shape(theta_e-4*math.pi/3, plant_bemf))
-            omega_m += (1/J) * (Te - k_load*omega_m**2) * Ts_p
+            T_perdas = B_loss*omega_m + (TAU_C if omega_m > 1e-3 else 0.0)
+            omega_m += (1/J) * (Te - T_perdas - k_load*omega_m**2) * Ts_p
             theta_e  = (theta_e + (omega_m*p)*Ts_p) % (2*math.pi)
 
             # ── Front-end analógico, por fase, no passo da planta ─────────
