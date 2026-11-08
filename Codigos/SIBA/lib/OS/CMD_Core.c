@@ -108,6 +108,10 @@ static void handle_func_battery(const CMD *cmd)
             Battery_Manager_Set_Temp_Limit(cmd->value);
             break;
         case BAT_ACTION_RELAY:
+            if (cmd->value > 0.5f && Security_Manager_Button_Pressed()) {
+                LOG_ERR("CMD BATTERY: rele recusado — botao de emergencia");
+                break;
+            }
             Battery_Manager_Set_Relay(cmd->value > 0.5f);
             break;
         default:

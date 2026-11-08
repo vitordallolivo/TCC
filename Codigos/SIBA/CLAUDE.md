@@ -29,10 +29,21 @@ HAL → NVM` (NVM restaura calibração da EEPROM I2C2 0x50).
 
 ## Armadilhas de hardware
 
-- **Relés invertidos** (`GPIO_ACTIVE_LOW`). Ligar: pré-carga → 3 s → potência.
-  Desligar: potência → pré-carga. `HAL_Relay_Energize()` bloqueia 3 s.
-- **Emergência PD1**: corte físico no 12 V das bobinas; o micro só lê
-  (0 V = emergência, pull-down = fio solto vira emergência).
+- **Relés**: módulo de 5 V ativo em nível baixo (`GPIO_ACTIVE_LOW`). 0 V liga;
+  para desligar o pino fica em **alta impedância** (`hal_relay_drive`), pois
+  3,3 V em push-pull não desliga o módulo. Ligar: pré-carga →
+  `CONFIG_SIBA_RELAY_PRECHARGE_MS` (5 s) → confere o botão → potência.
+  `HAL_Relay_Energize()` bloqueia a `siba_wq` (e a telemetria) nesse tempo.
+- **Emergência PD1**: corte físico no 12 V das bobinas; o micro só lê por um
+  divisor (0 V = emergência), sem pull interno.
+- **PWM do ESC (PB6)**: `pwms = <&pwm4 0 ...>` (canal começa em 0 = CH1) e
+  `output-low` no pinctrl; sem isso o pinctrl deixa o pino analógico. Medido:
+  50 Hz, 1000–2000 µs. `FUNC_ESC` recebe **0–100 %** com `INSTR_WRITE`.
+- **"Pronto" repetido**: a GUI manda `FUNC_START`/`STATUS_OK` a cada 30 s;
+  `Security_Manager_Arm_Bench` não rearma um ESC já armado (não zera o throttle).
+- **Shell só no `native_sim`**: `CONFIG_SHELL=n` no `prj.conf` (economiza
+  ~48 kB de ROM); `boards/native_sim.conf` religa.
+- Pausar o core pelo WCH-Link congela o Ethernet até o reset.
 - **PC0/PC1** são LEDs do PHY interno: nunca usar como ADC.
 - `CONFIG_ADC_CH32V00X=n` obrigatório: o driver upstream também casa com
   `wch,adc` e anula o driver custom `drivers/adc/adc_ch32v307.c`.
@@ -44,8 +55,8 @@ HAL → NVM` (NVM restaura calibração da EEPROM I2C2 0x50).
 
 ## Rede
 
-IP no `prj.conf` (`169.254.97.51`) diverge do YAML (`.200`). Ver Fase 0 do
-plano em `../CLAUDE.md`. LED verde PB4 acompanha `NET_EVENT_IF_UP/DOWN`.
+IP no `prj.conf` alinhado com o YAML (`169.254.97.200`). Telemetria em
+broadcast; no Linux com ufw, liberar a UDP 5555. LED verde PB4 acompanha `NET_EVENT_IF_UP/DOWN`.
 
 ## native_sim
 

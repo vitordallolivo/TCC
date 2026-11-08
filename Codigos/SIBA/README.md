@@ -8,7 +8,7 @@
 | **Rede** | UDP · placa `169.254.97.200:5000` (comando) → PC `:5555` (telemetria, 10 Hz) |
 | **Mede** | 6 células de carga (HX711), RPM, Pitot, bateria (tensão, corrente, temperatura), temperatura do motor |
 | **Aciona** | ESC do motor (PWM 50 Hz) e relés de pré-carga/potência da bateria |
-| **Shell** | UART (USART1, 115200 8N1) |
+| **Shell** | Só no `native_sim` (desligado na placa para economizar memória) |
 
 **Sumário:** [Build](#requisitos-e-build) · [Arquitetura](#como-a-placa-é-organizada-por-dentro-arquitetura-de-software) · [Protocolo](#protocolo-de-comunicação-com-o-pc) · [Sensores](#os-sensores-um-a-um) · [Segurança](#segurança--o-código-de-erro-agregado) · [Shell](#shell-de-diagnóstico-via-uart) · [Pinagem](#pinagem-referência-de-hardware) · [generate.py](#como-o-protocolo-é-gerado-generatepy)
 
@@ -36,9 +36,8 @@ aciona o ESC e cuida da bateria/aerodinâmica.
 A placa roda em um microcontrolador **CH32V307VCT6** (núcleo RISC-V,
 144 MHz, com Ethernet MAC integrada) sobre o **Zephyr RTOS v4.4.0**, e
 conversa com um programa de PC (`../Aplicacao_Pi/`) por **UDP/Ethernet**.
-Além da rede, a placa tem um **shell de comandos via UART** para
-diagnóstico de bancada sem precisar do PC ligado na rede (detalhado mais
-abaixo).
+O **shell de comandos** de diagnóstico só existe no build `native_sim`; na
+placa ele fica desligado para economizar memória (detalhado mais abaixo).
 
 Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
 
@@ -663,6 +662,9 @@ evitar que o motor dispare sozinho ao ligar a placa (se o primeiro sinal
 que o ESC visse já fosse um throttle alto, ele entenderia isso como um
 comando válido assim que ligasse).
 
+Medido no pino com analisador lógico: período de 20 ms, com pulso de 1000 µs
+em 0 % e 2000 µs em 100 %, linear entre os dois.
+
 ### Proteção contra sobrecorrente do motor
 
 Todo pedido de throttle — venha de um `CMD FUNC_ESC` pela rede ou do
@@ -742,8 +744,8 @@ exatamente uma linha quando começa e uma quando termina.
 
 O botão de emergência fica no caminho de 12 V que alimenta as bobinas dos
 relés: o corte é **físico**, sem depender do micro. O pino PD1 só **lê** o
-estado do botão (por um divisor 12 V → 3 V; 0 V = apertado). Fio solto
-também é lido como emergência. O `Security_Manager` checa esse pino a cada
+estado do botão (por um divisor 12 V → 3 V; 0 V = apertado), sem pull
+interno: o resistor inferior do divisor já define o 0 V. O `Security_Manager` checa esse pino a cada
 despacho de sensor, dispara a parada e a libera quando o sinal volta.
 
 Armar a bancada (`arm` no shell ou `FUNC_START`+`STATUS_OK` pela rede)
@@ -788,6 +790,11 @@ estiver perto de uma dessas transições.
 ---
 
 ## Shell de diagnóstico via UART
+
+> **Desligado na placa** para economizar cerca de 48 kB de ROM
+> (`CONFIG_SHELL=n` no `prj.conf`). Continua no `native_sim`, por meio de
+> `boards/native_sim.conf`. Para tê-lo na placa, religar `CONFIG_SHELL`,
+> `CONFIG_SHELL_BACKEND_SERIAL` e `CONFIG_SIBA_TEST_SHELL`.
 
 Além do protocolo de rede, a placa aceita comandos de texto digitados
 direto num terminal serial ligado à UART (`USART1`, 115200 bps, 8 bits de
@@ -867,9 +874,9 @@ do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 | PC2 | ADC2 canal 12 | Reserva | analógico |
 | PC3 | ADC2 canal 13 | Tensão da bateria (`v_batt`) | analógico |
 | PC4 | ADC2 canal 14 | Corrente da bateria (`i_batt`) | analógico |
-| PD1 | GPIO entrada | Leitura do botão de emergência via divisor 12 V→3 V (0 V = desliga, 3 V = liga); o corte dos relés é físico | ativa alta, pull-down interno (fio solto = emergência) |
-| PB12 | GPIO saída | Relé de potência | **invertida** (0 = liga) |
-| PB13 | GPIO saída | Relé de pré-carga | **invertida** (0 = liga) |
+| PD1 | GPIO entrada | Leitura do botão de emergência via divisor 12 V→3 V (0 V = desliga, 3 V = liga); o corte dos relés é físico | ativa alta, sem pull interno (o divisor define o 0 V) |
+| PB12 | GPIO saída | Relé de potência | 0 V = liga, alta impedância = desliga |
+| PB13 | GPIO saída | Relé de pré-carga | 0 V = liga, alta impedância = desliga |
 | PE0–PE5 | GPIO saída | Clock (`PD_SCK`) do HX711 das células 1–6 | saída |
 | PE6–PE11 | GPIO entrada | Dado (`DOUT`) do HX711 das células 1–6 | entrada, sem pull |
 | PB0 | TIM3 canal 3, captura | Contador de pulsos de RPM | entrada, sem pull |
@@ -878,7 +885,7 @@ do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 | PB4 | GPIO saída | LED verde de status | ativa alta |
 | PA15 | GPIO saída | LED vermelho de status | ativa alta |
 | PB10 / PB11 | I2C2 SCL / SDA | EEPROM FT24C32A (0x50) | open-drain, pull-up externo |
-| PA9 / PA10 | USART1 TX / RX | Console de log e shell (115200 8N1) | push-pull / entrada com pull-up |
+| PA9 / PA10 | USART1 TX / RX | Console de log (115200 8N1) | push-pull / entrada com pull-up |
 | PC6–PC9 | Ethernet (PHY interno) | RX+ / RX− / TX+ / TX− | pinos fixos |
 | PA2, PA5, PA6, PA7 | SPI1 (desligado) | Reserva para flash W25Q | — |
 
@@ -890,10 +897,10 @@ do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 > bateria (`Security_Manager`) e os alarmes do `Battery_Manager`. Os nós continuam no `.dts` — religar é comentar uma
 > linha.
 
-As saídas dos relés são **invertidas** no módulo de relés (0 no pino =
-relé fechado). A inversão é declarada no `.dts` (`GPIO_ACTIVE_LOW`), de modo
-que o código continua escrevendo 1 para "fechar"; no boot os pinos vão a 1
-(relés abertos).
+Os módulos de relé são acionados em nível baixo (0 V no pino = relé
+fechado), declarado no `.dts` como `GPIO_ACTIVE_LOW`. Para abrir, o pino fica
+em alta impedância, pois 3,3 V em push-pull não desligam o módulo de 5 V; no
+boot os dois ficam assim (relés abertos).
 
 ---
 

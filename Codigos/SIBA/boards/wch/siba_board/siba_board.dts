@@ -52,8 +52,8 @@
      * rodar) — o sinal de "liga" é ativo alto. O nó descreve a EMERGÊNCIA,
      * então GPIO_ACTIVE_LOW: a API lógica do Zephyr (gpio_pin_get_dt)
      * devolve 1 quando o pino está em 0 V — o HAL não repete a inversão.
-     * Configurado com pull-DOWN interno: fio rompido/solto = 0 V =
-     * emergência (falha segura). */
+     * Entrada sem pull interno: o resistor inferior do divisor externo já
+     * leva o pino a 0 V quando o botão abre. */
     emergency_button: emergency-button {
         compatible = "siba,gpio-array";
         gpios = <&gpiod 1 GPIO_ACTIVE_LOW>;
@@ -64,10 +64,10 @@
      *   LIGAR:   relay_precharge ON → espera 3 s → relay_power ON         *
      *   DESLIGAR: relay_power OFF → relay_precharge OFF                   *
      * A pré-carga limita a corrente de inrush nos capacitores do ESC.    *
-     * Lógica INVERTIDA no driver dos relés: 0 no pino = relé fechado.    *
-     * GPIO_ACTIVE_LOW absorve a inversão — o HAL continua usando         *
-     * gpio_pin_set_dt(…, 1) para "fechar" e GPIO_OUTPUT_INACTIVE (pino   *
-     * em 1) para abrir no boot.                                          */
+     * Módulos de relé de 5 V acionados em nível baixo: 0 V = liga. Para   *
+     * desligar o pino fica em ALTA IMPEDÂNCIA (entrada flutuante), pois   *
+     * 3,3 V em push-pull não desliga o módulo. PB12/PB13 toleram 5 V.     *
+     * O driver GPIO não oferece open-drain: o HAL reconfigura o pino.     */
     relay_power: relay-power {
         compatible = "siba,gpio-array";
         gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
@@ -175,7 +175,7 @@
 
     esc_motor: esc-motor {
         compatible = "siba,pwm-consumer";
-        pwms = <&pwm4 1 PWM_USEC(20000) PWM_POLARITY_NORMAL>;
+        pwms = <&pwm4 0 PWM_USEC(20000) PWM_POLARITY_NORMAL>;  /* canal 0-based: 0 = CH1 (PB6) */
     };
 
 };
@@ -261,6 +261,9 @@
     tim4_ch1_default: tim4_ch1_default {
         group1 {
             pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PB, 6, TIM4, 0)>;
+            /* output-low é obrigatório: sem output-high/low o driver de
+             * pinctrl deixa o pino em modo analógico. */
+            output-low;
             drive-push-pull;
             slew-rate = "max-speed-50mhz";
         };

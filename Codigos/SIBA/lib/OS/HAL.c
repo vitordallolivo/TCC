@@ -1293,6 +1293,13 @@ static const struct gpio_dt_spec relay_power_pin     =
 static const struct gpio_dt_spec relay_precharge_pin =
     GPIO_DT_SPEC_GET(RELAY_PRECHARGE_NODE, gpios);
 
+/* Módulo acionado em nível baixo: ligado = saída em 0 V (ativo no DTS);
+ * desligado = alta impedância, já que 3,3 V em push-pull não o desliga. */
+static void hal_relay_drive(const struct gpio_dt_spec *pin, bool closed)
+{
+    gpio_pin_configure_dt(pin, closed ? GPIO_OUTPUT_ACTIVE : GPIO_INPUT);
+}
+
 int HAL_Relay_Init(void)
 {
     if (!device_is_ready(relay_power_pin.port)) {
@@ -1303,8 +1310,8 @@ int HAL_Relay_Init(void)
         LOG_ERR("relay_precharge GPIO não pronto");
         return -ENODEV;
     }
-    gpio_pin_configure_dt(&relay_power_pin,     GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure_dt(&relay_precharge_pin, GPIO_OUTPUT_INACTIVE);
+    hal_relay_drive(&relay_power_pin,     false);
+    hal_relay_drive(&relay_precharge_pin, false);
     hal_relay_energized       = false;
     hal_relay_precharge_closed = false;
     hal_relay_power_closed     = false;
@@ -1317,11 +1324,18 @@ void HAL_Relay_Energize(uint32_t precharge_ms)
     if (hal_relay_energized) return;
     LOG_INF("HAL Relay: fechando pre-carga (PB13) — aguardando %u ms",
             (unsigned)precharge_ms);
-    gpio_pin_set_dt(&relay_precharge_pin, 1);
+    hal_relay_drive(&relay_precharge_pin, true);
     hal_relay_precharge_closed = true;
     k_sleep(K_MSEC(precharge_ms));
+    /* A fila fica bloqueada na espera: confere o botão antes de fechar. */
+    if (HAL_Emergency_Is_Pressed()) {
+        LOG_ERR("HAL Relay: emergencia durante a pre-carga — abortando");
+        hal_relay_drive(&relay_precharge_pin, false);
+        hal_relay_precharge_closed = false;
+        return;
+    }
     LOG_INF("HAL Relay: fechando potencia (PB12)");
-    gpio_pin_set_dt(&relay_power_pin, 1);
+    hal_relay_drive(&relay_power_pin, true);
     hal_relay_power_closed = true;
     hal_relay_energized    = true;
     LOG_INF("HAL Relay: energizado");
@@ -1331,10 +1345,10 @@ void HAL_Relay_Deenergize(void)
 {
     if (!hal_relay_energized) return;
     LOG_INF("HAL Relay: abrindo potencia (PB12)");
-    gpio_pin_set_dt(&relay_power_pin, 0);
+    hal_relay_drive(&relay_power_pin, false);
     hal_relay_power_closed = false;
     LOG_INF("HAL Relay: abrindo pre-carga (PB13)");
-    gpio_pin_set_dt(&relay_precharge_pin, 0);
+    hal_relay_drive(&relay_precharge_pin, false);
     hal_relay_precharge_closed = false;
     hal_relay_energized        = false;
     LOG_INF("HAL Relay: desenergizado");
@@ -1393,10 +1407,10 @@ bool HAL_Relay_Power_Closed(void)
 }
 
 /* ── Sinal de emergência (PD1) + LED externo de pronto (PE15) ───────────
- * PD1 é entrada com pull-down interno: 0 V no pino = emergência (desliga),
+ * PD1 é entrada sem pull interno: 0 V no pino = emergência (desliga),
  * 3 V = pode rodar (liga). A inversão está no DTS (GPIO_ACTIVE_LOW), então
  * gpio_pin_get_dt devolve 1 para "emergência" e o código aqui não inverte
- * nada de novo. O pull-down faz fio solto cair em emergência (falha segura).
+ * nada de novo. O divisor externo define o 0 V quando o botão abre.
  * PE15 é saída e acende o LED externo de "sistema pronto".
  * Quem consome os dois é o Security_Manager, a cada despacho de sensor.
  * native_sim: stubs — botão sempre solto, LED só loga a transição. */
@@ -1421,7 +1435,7 @@ int HAL_Emergency_Init(void)
         return -ENODEV;
     }
 
-    r = gpio_pin_configure_dt(&emergency_btn, GPIO_INPUT | GPIO_PULL_DOWN);
+    r = gpio_pin_configure_dt(&emergency_btn, GPIO_INPUT);
     if (r) {
         LOG_ERR("PD1 configure falhou: %d", r);
         return r;

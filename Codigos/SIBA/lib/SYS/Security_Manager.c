@@ -181,7 +181,10 @@ int Security_Manager_Arm_Bench(void)
     if (!HAL_Relay_Power_Closed()) {
         Battery_Manager_Set_Relay(true);
     }
-    HAL_ESC_Arm();
+    /* O supervisório repete o "pronto": armar de novo zeraria o throttle. */
+    if (!HAL_ESC_Is_Armed()) {
+        HAL_ESC_Arm();
+    }
 
     LOG_INF("SECURITY: bancada armada (pre-carga=%d potencia=%d ESC=%d)",
             (int)HAL_Relay_Precharge_Closed(), (int)HAL_Relay_Power_Closed(),

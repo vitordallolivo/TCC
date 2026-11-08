@@ -46,6 +46,9 @@ TYPE_MAP = {
     "uint8_t": "B"
 }
 
+READY_PERIOD_MS = 30000
+
+
 class AlbatrozGUI(QMainWindow):
     # Resultado do ping disparado pelo botão Conectar — emitido da thread de
     # sondagem, consumido na thread da UI (mesmo padrão do Gerenciador).
@@ -122,6 +125,12 @@ class AlbatrozGUI(QMainWindow):
         # (uma vez por conexão, no primeiro pacote de cada placa).
         self.discovery = DiscoveryService(self.eth)
         self._ready_announced = set()
+        # "Pronto" periódico da SIBA; Desligar (Motor) suspende até reconectar.
+        self._ready_paused = False
+        self._ready_timer = QTimer(self)
+        self._ready_timer.setInterval(READY_PERIOD_MS)
+        self._ready_timer.timeout.connect(self._send_periodic_ready)
+        self._ready_timer.start()
         self._probe_done.connect(self._connect_probed)
 
         # 5. Inicializa o Terminal (Agora ele herdará self.eth corretamente do parent)
@@ -746,6 +755,7 @@ class AlbatrozGUI(QMainWindow):
         print(f"Procurando placas do modo {self.op_mode}: {boards}")
         self.on_clear_all()
         self._ready_announced.clear()
+        self._ready_paused = False
         self.ui.pushButton_2.setEnabled(False)
         self.ui.pushButton_2.setText("Procurando…")
 
@@ -787,6 +797,14 @@ class AlbatrozGUI(QMainWindow):
         except Exception as e:
             print(f"Erro de rede: {e}")
         self.ui.pushButton_2.setText("Desconectar")
+
+    @Slot()
+    def _send_periodic_ready(self):
+        """Repete o "pronto" com o link da SIBA ativo, mesmo sem telemetria."""
+        if self._ready_paused or "SIBA" not in self.eth.workers:
+            return
+        self._send_board_cmd("SIBA", "FUNC_START", 1.0,
+                             instr="INSTR_WRITE", status="STATUS_OK")
 
     def _announce_ready(self, board):
         """Declara à placa que o supervisório está pronto, uma vez por conexão.
@@ -1098,28 +1116,22 @@ class AlbatrozGUI(QMainWindow):
         sliderReleased / 'Atualizar (Motor)' (evita inundar a rede)."""
         self.prefs["motor_val"] = val
         board = self._motor_board(self.op_mode)
-        # A SIBA aciona o ESC em µs (servo PWM); rótulo mostra os µs.
-        if board == "SIBA":
-            us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
-            self.ui.Motor_update.setText(f"Atualizar (throttle {us}us)")
-        else:
-            self.ui.Motor_update.setText(f"Atualizar (Motor {val}%)")
+        self.ui.Motor_update.setText(f"Atualizar (Motor {val}%)")
         self.save_user_prefs()
 
     @Slot()
     def apply_throttle(self):
         """Envia o throttle atual para quem ACIONA o ESC no modo atual.
 
-        SIBA: manda um CMD FUNC_ESC com value = <us> (1000–2000) — a SIBA
+        SIBA: manda um CMD FUNC_ESC com value = throttle (0–100 %) — a SIBA
               controla o ESC (servo PWM). A SAME NÃO aciona (só lê/estima)."""
         board = self._motor_board(self.op_mode)
         val = self.ui.Motor_action.value()
-        us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
         if board == "SIBA":
             if "SIBA" not in self.eth.workers:
                 self.eth.start_link("SIBA")
-            self._send_board_cmd("SIBA", "FUNC_ESC", float(us))
-            print(f"[Motor] SIBA ESC throttle {us}us ({val}%)")
+            self._send_board_cmd("SIBA", "FUNC_ESC", float(val), instr="INSTR_WRITE")
+            print(f"[Motor] SIBA ESC throttle {val}%")
         else:
             print("[Motor] Modo atual não aciona o ESC (SAME é só leitura/estimativa).")
 
@@ -1128,10 +1140,11 @@ class AlbatrozGUI(QMainWindow):
         """Para o motor com segurança conforme o modo e zera o slider."""
         board = self._motor_board(self.op_mode)
         if board == "SIBA":
-            # ESC em idle (1000us) + corte imediato de potência (FUNC_STOP).
-            self._send_board_cmd("SIBA", "FUNC_ESC", 1000.0)
+            # ESC em idle (0 %) + corte imediato de potência (FUNC_STOP).
+            self._send_board_cmd("SIBA", "FUNC_ESC", 0.0, instr="INSTR_WRITE")
             self._send_board_cmd("SIBA", "FUNC_STOP", 0.0)
-            print("[Motor] SIBA ESC parado (throttle 1000 + stop).")
+            self._ready_paused = True
+            print("[Motor] SIBA ESC parado (throttle 0 % + stop).")
         self.ui.Motor_action.setValue(0)
 
     def _send_board_cmd(self, board, func_name, value, target="TARGET_DEFAULT",
