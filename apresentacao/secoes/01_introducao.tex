@@ -1,0 +1,50 @@
+%%=====================================================================
+%% INTRODUÇÃO
+%%=====================================================================
+\begin{frame}{Albatroz Aerodesign}
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \begin{itemize}
+        \item Competição SAE Brasil Aerodesign
+        \item Motor BLDC obrigatório
+        \item Propulsão define a carga útil
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{Introducao/DSCN3474.JPG}
+      \fonte[Equipe Albatroz; SAE Brasil (2024)]
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Problema}
+  \begin{columns}[c]
+    \begin{column}{0.45\textwidth}
+      \begin{itemize}
+        \item Medições isoladas
+        \item Sem sincronismo entre grandezas
+        \item Sem torque no eixo
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=0.85\linewidth]{Introducao/BancadaDesempenho.png}
+      \fonte[Souza e Veber (2023); Costa (2021)]
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Objetivo}
+  \destaque{Integrar a bancada de ensaios motopropulsores da equipe
+            em um sistema único de aquisição sincronizada.}
+
+  \vspace{0.8em}
+  \begin{itemize}
+    \item Hardware de medição elétrica do motor
+    \item Observador de velocidade e torque \textit{sensorless}
+    \item Instrumentação aerodinâmica
+    \item Rede Ethernet entre os nós
+    \item Software de supervisão
+  \end{itemize}
+\end{frame}
