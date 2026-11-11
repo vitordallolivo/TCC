@@ -1,5 +1,7 @@
 # Configuração e Geração de Protocolo
 
+> Parte da [aplicação de supervisão](../README.md) · [README principal](../../../README.md)
+
 Este diretório centraliza a **fonte única de verdade** do protocolo de rede
 (`CMD`/`TELEMETRY_LOG`) e gera os headers C consumidos pelos firmwares da
 SIBA e da SAME.
@@ -20,11 +22,28 @@ aqui só descreve endereçamento/`Ts`/comandos do lado do PC.
 
 ## Estrutura de arquivos e outputs
 
-| Fonte (template) | Destino (por placa) | Escopo |
-| :--- | :--- | :--- |
-| `Common_template.h.j2` | `lib/OS/Common_Types.h` | Enums compartilhados (`func_type`, `target_type`, ...) |
-| `CMD_template.h.j2` | `lib/OS/CMD.h` | Struct de comando (PC → placa) |
-| `LOG_template.h.j2` | `lib/SYS/Log_Manager.h` | Struct de telemetria (placa → PC) + `SENSOR_ID_*` |
+### Arquivos deste diretório
+
+| Arquivo | Papel |
+| :--- | :--- |
+| `SIBA.yaml` / `SAME.yaml` | Protocolo de cada placa: `link`, `enums`, `structs`, `error_bits`, `sensor_defaults` e (SAME) `security_limits` |
+| `SPMM.yaml` | Só endereçamento/`Ts`/comandos do lado do PC (não gera nada) |
+| `generate.py` | Renderiza os templates para SIBA e SAME |
+| `*_template.h.j2` | Templates Jinja2 dos headers C |
+| `plots.yaml` | Mapeamento telemetria → gráficos da GUI (títulos, eixos, legendas) |
+| `commands.yaml` | Árvore de comandos e textos de ajuda do `TinyTerminal` |
+| `motors/` | Perfis de motor salvos pela GUI (Motor → Criar); criado sob demanda |
+
+### Headers gerados
+
+| Fonte (template) | Destino (por placa) | Gerado quando | Escopo |
+| :--- | :--- | :--- | :--- |
+| `Common_template.h.j2` | `lib/OS/Common_Types.h` | sempre | Enums compartilhados (`func_type`, `target_type`, ...) |
+| `CMD_template.h.j2` | `lib/OS/CMD.h` | sempre | Struct de comando (PC → placa) |
+| `LOG_template.h.j2` | `lib/SYS/Log_Manager.h` | sempre | Struct de telemetria (placa → PC) + `SENSOR_ID_*` |
+| `Error_Codes_template.h.j2` | `lib/SYS/Error_Codes.h` | yaml tem `error_bits` | Enum `<placa>_error_bit_t` (mesma tabela que a GUI usa em `errors.py`) |
+| `CMD_Core_prm_template.h.j2` | `lib/OS/CMD_Core_prm.h` | yaml tem `sensor_defaults` | Calibração/faixa padrão por sensor, com lei `affine` ou `sqrt` (Pitot) |
+| `Security_prm_template.h.j2` | `lib/SYS/Security_prm.h` | yaml tem `security_limits` | Limiares `SM_*` do `Security_Manager` (hoje só a SAME) |
 
 ## Integridade de memória e alinhamento
 
@@ -50,10 +69,9 @@ Sempre que `SIBA.yaml` ou `SAME.yaml` forem modificados, rode o gerador
 antes de compilar o firmware correspondente:
 
 ```bash
-# no venv (.venv/)
 python generate.py
-# gera SIBA/lib/OS/{Common_Types,CMD}.h + SIBA/lib/SYS/Log_Manager.h
-# e    SAME/lib/OS/{Common_Types,CMD}.h + SAME/lib/SYS/Log_Manager.h
+# SIBA/lib/OS/{Common_Types,CMD,CMD_Core_prm}.h + SIBA/lib/SYS/{Log_Manager,Error_Codes}.h
+# SAME/lib/OS/{Common_Types,CMD,CMD_Core_prm}.h + SAME/lib/SYS/{Log_Manager,Error_Codes,Security_prm}.h
 ```
 
 Os `.h` gerados nunca são editados à mão.

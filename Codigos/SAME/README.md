@@ -1,5 +1,18 @@
 # SAME — Sistema de Aquisição do Motor Elétrico
 
+> [README principal](../../README.md) · [Visão geral do software](../README.md) · [Aplicação de supervisão](../Aplicacao_Pi/README.md)
+
+| | |
+|---|---|
+| **MCU** | CH32V307VCT6 (RISC-V, 144 MHz) · Zephyr RTOS |
+| **Rede** | UDP · placa `169.254.97.100:4444` (comando) → PC `:4445` (telemetria, 10 Hz por padrão) |
+| **Mede** | Tensões e correntes das 3 fases entre o ESC e o motor (ADC dual simultâneo) |
+| **Estima** | Velocidade e torque eletromagnético, sem sensor mecânico (SMO + PLL) |
+| **Aciona** | Nada: a SAME só observa |
+| **Persistência** | Calibração e parâmetros do observador na EEPROM (I2C2, 0x50) |
+
+**Sumário:** [Build](#build) · [Arquitetura](#como-a-placa-é-organizada-por-dentro) · [Protocolo](#protocolo-de-comunicação-com-o-pc) · [Diagnóstico](#diagnóstico--o-código-de-erro-agregado) · [Observador](#o-observador--modos-deslizantes-smo--pll) · [Otimizações](#otimizações-do-observador--o-que-foi-feito-e-o-que-foi-medido) · [Parâmetros R e L](#parâmetros-elétricos-do-motor-r-e-l--como-são-medidos)
+
 ## O que é essa placa e para que ela serve
 
 A SAME é o nó de instrumentação **elétrica** do motor, na mesma bancada de
@@ -28,7 +41,7 @@ condições de segurança (sobrecorrente, superaquecimento da bateria) em
 tempo real; a placa que só observa pode ter sua lógica de estimação
 livre dessas preocupações.
 
-Roda em um **CH32V307VTC6** (RISC-V, 144 MHz) sobre **Zephyr RTOS**,
+Roda em um **CH32V307VCT6** (RISC-V, 144 MHz) sobre **Zephyr RTOS**,
 comunicando com o PC (`../Aplicacao_Pi/`) por **UDP/Ethernet**. Diferente
 da SIBA, a SAME **não tem um shell de comandos via UART** — todo ajuste de
 parâmetro (ganhos do observador, calibração de sensor, parâmetros do
@@ -128,17 +141,19 @@ conversão do ADC, sem fila no meio.
 
 ### O que a `same_wq` processa
 
-A `same_wq` é bem mais simples que a `siba_wq` da placa irmã, porque não
-existe nenhum manager de domínio (bateria, hélice, segurança) na SAME — só
-dois tipos de trabalho:
+A `same_wq` é bem mais simples que a `siba_wq` da placa irmã, porque a
+SAME não tem managers de bateria ou hélice, e o diagnóstico do
+`Security_Manager` roda na própria thread de aquisição (ver
+[Diagnóstico](#diagnóstico--o-código-de-erro-agregado)). Sobram só dois
+tipos de trabalho:
 
 ```c
 /* Igual à SIBA: um k_msgq guarda os dados, um k_work avisa a same_wq para processar */
 typedef struct { uint32_t sensor_id; float value; } sensor_item_t;
-K_MSGQ_DEFINE(sensor_queue, sizeof(sensor_item_t), 32, 4);
+K_MSGQ_DEFINE(sensor_queue, sizeof(sensor_item_t), SENSOR_QUEUE_LEN /* 32 */, 4);
 
 typedef struct { uint8_t buf[sizeof(CMD)]; size_t len; } cmd_item_t;
-K_MSGQ_DEFINE(cmd_queue, sizeof(cmd_item_t), 4, 4);
+K_MSGQ_DEFINE(cmd_queue, sizeof(cmd_item_t), CMD_QUEUE_LEN /* 4 */, 4);
 ```
 
 Quando a thread de aquisição decide publicar a telemetria (ver "decimação"
@@ -201,6 +216,8 @@ flowchart TD
     subgraph SYS["Domínio"]
         Logm["Log_Manager — monta o pacote de telemetria (13 campos) + envio periódico"]
         Obs["Observer_Manager — SMO + PLL + torque"]
+        Sec["Security_Manager — error_code + LEDs"]
+        NVM["NVM — calibração e parâmetros na EEPROM"]
     end
     subgraph OS["Sistema"]
         OSSI["same_wq — fila de trabalho única"]
@@ -215,23 +232,36 @@ flowchart TD
     main["src/main.c"] --> OS & SYS
     HAL --> MCU
     HAL -->|"a cada conversão do ADC"| Obs
+    HAL -->|"checa faixas e saúde do observador"| Sec
     Obs --> Logm
     Logm -->|"a cada 100ms, via same_wq"| NCI
     NCI <--> UDP(("UDP — Aplicacao_Pi"))
     NCI -->|"comando recebido"| CMDCore
-    CMDCore --> Obs & Logm
+    CMDCore --> Obs & Logm & NVM
 ```
 
 ### Ordem de inicialização
 
+```text
+1. Observer_Init()         — carrega os valores padrão do SMO/PLL e zera o estado
+2. Security_Manager_Init() — zera o error_code e configura os LEDs de status
+3. Log_Manager_Init()      — zera o pacote de telemetria, arranca o timer de envio (100 ms)
+4. CMD_Core_Init()         — carrega a tabela de calibração dos sensores de corrente/tensão
+5. NVM_Init()              — restaura calibração e parâmetros do observador da EEPROM
+                             (falha tolerada: seguem os defaults)
+6. OSSI_Init()             — cria e arranca a same_wq
+7. NCI_Init()              — abre o socket de saída e cria a thread nci_rx (porta 4444)
+8. HAL_Init()              — configura os 2 ADCs e cria a única thread de hardware, hal_adc
 ```
-1. OSSI_Init()        — cria e arranca a same_wq
-2. Observer_Init()    — carrega os valores padrão do SMO/PLL e zera o estado
-3. Log_Manager_Init() — zera o pacote de telemetria, arranca o timer de envio (100ms)
-4. CMD_Core_Init()    — carrega a tabela de calibração dos sensores de corrente/tensão
-5. NCI_Init()         — abre o socket de saída e cria a thread nci_rx (escuta a porta 4444)
-6. HAL_Init()         — configura os 2 ADCs e cria a única thread de hardware, hal_adc
-```
+
+Logo depois do boot, a thread de aquisição faz uma **calibração automática
+de offset** das correntes: espera o sensor Hall estabilizar
+(`SM_CAL_SETTLE_MS`, 2 s), acumula `SM_CAL_FRAMES` quadros com o ESC
+parado e grava a média como zero. Enquanto isso o bit
+`CAL_IN_PROGRESS` fica ligado. Se o ruído passar de `SM_CAL_STD_MAX_MV`
+(ESC energizado, sensor mal alimentado), a calibração falha e liga
+`CAL_FAILED` em vez de gravar um offset errado. **Mantenha o ESC parado
+ao ligar a SAME.**
 
 ---
 
@@ -256,7 +286,7 @@ esses arquivos gerados à mão.
 typedef struct __attribute__((packed)) {
     func_type      function;         // FUNC_START, FUNC_STOP, FUNC_RESET, FUNC_SENSOR
     instruct_type  instruction;      // INSTR_READ/WRITE/NONE/DEFAULT
-    int8_t         target_id;        // qual sensor/parâmetro/ganho
+    target_type    target_id;        // qual sensor/parâmetro/ganho (enum de 1 byte)
     float          value;            // o novo valor
     int8_t         action_or_status; // qual ação de calibração/ajuste
 } CMD;
@@ -325,14 +355,14 @@ typedef struct __attribute__((packed)) {
     float      rpm_same;          // rotação estimada pelo PLL
     float      torque_eletrico;   // torque eletromagnético estimado (Te)
     float      torque_helice;     // torque estimado na hélice (hoje, espelha o elétrico)
-    log_status status;            // sempre LOG_VALID hoje — a SAME não faz checagem de faixa/segurança
+    log_status status;
+    uint32_t   error_code;        // mapa de bits de diagnóstico (ver seção abaixo)
 } TELEMETRY_LOG;
 ```
 
-Note que a SAME **não tem** um campo `error_code` como a SIBA — ela não
-tem um `Security_Manager` próprio, porque não há nada de crítico para
-proteger do lado dela (não aciona motor, não gerencia bateria). O campo
-`status` sempre sai como `LOG_VALID`.
+O campo `error_code` segue o mesmo padrão da SIBA, mas aqui ele é só
+**diagnóstico**: a SAME não aciona nada, então nenhum bit dispara parada
+de emergência.
 
 `torque_helice` hoje simplesmente repete o valor de `torque_eletrico` —
 em regime permanente (rotação constante), o torque que a hélice exige do
@@ -341,6 +371,35 @@ distinção só passaria a importar quando o atrito mecânico do conjunto
 (coeficiente viscoso $B$ e de Coulomb $\tau_c$, medidos na bancada
 [SPMM](../SPMM/README.md)) forem subtraídos: $\tau_{h\acute{e}lice} =
 T_e - (B\omega + \tau_c)$. Essa subtração ainda não está implementada.
+
+---
+
+## Diagnóstico — o código de erro agregado
+
+O `Security_Manager` da SAME roda a cada amostra na thread de aquisição
+(`Security_Manager_Check_Electrical` e `_Check_Observer`) e mantém um
+`error_code` de 32 bits, um bit por condição. Os LEDs da placa mostram o
+resumo: **verde** = micro pronto, **vermelho** = algum bit ligado. Os bits e
+os limiares (`SM_*`) vêm do `SAME.yaml` (`error_bits` e `security_limits`),
+gerados em `Error_Codes.h` e `Security_prm.h`.
+
+| Bit | Nome | Quando liga |
+|---|---|---|
+| 0 | `MEAS_CURRENT_IMBALANCE` | As 3 correntes não somam zero (sensor com falha, fase aberta ou calibração fora) |
+| 1 | `MEAS_VOLTAGE_IMBALANCE` | As 3 tensões não somam zero |
+| 2 | `MEAS_OVERCURRENT` | Corrente de fase acima de `SM_OVERCURRENT_A` (60 A) |
+| 3 | `MEAS_SENSOR_RANGE` | Leitura fora da faixa válida (sensor saturado ou desconectado) |
+| 8 | `OBS_BEMF_TOO_LOW` | BEMF baixa demais para o PLL travar (motor parado ou lento) |
+| 9 | `OBS_PLL_UNLOCKED` | Erro de fase do PLL acima de `SM_PLL_ERR_MAX` |
+| 10 | `OBS_DIVERGED` | O observador produziu valores não finitos |
+| 11 | `OBS_RPM_IMPLAUSIBLE` | Rotação estimada acima de `SM_RPM_MAX` |
+| 16 | `CFG_MOTOR_PARAM_INVALID` | R, L, pares de polos, Kv ou Ts ≤ 0 |
+| 17 | `CFG_GAMMA_SIGN` | Sinais dos ganhos incorretos (regra: Γ1 > 0, Γ2 < 0, Γt > 0) |
+| 24 | `SYS_ADC_READ_FAILED` | Falha na leitura do ADC |
+| 25 | `SYS_ADC_FRAME_DROP` | Quadros do ADC descartados (a ISR não acompanhou) |
+| 26 | `CAL_IN_PROGRESS` | Calibração de offset em andamento |
+| 27 | `CAL_FAILED` | Calibração de offset falhou por ruído alto |
+| 28 | `SYS_NET_DISCONNECTED` | PHY sem link ou interface Ethernet não inicializada |
 
 ---
 
@@ -709,7 +768,7 @@ flowchart TD
 
 A SAME reaproveita da SIBA o driver de ADC customizado (necessário porque
 o driver de ADC genérico do Zephyr, neste chip, conflita com o registrador
-de Ethernet — ver a explicação completa em `../SIBA/Readme.md`) e o
+de Ethernet — ver a explicação completa em `../SIBA/README.md`) e o
 esquema de `native_sim`. A SPMM é uma bancada **provisória** — ela existiu
 para caracterizar o atrito viscoso ($B$), o atrito de Coulomb ($\tau_c$) e
 o momento de inércia ($J$) do conjunto mecânico antes de SIBA e SAME

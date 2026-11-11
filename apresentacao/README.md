@@ -1,17 +1,19 @@
 # Apresentação do TCC
 
+> [README principal](../README.md) · [Texto do TCC](../Textual/README.md)
+
 Slides da defesa no padrão visual UDESC (tema `beamerthemeUDESC.sty`).
 
-```
+```bash
 make        # gera apresentacao.pdf (pdflatex, duas passadas)
-make clean
+make clean  # apaga os auxiliares
 ```
 
 As figuras vêm direto de `../Textual/Textuais/Imgs/`, então compile a partir desta pasta.
 
 ## Estrutura
 
-```
+```text
 apresentacao.tex          # dados da capa e ordem das seções
 beamerthemeUDESC.sty      # tema UDESC
 figuras/                  # diagramas TikZ extraídos dos .tex do TCC

@@ -1,5 +1,17 @@
 # SPMM — Sistema Provisório de Medição Mecânica
 
+> [README principal](../../README.md) · [Visão geral do software](../README.md) · [Aplicação de supervisão](../Aplicacao_Pi/README.md)
+
+| | |
+|---|---|
+| **MCU** | CH32V307VCT6 (RISC-V, 144 MHz) · Zephyr RTOS |
+| **Rede** | Telnet `169.254.97.150:23` (comandos) + UDP `:5000` (log binário, 100 Hz por padrão) |
+| **Mede** | Tensões e correntes das 3 fases e RPM (sensor independente da comutação) |
+| **Aciona** | ESC comercial próprio (PWM 50 Hz) |
+| **Ensaios** | Atrito viscoso $B$ e de Coulomb $\tau_c$ (patamares) · inércia $J$ (coast-down) |
+
+**Sumário:** [Build](#build) · [Arquitetura](#como-a-placa-é-organizada-por-dentro) · [Shell](#comandos-do-shell-telnet) · [Log UDP](#protocolo-do-log-de-telemetria-udp-binário) · [Ensaios](#os-ensaios--o-que-cada-um-mede-e-por-quê) · [Parâmetros](#parâmetros-do-motor-sob-ensaio)
+
 ## O que é essa placa e por que ela existe
 
 O SPMM é uma bancada de caracterização **provisória** — não é uma das duas
@@ -20,7 +32,7 @@ Esses três parâmetros são necessários para o modelo mecânico completo do
 motor — por exemplo, é o que permitiria isolar, do torque eletromagnético
 medido pela SAME, a parcela que efetivamente sobra para acelerar/mover a
 hélice (`torque_helice = T_e - (B\omega + \tau_c)`, ver
-`../SAME/Readme.md`), e para prever a resposta dinâmica do conjunto em
+`../SAME/README.md`), e para prever a resposta dinâmica do conjunto em
 manobras.
 
 O motivo de existir uma placa separada e provisória para isso, em vez de
@@ -64,6 +76,7 @@ make build           # placa real (CH32V307), gera zephyr.bin
 make flash           # grava via WCH-LinkE (OpenOCD)
 make native_sim       # compila para rodar como processo POSIX no PC
 make native_sim_run   # roda o binário native_sim
+make debug            # OpenOCD + GDB
 ```
 
 No modo `native_sim`, cada um dos três módulos de hardware (`esc.c`,
@@ -415,7 +428,7 @@ resultado do método da derivada quando o atrito seco é pequeno.
 
 Motor: **Scorpion A-5025-310Kv**, enrolamento em Delta (6T/7T), 14 polos
 ($p=7$ pares de polos). Parâmetros elétricos já caracterizados por outro
-método (ensaio de rotor bloqueado, ver `../SAME/Readme.md`), usados aqui só
+método (ensaio de rotor bloqueado, ver `../SAME/README.md`), usados aqui só
 como referência — não entram diretamente nas contas mecânicas acima:
 $R_Y \approx 8{,}69\text{ m}\Omega$ (o valor de datasheet é $8{,}65\text{
 m}\Omega$, uma diferença de 0,46%) e $L_Y \approx 6{,}95\text{ µH}$.

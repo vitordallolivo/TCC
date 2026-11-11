@@ -1,5 +1,17 @@
 # SIBA — Sistema Integrado da Bancada Aerodinâmica
 
+> [README principal](../../README.md) · [Visão geral do software](../README.md) · [Aplicação de supervisão](../Aplicacao_Pi/README.md)
+
+| | |
+|---|---|
+| **MCU** | CH32V307VCT6 (RISC-V, 144 MHz) · Zephyr RTOS v4.4.0 |
+| **Rede** | UDP · placa `169.254.97.200:5000` (comando) → PC `:5555` (telemetria, 10 Hz) |
+| **Mede** | 6 células de carga (HX711), RPM, Pitot, bateria (tensão, corrente, temperatura), temperatura do motor |
+| **Aciona** | ESC do motor (PWM 50 Hz) e relés de pré-carga/potência da bateria |
+| **Shell** | UART (USART1, 115200 8N1) |
+
+**Sumário:** [Build](#requisitos-e-build) · [Arquitetura](#como-a-placa-é-organizada-por-dentro-arquitetura-de-software) · [Protocolo](#protocolo-de-comunicação-com-o-pc) · [Sensores](#os-sensores-um-a-um) · [Segurança](#segurança--o-código-de-erro-agregado) · [Shell](#shell-de-diagnóstico-via-uart) · [Pinagem](#pinagem-referência-de-hardware) · [generate.py](#como-o-protocolo-é-gerado-generatepy)
+
 ## O que é essa placa e para que ela serve
 
 A SIBA é uma placa eletrônica customizada, projetada para a bancada de
@@ -11,16 +23,17 @@ responsabilidades dentro da bancada:
    torques/momentos da hélice), velocidade do ar incidente (tubo de Pitot)
    e rotação do eixo (sensor óptico/Hall + contador de pulsos).
 2. **Gerenciar e proteger a bateria LiPo** que alimenta o motor: mede
-   tensão, corrente e temperatura, estima a carga restante (SOC), decide
-   quando acionar o relé de potência e **é ela quem aciona o ESC do motor**
-   (gera o sinal PWM de servo que controla o acelerador).
+   tensão, corrente e temperatura, estima a carga restante (SOC), comanda
+   os relés de pré-carga e de potência, lê o botão de emergência e **é ela
+   quem aciona o ESC do motor** (gera o sinal PWM de servo que controla o
+   acelerador).
 
 O motor propriamente dito (correntes e tensões de fase, estimativa de
 torque eletromagnético sem sensores) é medido por uma placa irmã, a
 **SAME** (`../SAME/`) — a SIBA não lê nada do lado elétrico do motor, só
 aciona o ESC e cuida da bateria/aerodinâmica.
 
-A placa roda em um microcontrolador **CH32V307VTC6** (núcleo RISC-V,
+A placa roda em um microcontrolador **CH32V307VCT6** (núcleo RISC-V,
 144 MHz, com Ethernet MAC integrada) sobre o **Zephyr RTOS v4.4.0**, e
 conversa com um programa de PC (`../Aplicacao_Pi/`) por **UDP/Ethernet**.
 Além da rede, a placa tem um **shell de comandos via UART** para
@@ -31,7 +44,7 @@ Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
 
 ## Requisitos e build
 
-- Hardware: CH32V307VTC6 + PC com Zephyr SDK instalado
+- Hardware: CH32V307VCT6 + PC com Zephyr SDK instalado
 - Toolchain: Zephyr SDK, Make, CMake, Ninja, Python — ver o
   [guia oficial do Zephyr](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)
 
@@ -63,8 +76,9 @@ make native_sim_run   # builda (se preciso) e roda build_native_sim/zephyr/zephy
 
 Quando o binário sobe, aparece um prompt (`uart:~$`) — é o mesmo shell de
 diagnóstico que existe na placa real (seção "Shell de diagnóstico" abaixo),
-funcionando sobre um pseudo-terminal do Linux em vez da UART física. Ctrl+]
-encerra o processo.
+funcionando sobre o stdin/stdout do processo em vez da UART física. Só em
+`native_sim` existe também o comando `btn on|off`, que simula o botão de
+emergência. Ctrl+C encerra o processo.
 
 Importante: mesmo nesse modo, a **rede é real** — o binário abre sockets
 UDP de verdade no Linux e troca pacotes com o PC nas mesmas portas que a
@@ -80,7 +94,7 @@ escuta em loopback, `127.0.0.200` (o último número do IP real vira o
 mesmo PC sem os pacotes de uma se misturarem com os da outra (a SAME usa
 `127.0.0.100`).
 
-Como cada periférico físico (ADC, PWM do ESC, contador de RPM, HX711, DAC)
+Como cada periférico físico (ADC, PWM do ESC, contador de RPM, HX711, I2C)
 não existe de verdade nesse modo, o próprio arquivo `HAL.c` tem blocos
 `#ifdef CONFIG_ARCH_POSIX` que trocam a leitura do registrador físico por
 um gerador de valor sintético plausível (por exemplo, o RPM sintético
@@ -100,7 +114,7 @@ dois alvos automaticamente, sem precisar lembrar de replicar a mudança.
 
 Um firmware como esse tem várias fontes de eventos acontecendo ao mesmo
 tempo e de forma imprevisível: uma célula de carga termina de converter,
-o ADC termina uma leitura, chega um pacote UDP do PC, um timer de 100 ms
+o ADC termina uma média, chega um pacote UDP do PC, um timer de 100 ms
 dispara para mandar a telemetria. Se cada uma dessas fontes rodasse numa
 thread própria e todas mexessem diretamente nas mesmas variáveis (por
 exemplo, o snapshot de telemetria, ou o estado da calibração de uma
@@ -118,31 +132,33 @@ competem pelo mesmo dado, existe **uma única fila de trabalho**
 sempre na mesma thread, tudo que precisa mexer no estado compartilhado
 (configuração de sensor, snapshot de telemetria, código de erro
 agregado). As únicas threads que continuam existindo separadamente são
-as que **precisam mesmo bloquear esperando hardware** — ler o ADC,
-fazer bit-bang do protocolo do HX711, e esperar um pacote de rede
-(`recvfrom`) — porque essas operações não podem virar um item de fila (elas
-bloqueiam por tempo indeterminado). Quando uma dessas threads termina de
-ler um valor, ela não mexe direto nas variáveis compartilhadas: ela só
+as que **precisam mesmo bloquear esperando hardware** — fazer bit-bang do
+protocolo do HX711 e esperar um pacote de rede (`recvfrom`) — porque essas
+operações não podem virar um item de fila (elas bloqueiam por tempo
+indeterminado). O ADC e o RPM nem precisam de thread: são tratados por
+interrupção. Quando uma dessas fontes termina de ler um valor, ela não mexe direto nas variáveis compartilhadas: ela só
 empacota o valor e o empurra para a fila de trabalho, que processa depois,
 na sua própria vez.
 
 ### Threads do sistema e como elas se comunicam entre si
 
-Existem só **3 threads que bloqueiam em hardware/rede**, mais **1 fila de
-trabalho**, mais **2 mecanismos que não são threads** (um timer e uma
-interrupção de hardware):
+Existem só **2 threads que bloqueiam em hardware/rede**, mais **1 fila de
+trabalho**, mais **3 mecanismos que não são threads** (interrupções e
+timers):
 
 | Nome | Prioridade Zephyr | O que faz | Como entrega o resultado |
 |---|---|---|---|
-| `hal_adc` | 7 (a mais alta do sistema) | Fica bloqueada em `adc_read_async`, esperando o DMA terminar de encher o buffer com as 4 leituras do ADC1 (v_batt, i_batt, air_speed, temperature_battery) | Chama `OSSI_Submit_Sensor(sensor_id, valor)` uma vez para cada uma das 4 leituras |
 | `hal_hx711` | 6 | Fica fazendo bit-bang (gerando os pulsos de clock manualmente por software) nos pinos de cada uma das 6 células de carga, uma де cada vez, e lendo o bit de dado que a célula devolve | Chama `OSSI_Submit_Sensor(sensor_id, valor)` para cada célula, na sua vez |
 | `nci_rx` | 5 | Fica bloqueada em `recvfrom()`, esperando um pacote UDP chegar na porta 5000 | Chama `OSSI_Submit_CMD(buf, tamanho)` com os bytes crus recebidos |
 | `siba_wq` | 5 | **Não bloqueia em hardware nenhum** — só espera algum item ser colocado nela. É aqui que toda a lógica de negócio roda | (ver abaixo) |
+| ADC (ISR + `k_work`) | — | O DMA do ADC dual (ADC1 mestre + ADC2 escravo, simultâneos) dispara uma interrupção a cada quadro; a ISR acumula 1500 quadros e então agenda a publicação da média | Um `k_work` chama `OSSI_Submit_Sensor` para cada canal |
+| RPM (ISR TIM3 + `k_timer`) | — | A captura do TIM3 conta pulsos; um timer de 100 ms converte a contagem em RPM | `OSSI_Submit_Sensor(SENSOR_ID_RPM, ...)` |
+| Log TX (`k_timer`) | — | Dispara a cada 100 ms | Agenda `log_tx_work` na `siba_wq` |
 
 (Prioridade no Zephyr funciona ao contrário do que parece intuitivo:
 **número menor é mais prioritário**. Então `siba_wq` e `nci_rx`, com
-prioridade numérica 5, têm prioridade **maior** que `hal_hx711` (6) e
-`hal_adc` (7). Isso é proposital: assim que um dado de sensor fica pronto,
+prioridade numérica 5, têm prioridade **maior** que `hal_hx711` (6).
+Isso é proposital: assim que um dado de sensor fica pronto,
 a prioridade alta de quem processa esse dado (`siba_wq`) garante que a
 lógica de segurança — que pode precisar desarmar o ESC — roda assim que
 possível, sem ficar esperando atrás de uma thread de leitura de hardware
@@ -189,7 +205,7 @@ typedef struct { uint8_t buf[sizeof(CMD)]; size_t len; } cmd_item_t;
 K_MSGQ_DEFINE(cmd_queue, sizeof(cmd_item_t), 4, 4);
 ```
 
-Quando `hal_adc` termina uma leitura, ela chama
+Quando o ADC termina uma média, o trabalho de publicação chama
 `OSSI_Submit_Sensor(SENSOR_ID_V_BATT, 12.4f)`, que faz exatamente duas
 coisas: põe o item na `sensor_queue` (`k_msgq_put`), e manda a `siba_wq`
 rodar a função de despacho assim que puder
@@ -197,9 +213,9 @@ rodar a função de despacho assim que puder
 despacho, `sensor_dispatch_fn`, quando finalmente roda na `siba_wq`, **não
 processa só o item que a acordou** — ela drena a fila inteira num laço
 (`while (k_msgq_get(...) == 0)`), processando todos os itens que estiverem
-esperando. Isso importa porque `hal_adc` e `hal_hx711` submetem vários
-itens em sequência rápida (uma leitura de ADC gera 4 chamadas seguidas,
-uma para cada canal) — sem esse laço de drenagem, a `siba_wq` precisaria
+esperando. Isso importa porque o ADC e a `hal_hx711` submetem vários
+itens em sequência rápida (uma média de ADC gera uma chamada para cada
+canal) — sem esse laço de drenagem, a `siba_wq` precisaria
 ser acordada 4 vezes separadas para o mesmo evento de conversão.
 
 Para cada item de sensor drenado, a função de despacho decide, por um
@@ -215,10 +231,12 @@ static void sensor_dispatch_fn(struct k_work *w)
 
         Log_Manager_Update(id, val);   /* SEMPRE — grava no snapshot de telemetria */
 
+#if HAL_ENABLE_ADC                     /* alarmes de bateria dependem do ADC */
         if (id == SENSOR_ID_V_BATT || id == SENSOR_ID_I_BATT ||
             id == SENSOR_ID_TEMPERATURE_BATTERY) {
             Battery_Manager_Update(id, val);   /* recalcula SOC, checa alarmes de bateria */
         }
+#endif
         if (id == SENSOR_ID_I_BATT || id <= SENSOR_ID_LOAD_CELL_5) {
             Propeller_Manager_Update(id, val); /* protege o motor contra sobrecorrente */
         }
@@ -255,7 +273,7 @@ tempo:
 ```mermaid
 sequenceDiagram
     participant HW as ADC / HX711 (hardware)
-    participant Thr as thread hal_adc / hal_hx711
+    participant Thr as ISR do ADC / thread hal_hx711
     participant Q as sensor_queue (k_msgq)
     participant WQ as siba_wq (sensor_dispatch_fn)
     participant Log as Log_Manager
@@ -299,11 +317,11 @@ flowchart TD
     subgraph OS["Camada de sistema"]
         OSSI["siba_wq — fila de trabalho única"]
         NCI["NCI — socket UDP + thread de recepção"]
-        HAL["HAL — ADC, HX711, ESC, RPM, I2C, DAC"]
+        HAL["HAL — ADC, HX711, ESC, RPM, I2C2, relés, emergência"]
         CMDCore["CMD_Core — interpretador de comandos"]
     end
     subgraph HW["Hardware"]
-        MCU["CH32V307 — ADC próprio + GPIO + PWM(TIM4) + Captura(TIM3) + I2C1 + DAC1"]
+        MCU["CH32V307 — ADC dual + GPIO + PWM(TIM4) + Captura(TIM3) + I2C2 (EEPROM)"]
     end
 
     main --> OSSI
@@ -332,7 +350,7 @@ duas bloqueantes de HAL, a de rede, e a fila de trabalho) já foram criadas
 e continuam vivas sob o escalonador do Zephyr independente do `main()` ter
 retornado.
 
-```
+```text
 1. OSSI_Init()              — cria e arranca a siba_wq (precisa vir primeiro:
                                tudo que vem depois pode gerar trabalho para ela)
 2. Security_Manager_Init()
@@ -341,13 +359,18 @@ retornado.
 5. Log_Manager_Init()       — zera o snapshot de telemetria, arranca o timer de 100ms
 6. CMD_Core_Init()          — carrega a tabela de calibração/faixa de cada sensor
 7. NCI_Init()               — abre o socket de saída (TX) e cria a thread nci_rx
-8. HAL_Init()               — inicializa ADC/HX711/ESC/RPM/I2C/DAC de verdade,
-                               e só agora cria as threads hal_adc/hal_hx711
-9. NCI_Set_Connection_Status(true) — libera o envio de telemetria pela rede
+8. HAL_Init()               — inicializa ADC/HX711/ESC/RPM/I2C2/relés de verdade
+                               (relés abertos), cria a thread hal_hx711 e liga
+                               as interrupções do ADC e do RPM
+9. NVM_Init()               — restaura a calibração gravada na EEPROM (I2C2, 0x50);
+                               se falhar, seguem os defaults de CMD_Core_prm.h
 ```
 
+O status da rede não é ligado à mão: o `NCI` registra um callback que
+acompanha o link do PHY (e acende o LED de PE15) sozinho.
+
 A ordem importa: por exemplo, `HAL_Init()` só é chamado depois que todos
-os managers já existem, porque assim que a thread `hal_adc` arranca ela já
+os managers já existem, porque assim que o ADC começa a converter ele já
 pode gerar leituras que vão parar na fila de sensores — se o
 `Battery_Manager` ainda não tivesse sido inicializado, a primeira leitura
 de tensão poderia cair numa struct com lixo de memória.
@@ -407,7 +430,7 @@ bytes — por isso o total é `1+1+1+4+1 = 8` bytes.
 
 | Valor | Nome | O que a placa faz quando recebe |
 |---|---|---|
-| 0 | `FUNC_START` | Não faz nada de prático — só grava um log informativo. As células de carga e a telemetria já rodam sozinhas desde o boot, então não existe um "start" real a disparar. Esse comando existe porque o protocolo original previa ligar/desligar telemetria por comando, mas isso nunca foi implementado (ver observação no fim). |
+| 0 | `FUNC_START` | Com `target_id = TARGET_DEFAULT` e `INSTR_WRITE`, comanda a **cadeia de potência** conforme `action_or_status` (`status_type`): `STATUS_OK` arma a bancada (pré-carga → potência → ESC), `STATUS_ERROR` desliga a bancada, `STATUS_EMERGENCY_OVERRIDE`/`RESTORE` sobrescreve/restaura o botão de emergência. Em qualquer outro caso é só informativo (as células e a telemetria já rodam desde o boot) |
 | 1 | `FUNC_STOP` | Se `target_id` for o alvo "padrão" (`TARGET_DEFAULT`), dispara uma **parada de emergência**: desarma o ESC imediatamente, independente de qualquer outra condição. |
 | 2 | `FUNC_RESET` | Reinicia o microcontrolador (`sys_reboot`, um reset "frio", como se tivesse desligado e ligado de novo). |
 | 3 | `FUNC_SENSOR` | Ajusta a calibração (ganho/offset/limites) de um sensor — célula de carga ou canal de ADC. Ver tabela detalhada abaixo. |
@@ -424,12 +447,12 @@ tratado como um pedido de throttle, não importa o que esteja em
 
 O `target_id` identifica qual sensor está sendo calibrado (mesma
 numeração usada na telemetria, ver tabela de sensores mais abaixo:
-0 a 5 são as 6 células de carga; 6, 7, 9, 10 são os canais de ADC —
-tensão da bateria, corrente da bateria, temperatura da bateria e
-velocidade do ar). O campo `action_or_status`, para essa função, é
+0 a 5 são as 6 células de carga; 6, 7, 9, 10 e 12 são os canais de ADC —
+tensão, corrente e temperatura da bateria, velocidade do ar e temperatura
+do motor). O campo `action_or_status`, para essa função, é
 interpretado como um `default_action`:
 
-| `default_action` | Célula de carga (target 0-5) | Sensor de ADC (target 6,7,9,10) |
+| `default_action` | Célula de carga (target 0-5) | Sensor de ADC (target 6,7,9,10,12) |
 |---|---|---|
 | `..._LINEAR_COEF` | `value` é o **peso conhecido** que está sobre a célula agora — a placa resolve sozinha a escala necessária para que a leitura passe a valer esse peso (ver a fórmula de calibração do HX711 abaixo) | `value` é o ganho linear direto |
 | `..._OFFSET_COEF` | Tara a célula: o offset vira a leitura bruta atual (o valor de `value` é ignorado) | `value` é o offset (deslocamento) direto |
@@ -465,6 +488,7 @@ typedef struct __attribute__((packed)) {
     float      temperature_battery;   // temperatura da bateria, em °C
     float      air_speed;             // velocidade do ar (tubo de Pitot), m/s
     float      rpm;                   // rotação do eixo do motor
+    float      temperature_motor;     // temperatura do motor (termistor no estator), °C
     log_status status;                // LOG_VALID / LOG_INVALID / LOG_OVERFLOW /
                                        // LOG_CRITICAL_ALARM / LOG_DENIED_ACTION
     uint32_t   error_code;            // mapa de bits com todos os alarmes ativos
@@ -473,7 +497,7 @@ typedef struct __attribute__((packed)) {
 ```
 
 O campo `error_code` é o que permite ao programa de PC (e ao próprio shell
-da placa, com o comando `siba error`) mostrar, em uma única leitura,
+da placa, com o comando `errs`) mostrar, em uma única leitura,
 **todas** as condições de alarme que estão ativas no momento — sem
 precisar de vários campos booleanos separados. A ideia por trás disso é
 explicada na seção de Segurança.
@@ -530,42 +554,49 @@ célula, o limite do próprio chip HX711) de cada vez.
 
 **Diagnóstico automático de célula desconectada**: se o pino `DOUT` de uma
 célula não estiver ligado a chip nenhum (fio solto, célula removida), o
-pino fica "flutuando" e, por causa do pull-up interno do microcontrolador,
-é lido sempre em nível alto — os 24 bits todos em `1`. Interpretado como
+pino fica "flutuando" (DOUT não tem pull configurado) e tende a ser
+lido em nível alto — os 24 bits todos em `1`. Interpretado como
 inteiro com sinal de 24 bits, `0xFFFFFF` vira exatamente `-1`. O firmware
 usa esse fato como diagnóstico: se `raw == -1`, ele assume que aquela
 célula está fisicamente desconectada e sinaliza isso no código de erro
 agregado (bit `PROP_LOAD_CELL_NOT_CONNECTED`), sem precisar de um pino de
 detecção de presença dedicado.
 
-### Sensores de bateria e Pitot (ADC1, 4 canais)
+### Sensores de bateria, Pitot e temperatura (ADC dual, 5 canais)
 
-O microcontrolador CH32V307 tem dois periféricos de ADC (ADC1 e ADC2), mas
-cada um só alcança fisicamente um conjunto fixo de pinos (é um mux
-analógico interno, não uma limitação de configuração): ADC1 só enxerga os
-pinos PA0 a PA7. Como o driver de ADC deste projeto é **customizado** (não
-o driver genérico do Zephyr — a razão está na próxima seção), e só o ADC1
-está de fato conectado a algo hoje, os 4 canais usados são:
+> ⚠️ **ADC desligado nesta versão da placa** (`HAL_DISABLE_ADC` em
+> `lib/OS/HAL_prm.h`): os circuitos analógicos não foram montados. Esses
+> campos saem zerados na telemetria e os alarmes de bateria ficam
+> desligados. O texto abaixo vale quando o ADC for religado.
 
-| Grandeza física | O que mede | Onde entra na telemetria |
-|---|---|---|
-| Tensão da bateria (`v_batt`) | Tensão do pack de baterias, em Volts | Usada também para estimar o SOC |
-| Corrente da bateria (`i_batt`) | Corrente que está saindo da bateria, em Ampères | Usada pela proteção de sobrecorrente do motor |
-| Velocidade do ar (`air_speed`) | Pressão diferencial do tubo de Pitot, convertida para m/s | Telemetria aerodinâmica |
-| Temperatura da bateria (`temperature_battery`) | Temperatura de um termistor colado no pack | Usada para disparar alarme de superaquecimento |
+O CH32V307 tem dois ADCs e cada um só alcança um conjunto fixo de pinos (é
+um mux analógico interno). O firmware usa os dois em **modo dual
+simultâneo**: o ADC1 é mestre, com DMA, e o ADC2 converte junto como
+escravo. Cada palavra do DMA traz as duas leituras.
 
-Diferente de um projeto que embutiria a fórmula física de cada sensor no
-firmware (por exemplo, a equação de Bernoulli para o Pitot, ou a curva de
-resistência de um termistor NTC), este firmware usa **um único modelo
-linear genérico** para os 4 canais, igual ao usado no HX711 conceitualmente
-(mas afim, não canônico com tara):
+| ADC / canal | Pino | Grandeza | `SENSOR_ID` |
+|---|---|---|---|
+| ADC1 CH0 | PA0 | Velocidade do ar (`air_speed`, Pitot) | 10 |
+| ADC1 CH1 | PA1 | Temperatura da bateria (`temperature_battery`) | 9 |
+| ADC1 CH3 | PA3 | Temperatura do motor (`temperature_motor`) | 12 |
+| ADC2 CH13 | PC3 | Tensão da bateria (`v_batt`) | 6 |
+| ADC2 CH14 | PC4 | Corrente da bateria (`i_batt`) | 7 |
+| ADC2 CH12 | PC2 | Reserva (não publicado) | — |
 
-$$y = \text{linear} \cdot x_{mV} + \text{offset}$$
+Em vez de embutir a fórmula física exata de cada sensor, o firmware usa
+um modelo genérico com ponto de zero, escolhido por sensor no `SIBA.yaml`
+(`sensor_defaults`):
+
+$$y = \text{linear} \cdot (x_{mV} - \text{zero}) + \text{offset} \qquad \text{(lei afim, padrão)}$$
+
+$$y = \text{linear} \cdot \sqrt{x_{mV} - \text{zero}} + \text{offset} \qquad \text{(lei raiz, usada no Pitot)}$$
 
 onde $x_{mV}$ é a tensão lida no pino, em milivolts, e $y$ é o valor físico
-final (Volts, Ampères, m/s ou °C, dependendo do canal). O motivo dessa
-escolha de projeto é que as fórmulas físicas exatas dependem de
-componentes específicos do circuito de condicionamento de sinal (razão
+final (Volts, Ampères, m/s ou °C, dependendo do canal). A lei raiz existe
+porque, por Bernoulli, a velocidade do ar cresce com a raiz da pressão
+diferencial, e nenhuma reta descreve o Pitot. O motivo de manter só
+esses parâmetros ajustáveis, em vez de uma fórmula física completa, é
+que as fórmulas físicas exatas dependem de componentes específicos do circuito de condicionamento de sinal (razão
 exata do divisor resistivo, sensibilidade do sensor de corrente,
 coeficientes do termistor, ganho do amplificador do Pitot) que ainda
 estavam sendo definidos/ajustados no esquemático durante o
@@ -576,18 +607,16 @@ tempo real (via `CMD` de rede ou shell), e o usuário calibra na bancada
 com os valores medidos de verdade, contra um instrumento de referência.
 
 O ADC lê cada canal com resolução de 12 bits (0 a 4095) sobre uma
-referência de 3300 mV, faz uma média de 8 amostras por leitura
-(oversampling, para reduzir ruído) e devolve o resultado via DMA — ou
-seja, o próprio periférico de hardware transfere os dados para a memória
-sem a CPU precisar ficar copiando byte a byte, o que libera o processador
-enquanto a conversão acontece.
+referência de 3300 mV, em DMA circular. A interrupção acumula 1500 quadros
+e publica a média (cerca de 16 Hz), o que reduz bastante o ruído sem
+ocupar a CPU com cópias.
 
 ### Por que existe um driver de ADC customizado
 
 O Zephyr já vem com um driver de ADC genérico que funcionaria, em teoria,
 para vários microcontroladores da mesma família (série CH32V00x/CH32V20x/
 CH32V30x da WCH). O problema é que, ativar esse driver genérico
-(`CONFIG_ADC=y`) neste chip específico (CH32V307VTC6) acaba selecionando,
+(`CONFIG_ADC=y`) neste chip específico (CH32V307VCT6) acaba selecionando,
 por engano, o driver escrito para o **CH32V003** — um chip bem mais
 simples da mesma fabricante — que usa os **mesmos endereços de registrador
 de memória (MMIO)** que, no CH32V307, pertencem ao controlador Ethernet.
@@ -595,8 +624,7 @@ Ou seja: ativar o ADC genérico corrompe a configuração da Ethernet e
 derruba toda a comunicação com o PC. Por isso este projeto mantém um
 driver próprio (`drivers/adc/adc_ch32v307.c`), escrito especificamente
 para os registradores certos do CH32V307, com suporte a múltiplas
-instâncias (ADC1 e ADC2, cada um com seu próprio canal de DMA) — mesmo
-que hoje só o ADC1 esteja de fato em uso.
+instâncias e com o modo dual simultâneo (ADC1 mestre, ADC2 escravo).
 
 ### Rotação do eixo (RPM)
 
@@ -639,7 +667,7 @@ comando válido assim que ligasse).
 ### Proteção contra sobrecorrente do motor
 
 Todo pedido de throttle — venha de um `CMD FUNC_ESC` pela rede ou do
-comando `siba esc` do shell — passa pelo `Propeller_Manager` antes de
+comando `esc` do shell — passa pelo `Propeller_Manager` antes de
 chegar no hardware do PWM. A cada nova leitura de corrente da bateria
 (`i_batt`), o `Propeller_Manager` decide o que fazer:
 
@@ -689,6 +717,11 @@ leitura, sem ambiguidade.
 | 18 | `SEC_RPM_EXCESSIVE` | Rotação acima do limite de segurança — **dispara parada de emergência** |
 | 19 | `SEC_EMERGENCY_ACTIVE` | Uma parada de emergência está em vigor agora (o ESC foi desarmado) |
 | 24 | `OS_GPIO_INIT_FAILED` | Algum periférico de GPIO não conseguiu ser inicializado no boot |
+| 25 | `MCU_POWER_READY` | Informativo: o micro está pronto e os relés estão abertos (ligado no boot pelo `Security_Manager`) |
+
+A tabela é gerada a partir da seção `error_bits` do `SIBA.yaml` (vira
+`lib/SYS/Error_Codes.h` no firmware e as mensagens do Painel de Erros na
+GUI).
 
 Os bits marcados como "dispara parada de emergência" são verificados pelo
 `Security_Manager` a **cada leitura nova** do sensor correspondente —
@@ -705,6 +738,21 @@ para ligado, ou vice-versa). Sem isso, uma condição de erro persistente
 geraria uma linha de log a cada leitura (10 Hz ou mais), inundando o
 console de depuração; com essa checagem de borda, cada condição gera
 exatamente uma linha quando começa e uma quando termina.
+
+### Botão de emergência e cadeia de potência
+
+O botão de emergência fica no caminho de 12 V que alimenta as bobinas dos
+relés: o corte é **físico**, sem depender do micro. O pino PD1 só **lê** o
+estado do botão (por um divisor 12 V → 3 V; 0 V = apertado). Fio solto
+também é lido como emergência. O `Security_Manager` checa esse pino a cada
+despacho de sensor, dispara a parada e a libera quando o sinal volta.
+
+Armar a bancada (`arm` no shell ou `FUNC_START`+`STATUS_OK` pela rede)
+percorre a cadeia na ordem: fecha a **pré-carga**, espera os capacitores do
+ESC carregarem (5 s por padrão, `CONFIG_SIBA_RELAY_PRECHARGE_MS`), fecha a **potência** e só então arma o **ESC**.
+Desarmar faz o caminho inverso. O armamento é recusado com o botão
+apertado, a menos que a emergência tenha sido sobrescrita pela rede
+(`siba force on` no TinyTerminal), o que vale até a placa reiniciar.
 
 ### Estimativa de carga da bateria (SOC)
 
@@ -758,56 +806,57 @@ shell falam **direto** com os gerenciadores de domínio ou com o HAL — eles
 nunca passam pela fila de comandos de rede (`CMD_Core`), então funcionam
 mesmo que a rede esteja completamente desligada.
 
+Os comandos ficam **no nível raiz** do shell (sem prefixo `siba`):
+
 ```mermaid
 flowchart LR
-    siba["siba"] --> read["read / sensors / error / rpm<br/>(consultas, não mudam estado)"]
-    siba --> esc_["esc &lt;0-100&gt; / arm / disarm"]
-    siba --> ops["start / stop / reset"]
-    siba --> tare["tare &lt;0-5&gt; / sensor &lt;id&gt; linear|offset|reset"]
-    siba --> batt["batt poly|templimit|relay|cells"]
-    siba --> prop["prop maxcurrent"]
-    siba --> i2c["i2c scan|read|write"]
-    siba --> dac["dac &lt;0-4095&gt;"]
+    q["tele / sensors / errs / rpm / nvm<br/>(consultas, não mudam estado)"]
+    p["arm / disarm / esc &lt;0-100&gt; / estop / reboot"]
+    c["tare &lt;0-5&gt; / calib &lt;id&gt; linear|offset|reset"]
+    b["batt poly|templimit|relay|cells"]
+    h["prop maxcurrent"]
+    i["i2c scan|read|write"]
+    m["mon &lt;0|1&gt; / btn on|off (só native_sim)"]
 ```
 
 | Comando | Argumentos | O que faz |
 |---|---|---|
-| `siba read` | — | Imprime uma foto completa do pacote de telemetria atual: timestamp, status, código de erro, as 6 células, tensão/corrente/SOC/temperatura da bateria, velocidade do ar e RPM |
-| `siba sensors` | — | Para cada sensor, imprime o valor **bruto** (contagem crua do ADC/HX711) *e* o valor **convertido** (já com a calibração aplicada) lado a lado — útil para descobrir se um problema é de hardware (valor bruto sem sentido) ou de calibração (bruto ok, convertido errado) |
-| `siba error` | — | Decodifica o código de erro agregado bit a bit, mostrando o nome e a descrição de cada condição ativa (a mesma tabela da seção Segurança) |
-| `siba rpm` | — | Imprime só o RPM atual |
-| `siba esc <0-100>` | percentual de throttle | Pede um throttle, passando pelo `Propeller_Manager` (então respeita o limite de corrente) |
-| `siba arm` | — | Arma o ESC diretamente no HAL — **não** passa pelo `Propeller_Manager`, então ignora o limite de corrente. Use com cuidado perto do motor |
-| `siba disarm` | — | Desarma o ESC diretamente no HAL |
-| `siba start <0-5>` | índice da célula | Comando informativo — não faz nada de prático, porque as células já rodam desde o boot |
-| `siba stop` | — | Dispara a mesma parada de emergência que o `CMD FUNC_STOP` |
-| `siba reset` | — | Reinicia o microcontrolador |
-| `siba tare <0-5>` | índice da célula | Tara a célula indicada (offset = leitura bruta atual) |
-| `siba sensor <id> linear <valor>` | — | Para célula de carga: calibra a escala usando `valor` como o **peso conhecido** aplicado agora. Para canal de ADC: define o ganho linear diretamente |
-| `siba sensor <id> offset <valor>` | — | Para célula: tara (o `valor` é ignorado). Para ADC: define o offset diretamente |
-| `siba sensor <id> reset` | — | Restaura a calibração de fábrica daquele sensor |
-| `siba batt poly <0-4> <valor>` | índice do coeficiente, valor | Sobrescreve um dos 5 coeficientes do polinômio de SOC |
-| `siba batt templimit <valor>` | temperatura em °C | Muda o limite de temperatura que dispara o alarme de superaquecimento |
-| `siba batt relay on` / `off` | — | Liga/desliga o relé de potência da bateria |
-| `siba batt cells <n>` | número de células (0 = auto) | Fixa manualmente a contagem de células do pack, contornando a auto-detecção (ver a limitação da lookup table acima) |
-| `siba prop maxcurrent <amps>` | limite em Ampères | Muda o limite de corrente que a proteção do motor usa (padrão 90A) |
-| `siba i2c scan` | — | Varre o barramento I2C1 (endereços 0x03 a 0x77) listando quem responde — útil para achar o endereço de um sensor novo antes de escrever o driver dele |
-| `siba i2c read <addr> <len>` | endereço, quantidade de bytes | Lê `len` bytes do endereço I2C indicado |
-| `siba i2c write <addr> <b0> [b1...]` | endereço, bytes | Escreve os bytes indicados no endereço I2C |
-| `siba dac <0-4095>` | valor bruto de 12 bits | Define a saída do DAC1 (canal 1, pino PA5) |
+| `tele` | — | Foto completa da telemetria atual: timestamp, status, código de erro, as 6 células, bateria, temperaturas, velocidade do ar, RPM e estado do ESC |
+| `sensors` | — | Para cada sensor, o valor **bruto** (contagem do ADC/HX711) e o **convertido** lado a lado — separa problema de hardware (bruto sem sentido) de problema de calibração (bruto ok, convertido errado) |
+| `errs` | — | Decodifica o código de erro bit a bit (a mesma tabela da seção Segurança) |
+| `rpm` | — | Só o RPM atual |
+| `esc <0-100>` | percentual de throttle | Pede um throttle pelo `Propeller_Manager` (respeita o limite de corrente) |
+| `arm` | — | Arma a bancada inteira: pré-carga → potência → ESC (bloqueia durante a pré-carga). Recusado com o botão de emergência apertado. O ESC é armado direto no HAL, então o limite de corrente só atua sobre os pedidos de throttle |
+| `disarm` | — | Desarma a bancada: ESC → potência → pré-carga |
+| `estop` | — | Dispara a mesma parada de emergência que o `CMD FUNC_STOP` |
+| `reboot` | — | Reinicia o microcontrolador (reset frio) |
+| `tare <0-5>` | índice da célula | Tara a célula indicada (offset = leitura bruta atual) |
+| `calib <id> linear <valor>` | — | Célula de carga: calibra a escala usando `valor` como o **peso conhecido** aplicado agora. Canal de ADC: define o ganho linear |
+| `calib <id> offset <valor>` | — | Célula: tara (o `valor` é ignorado). ADC: define o offset |
+| `calib <id> reset` | — | Restaura a calibração de fábrica daquele sensor |
+| `nvm` | — | Mostra a calibração gravada na EEPROM (13 sensores) e o contador de gravações |
+| `mon <0\|1>` | — | Liga/desliga uma impressão periódica na UART |
+| `batt poly <0-4> <valor>` | índice, valor | Sobrescreve um dos 5 coeficientes do polinômio de SOC |
+| `batt templimit <valor>` | °C | Muda o limite de temperatura do alarme de superaquecimento |
+| `batt relay on` / `off` | — | Liga/desliga o relé de potência (com a sequência de pré-carga) |
+| `batt cells <n>` | nº de células (0 = auto) | Fixa a contagem de células do pack, contornando a auto-detecção |
+| `prop maxcurrent <amps>` | Ampères | Muda o limite de corrente da proteção do motor (padrão 90 A) |
+| `i2c scan` | — | Varre o barramento I2C2 (PB10/PB11) listando quem responde |
+| `i2c read <addr> <len>` | endereço, nº de bytes | Lê `len` bytes do endereço indicado |
+| `i2c write <addr> <b0> [b1...]` | endereço, bytes | Escreve os bytes no endereço indicado |
+| `btn on` / `off` | — | **Só em `native_sim`:** simula o botão de emergência apertado/solto |
 
-Note que **alguns desses ajustes só existem pelo shell** — não têm
-equivalente no protocolo de rede (`CMD`) hoje: fixar manualmente o número
-de células (`batt cells`), mudar o limite de corrente do motor
-(`prop maxcurrent`), e todo o acesso ao I2C/DAC. Isso é proposital: são
-ajustes de bancada/diagnóstico, não parâmetros de operação normal que a
-GUI precisaria mudar em tempo real durante um ensaio.
+Alguns ajustes **só existem pelo shell**, sem equivalente no protocolo de
+rede (`CMD`): fixar o número de células (`batt cells`), mudar o limite de
+corrente do motor (`prop maxcurrent`), ler a NVM e acessar o I2C. São
+ajustes de bancada e diagnóstico, não parâmetros que a GUI precise mudar
+durante um ensaio.
 
 ---
 
 ## Pinagem (referência de hardware)
 
-MCU: **CH32V307VTC6** (RISC-V, 144 MHz). A tabela abaixo reflete o
+MCU: **CH32V307VCT6** (RISC-V, 144 MHz). A tabela abaixo reflete o
 esquemático real da placa, já aplicado ao arquivo de descrição de hardware
 do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 
@@ -826,7 +875,7 @@ do Zephyr (`.dts`) e ao código C (`HAL.c`/`HAL.h`).
 | PE6–PE11 | GPIO entrada | Dado (`DOUT`) do HX711 das células 1–6 | entrada, sem pull |
 | PB0 | TIM3 canal 3, captura | Contador de pulsos de RPM | entrada, sem pull |
 | PB6 | TIM4 canal 1, PWM | Sinal do ESC (50 Hz, 1000–2000 µs) | saída PWM |
-| PE15 | GPIO saída | LED externo de "sistema pronto" | ativa alta |
+| PE15 | GPIO saída | LED de "rede online" (acompanha o link do PHY) | ativa alta |
 | PB4 | GPIO saída | LED verde de status | ativa alta |
 | PA15 | GPIO saída | LED vermelho de status | ativa alta |
 | PB10 / PB11 | I2C2 SCL / SDA | EEPROM FT24C32A (0x50) | open-drain, pull-up externo |
@@ -866,6 +915,8 @@ flowchart LR
     gen --> ct["lib/OS/Common_Types.h<br/>(os enums)"]
     gen --> cmd["lib/OS/CMD.h<br/>(struct CMD)"]
     gen --> log["lib/SYS/Log_Manager.h<br/>(struct TELEMETRY_LOG + tabela de sensores)"]
+    gen --> prm["lib/OS/CMD_Core_prm.h<br/>(calibração/faixa padrão por sensor)"]
+    gen --> err["lib/SYS/Error_Codes.h<br/>(bits do error_code)"]
 ```
 
 ```bash
@@ -875,6 +926,8 @@ python generate.py
 #   ../../SIBA/lib/OS/Common_Types.h   (os enums)
 #   ../../SIBA/lib/OS/CMD.h            (a struct CMD)
 #   ../../SIBA/lib/SYS/Log_Manager.h   (a struct TELEMETRY_LOG + tabela de sensores)
+#   ../../SIBA/lib/OS/CMD_Core_prm.h   (calibração/faixa padrão de cada sensor)
+#   ../../SIBA/lib/SYS/Error_Codes.h   (os bits do error_code)
 ```
 
 **Sempre que o `SIBA.yaml` for editado, é preciso rodar `generate.py` antes

@@ -1,5 +1,7 @@
 # Texto do TCC (LaTeX / abnTeX2)
 
+> [README principal](../README.md) · [Apresentação](../apresentacao/README.md)
+
 Fonte LaTeX do trabalho, baseado no modelo [abnTeX2](https://www.abntex.net.br/) customizado pela UDESC/CCT
 (`abntex2-model_UDESC_2024.tex`).
 
@@ -11,7 +13,8 @@ PacotesBasicos.tex             # pacotes e configurações compartilhadas
 abntex2-alf_revNBR2023.bst     # estilo de bibliografia (bibtex) já incluso no repo
 abntex2-ref_UDESC_2020.bib     # base de referências bibliográficas
 PreTextuais/                   # capa, resumo, listas, etc.
-Textuais/                      # introdução, revisão, metodologia, conclusão
+Textuais/                      # introdução, revisão, metodologia, resultados, conclusão
+Textuais/Imgs/                 # figuras e dados (.dat) usados nos gráficos
 PosTextuais/                   # apêndices, anexos, glossário, índice remissivo
 ```
 
@@ -78,6 +81,8 @@ o `.bib` ou alguma imagem tiver mudado desde o último PDF. Alvos disponíveis:
 | `make view` | compila (se preciso) e abre o PDF |
 | `make watch` | recompila sozinho a cada alteração salva (precisa de `latexmk`) |
 | `make bib` | roda só o `bibtex` |
+| `make errors` | mostra as primeiras linhas de erro do `.log` |
+| `make warnings` | lista referências/citações não resolvidas |
 | `make clean` | apaga os auxiliares, mantém o PDF |
 | `make mrproper` | apaga auxiliares e PDF |
 | `make help` | lista os alvos |

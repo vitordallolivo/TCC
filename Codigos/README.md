@@ -1,20 +1,24 @@
-# Codigos — TCC Equipe Albatroz Aerodesign (UDESC Joinville)
+# Codigos — software da bancada
 
-Monorepo do TCC: firmwares das placas embarcadas + aplicação de PC que as
-comanda. O objetivo é caracterizar e controlar um motor **BLDC** de aeromodelo
-(bancada) e telemetria aerodinâmica.
+Firmwares das placas embarcadas e a aplicação de PC que as comanda. O
+objetivo é caracterizar um conjunto motor **BLDC** + hélice de aeromodelo em
+bancada, com telemetria elétrica e aerodinâmica.
+
+> Volta para o [README principal](../README.md).
 
 ## Estrutura
 
 | Pasta | O que é |
 |-------|---------|
 | **`Aplicacao_Pi/`** | **Aplicação PySide6 (GUI)** que roda no PC/Raspberry Pi — cliente unificado das três placas. Ver [`Aplicacao_Pi/README.md`](Aplicacao_Pi/README.md). |
-| **`SIBA/`** | Firmware da placa de **gerenciamento de energia e telemetria** (CH32V307, Zephyr) — aciona o ESC do motor. Ver [`SIBA/Readme.md`](SIBA/Readme.md). |
-| **`SAME/`** | Firmware do **nó de aquisição elétrica do motor** — lê 2 ADCs (tensões/correntes de fase) e **estima ω e torque sem sensores** via SMO+PLL (só observa, não aciona o motor). Ver [`SAME/Readme.md`](SAME/Readme.md). |
+| **`SIBA/`** | Firmware do **nó aerodinâmico e da bateria** (CH32V307, Zephyr): células de carga, Pitot, RPM, relés da bateria — e é quem aciona o ESC. Ver [`SIBA/README.md`](SIBA/README.md). |
+| **`SAME/`** | Firmware do **nó de aquisição elétrica do motor** — lê 2 ADCs (tensões/correntes de fase) e **estima ω e torque sem sensores** via SMO+PLL (só observa, não aciona o motor). Ver [`SAME/README.md`](SAME/README.md). |
 | **`SPMM/`** | Firmware da **bancada provisória de medição mecânica** do BLDC (atrito B/τc, inércia J). Shell **Telnet (TCP)** + log rápido por **UDP binário**. Ver [`SPMM/README.md`](SPMM/README.md). |
 | **`Equations/`** | Scripts de referência (otimização dos ganhos SMO, simulação, hélice) — os usados pela GUI ficam copiados em `Aplicacao_Pi/Scripts/`. |
+| **`Teste/`** | Scripts de experimentos pontuais (recepção crua da SIBA, dashboard de teste, identificação de $L_d$/$L_q$). |
+| **`Makefile`** | Atalhos para compilar/limpar as três placas de uma vez (`make help`). |
 
-Cada `README.md`/`Readme.md` acima é completo por si só — traz as equações,
+Cada `README.md` acima é completo por si só — traz as equações,
 os structs em C, a explicação de cada sensor/thread e o passo a passo de
 uso daquela placa/programa, sem depender de nenhum outro arquivo para
 fazer sentido. Além disso, cada pasta tem um `CLAUDE.md` com anotações
@@ -24,9 +28,10 @@ aberto, bugs históricos já corrigidos).
 ## Rodar
 
 ```bash
-cd Aplicacao_Pi && python mainApp.py                # GUI (venv Python 3.13)
+cd Aplicacao_Pi && python mainApp.py                # GUI
 cd SIBA && make build                               # firmware, placa real
 cd SIBA && make native_sim && make native_sim_run   # firmware no PC (só Linux)
+make native_sim                                     # daqui: native_sim das três placas
 ```
 
 `native_sim` também existe para SAME e SPMM (mesmos alvos de Makefile) — dá
@@ -59,8 +64,8 @@ flowchart TD
     end
 
     Config -->|gera headers C| Gen
-    Gen -->|"lib/OS/{Common_Types,CMD}.h<br/>lib/SYS/Log_Manager.h"| SIBA
-    Gen -->|"lib/OS/{Common_Types,CMD}.h<br/>lib/SYS/Log_Manager.h"| SAME
+    Gen -->|"headers C gerados<br/>(lib/OS, lib/SYS)"| SIBA
+    Gen -->|"headers C gerados<br/>(lib/OS, lib/SYS)"| SAME
 
     GUI <-->|"UDP 5000/5555 — CMD/TELEMETRY_LOG"| SIBA
     GUI <-->|"UDP 4444/4445 — CMD/TELEMETRY_LOG"| SAME
@@ -77,8 +82,8 @@ flowchart TD
 flowchart LR
     y1["Config/SIBA.yaml"] --> gen["Config/generate.py<br/>+ templates Jinja2 (*.h.j2)"]
     y2["Config/SAME.yaml"] --> gen
-    gen --> h1["SIBA/lib/OS/Common_Types.h<br/>SIBA/lib/OS/CMD.h<br/>SIBA/lib/SYS/Log_Manager.h"]
-    gen --> h2["SAME/lib/OS/Common_Types.h<br/>SAME/lib/OS/CMD.h<br/>SAME/lib/SYS/Log_Manager.h"]
+    gen --> h1["SIBA/lib/OS: Common_Types.h, CMD.h, CMD_Core_prm.h<br/>SIBA/lib/SYS: Log_Manager.h, Error_Codes.h"]
+    gen --> h2["SAME/lib/OS: Common_Types.h, CMD.h, CMD_Core_prm.h<br/>SAME/lib/SYS: Log_Manager.h, Error_Codes.h, Security_prm.h"]
     h1 --> SIBAbuild["make build / make native_sim"]
     h2 --> SAMEbuild["make build / make native_sim"]
 
@@ -155,12 +160,12 @@ de bancada sem depender do PC/link UDP.
 ```mermaid
 flowchart TD
     subgraph SIBAsh["SIBA — Test_Shell.c via UART (USART1, 115200 8N1)"]
-        s1["siba read/sensors/error/rpm"]
-        s2["siba esc/arm/disarm/stop/reset"]
-        s3["siba tare/sensor (calibração)"]
-        s4["siba batt (poly/templimit/relay/cells)"]
-        s5["siba prop maxcurrent"]
-        s6["siba i2c scan/read/write, siba dac"]
+        s1["tele / sensors / errs / rpm / nvm / mon"]
+        s2["arm / disarm / esc / estop / reboot"]
+        s3["tare / calib (calibração)"]
+        s4["batt poly|templimit|relay|cells"]
+        s5["prop maxcurrent"]
+        s6["i2c scan|read|write"]
     end
     subgraph SAMEsh["SAME — SEM shell"]
         n1["Todo ajuste só via CMD de rede"]
@@ -173,12 +178,14 @@ flowchart TD
     end
 ```
 
+Nos dois shells os comandos ficam **no nível raiz** (sem prefixo `siba`).
+
 | | SIBA | SAME | SPMM |
 |---|---|---|---|
 | Shell embarcado? | **Sim** — `Test_Shell.c`, Zephyr Shell subsystem | **Não** | **Sim** — Zephyr Shell subsystem, backend Telnet |
-| Meio de acesso | UART (console serial, USART1) | — (só `CMD` via UDP) | Telnet TCP:23 (ou stdin em `native_sim`) |
-| Cobre mais que o protocolo de rede? | **Sim** — I2C bruto, DAC, limite de corrente do motor, contagem de células (sem CMD equivalente) | — | Não tem CMD de rede pra comparar — o shell **é** o protocolo |
-| Detalhe completo | [`SIBA/Readme.md`](SIBA/Readme.md) | [`SAME/Readme.md`](SAME/Readme.md) | [`SPMM/README.md`](SPMM/README.md) |
+| Meio de acesso | UART (USART1); em `native_sim`, stdin do processo ou `siba native shell` no TinyTerminal | — (só `CMD` via UDP) | Telnet TCP:23 (ou stdin em `native_sim`) |
+| Cobre mais que o protocolo de rede? | **Sim** — I2C bruto, limite de corrente do motor, contagem de células, dump da NVM (sem CMD equivalente) | — | Não tem CMD de rede pra comparar — o shell **é** o protocolo |
+| Detalhe completo | [`SIBA/README.md`](SIBA/README.md) | [`SAME/README.md`](SAME/README.md) | [`SPMM/README.md`](SPMM/README.md) |
 
 > ⚠️ Não confundir com o **`TinyTerminal`** da `Aplicacao_Pi` — aquele é um
 > shell que roda **no PC** e fala com as placas pela rede (mesmo `CMD`

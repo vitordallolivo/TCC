@@ -1,11 +1,15 @@
 # Aplicacao_Pi — GUI unificada da bancada (Albatroz)
 
+> [README principal](../../README.md) · [Visão geral do software](../README.md) · [Geração do protocolo](Config/README.md)
+
+**Sumário:** [Como rodar](#como-rodar) · [Estrutura de pastas](#estrutura-de-pastas) · [Modos de conexão](#as-três-formas-de-conectar-em-uma-placa-e-quando-usar-cada-uma) · [Camadas](#estrutura-do-programa-e-o-porquê-de-cada-camada) · [Protocolo](#o-protocolo-de-comandotelemetria-por-dentro) · [TinyTerminal](#tinyterminal--o-shell-embutido-na-interface) · [Telas](#o-que-dá-para-fazer-tela-por-tela) · [Passo a passo](#passo-a-passo-prático-rodando-um-ensaio-do-zero)
+
 ## Para que serve este programa
 
 Esta é a aplicação de PC (roda também num Raspberry Pi) que **comanda e lê
 as três placas** da bancada de ensaios de motopropulsão da equipe Albatroz
-Aerodesign — [SIBA](../SIBA/Readme.md) (aerodinâmica + bateria + ESC),
-[SAME](../SAME/Readme.md) (estimativa elétrica do motor) e
+Aerodesign — [SIBA](../SIBA/README.md) (aerodinâmica + bateria + ESC),
+[SAME](../SAME/README.md) (estimativa elétrica do motor) e
 [SPMM](../SPMM/README.md) (bancada provisória de atrito/inércia). Sem essa
 aplicação, cada placa só fala um protocolo binário/texto de baixo nível —
 é ela que transforma esses bytes em gráficos em tempo real, calibração
@@ -27,17 +31,17 @@ do observador) prontos para entrar no modelo de desempenho da aeronave" —
 sem precisar que quem está calculando desempenho leia telemetria bruta ou
 escreva scripts de regressão do zero.
 
-Escrita em **Python com PySide6** (Qt) para os gráficos e a interface, com
-os cálculos numéricos em **NumPy** puro (sem dependências pesadas de
-álgebra linear onde não é necessário — ver a seção de ensaios da SPMM
-abaixo para o motivo).
+Escrita em **Python com PySide6** (Qt) e **pyqtgraph** para a interface e
+os gráficos. Os cálculos da própria GUI (Clarke/Park, regressões dos
+ensaios da SPMM) usam só **NumPy**; SciPy e Numba ficam restritos aos
+scripts de estimação em `Scripts/`, que rodam como subprocessos.
 
 Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
 
 ## Como rodar
 
 ```bash
-python mainApp.py     # usa o venv Python 3.13 em .venv/
+python mainApp.py     # Python >= 3.11 (dependências em pyproject.toml)
 ```
 
 Ao abrir, o programa primeiro confere se todas as dependências do
@@ -49,6 +53,33 @@ respondendo na mesma porta UDP que uma nova instância tentaria usar,
 misturando dados de duas fontes diferentes e sendo bem difícil de
 diagnosticar (o sintoma seria "a telemetria está estranha" sem pista
 nenhuma de que existem dois firmwares rodando ao mesmo tempo).
+
+---
+
+### Estrutura de pastas
+
+```text
+Aplicacao_Pi/
+├── mainApp.py               ponto de entrada da GUI
+├── native_cli.py            cliente de terminal para o firmware em native_sim (sem GUI)
+├── build.py                 empacota a aplicação com PyInstaller (--onedir)
+├── debug_log.py             logs em arquivo (logs/crash.log, app.log, session.log)
+├── debug_run.sh             roda a GUI sob o gdb para capturar segfaults em C/C++
+├── pyproject.toml           dependências
+├── Config/                  YAMLs do protocolo + generate.py (ver Config/README.md)
+├── Communication_Data/      transporte, domínio e serviço (seção "Estrutura do programa")
+├── GUI/                     janela principal, TinyTerminal e diálogos
+└── Scripts/                 estimação (SMO, hélice) e banco de testes de CMD
+```
+
+### Ferramentas de linha de comando
+
+| Comando | Para que serve |
+|---|---|
+| `python native_cli.py SIBA` | Sobe o `zephyr.exe` da placa e abre um prompt que fala o mesmo protocolo da GUI. `--no-spawn` usa um processo já rodando; `-c "<cmd>"` roteiriza comandos (ex.: `-c arm -c tele`) |
+| `python Scripts/cmd_test.py [--board SAME] [--send]` | Monta e decodifica **todos** os `CMD` possíveis; com `--send` sobe o `native_sim` e mede se a telemetria muda após cada comando |
+| `python build.py` | Gera o executável com PyInstaller; no Linux embute os binários `native_sim` das três placas |
+| `./debug_run.sh` | Roda a GUI sob o `gdb`; o backtrace vai para `logs/gdb_crash.log` |
 
 ---
 
@@ -257,7 +288,7 @@ A janela principal (`mainAlbatrozGUI.py`) e nove janelas auxiliares
 A SIBA e a SAME falam um protocolo idêntico em **formato** (8 bytes de
 comando, uma struct de telemetria), mas com conteúdo (quais enums, quais
 campos) diferente por placa — cada uma tem seu próprio arquivo `.yaml`.
-Veja `../SIBA/Readme.md` e `../SAME/Readme.md` para o conteúdo completo de
+Veja `../SIBA/README.md` e `../SAME/README.md` para o conteúdo completo de
 cada struct; aqui o que importa é como o Python lida com esse formato:
 
 ```python
@@ -346,6 +377,8 @@ flowchart TD
 | `ipconfig` | Lista as interfaces de rede do PC e seus IPs — útil para conferir se o PC está na mesma sub-rede link-local da placa |
 | `listing [porta]` | Diz se uma porta local já está em uso |
 | `tcpdump <ip> <segundos>` | Um sniffer de pacotes cru — requer `sudo` antes |
+| `connect <ip>` | Conecta a um IP qualquer |
+| `logs on` / `logs off` | Liga/desliga a impressão da telemetria das placas no terminal (desligado por padrão, para não esconder as respostas) |
 
 **Comandos por placa** (`siba`/`same`, protocolo `CMD` binário):
 
@@ -354,6 +387,8 @@ flowchart TD
 | `siba connect` / `same connect` | Liga o link apontando para o IP físico da placa (hardware real), e confirma com um ping de sub-rede |
 | `siba mock start` / `stop` | Liga/desliga o simulador Python (modo 2) |
 | `siba native start` / `stop` | Sobe/derruba o firmware real via `native_sim` (modo 3) — precisa ter rodado `make native_sim` na pasta do firmware antes |
+| `siba native shell <cmd>` | Manda uma linha para o shell de UART do firmware da SIBA rodando em `native_sim` (ex.: `siba native shell tele`) |
+| `siba force on` / `off` | Sobrescreve/restaura o botão físico de emergência da SIBA (`STATUS_EMERGENCY_OVERRIDE`/`RESTORE`). Fica só no terminal de propósito: é desvio de segurança, vale até a placa reiniciar |
 | `siba test_io` / `same test_io` | Ver seção "Testando a conexão" abaixo |
 | `siba set <alvo> linear\|offset\|reset\|max\|min <valor>` | Ajusta a calibração de um sensor — o terminal traduz o nome do alvo (`v_batt`, `load_cell_0`, etc.) para o índice correto do enum `target_type`, incluindo alguns apelidos necessários porque o nome que aparece na telemetria não bate literalmente com o nome do enum (por exemplo, `v_batt` na telemetria corresponde a `TARGET_VOLTAGE_DIVIDOR` no protocolo, não a um `TARGET_V_BATT` que não existe) |
 | `same set <alvo> ...` | Mesma ideia, para os alvos da SAME (correntes/tensões de fase, parâmetros do motor, ganhos do SMO) |
@@ -400,7 +435,7 @@ flowchart LR
     MB --> Estim["Estimativas"] --> EstSMO["Ganhos SMO"] & EstHel["Coeficiente da Hélice"] & EstSpmm["Ensaios SPMM (B,τc,J)"]
     MB --> Bat["Bateria"]
     MB --> Cells["Células de Carga"] --> CellsCal["Calibrar"]
-    MB --> Opt["Opções"] --> OptSens["Config. de Sensores"] & OptBoard["Gerenciador de Placas"] & OptErr["Painel de Erros"]
+    MB --> Opt["Opções"] --> OptSens["Config. de Sensores"] & OptBoard["Gerenciador de Placas"] & OptErr["Painel de Erros"] & OptInfo["Guia do Usuário"]
     MB -.canto direito.-> ModeBox["Modo de Operação"]
 ```
 
@@ -441,7 +476,7 @@ em cima; o campo de "peso conhecido" mais o botão "Calibrar pelo peso" é
 onde se informa quanto peso está de fato sobre a célula agora — é a
 placa (não a interface) quem calcula a escala necessária a partir desse
 peso, seguindo o modelo canônico do HX711 explicado em
-`../SIBA/Readme.md`.
+`../SIBA/README.md`.
 
 ### Configuração de Sensores
 
@@ -454,7 +489,7 @@ recalibrar um sensor sem querer só por ele estar na tabela.
 ### Painel de Erros e Alarmes
 
 Uma lâmpada por cada bit do código de erro agregado da SIBA (ver a tabela
-completa em `../SIBA/Readme.md`), agrupadas por área (bateria, motor/
+completa em `../SIBA/README.md`), agrupadas por área (bateria, motor/
 hélice, segurança, sistema), acendendo em vermelho quando aquele alarme
 específico está ativo na telemetria mais recente.
 
@@ -462,12 +497,12 @@ específico está ativo na telemetria mais recente.
 
 Recebe da pessoa que está operando a resistência ($R$) e a indutância
 ($L$) do motor (medidas na bancada de rotor bloqueado, ver
-`../SAME/Readme.md`), o período de amostragem simulado, e parâmetros do
+`../SAME/README.md`), o período de amostragem simulado, e parâmetros do
 algoritmo de busca (número de gerações e tamanho da população da Evolução
 Diferencial). Ao rodar, mostra em tempo real a curva de custo da
 otimização (quanto menor, melhor o ajuste dos ganhos candidatos) conforme
 o script avança, e ao terminar mostra os três ganhos ótimos na forma Γ
-(explicados em `../SAME/Readme.md`) — só grava no `SAME.yaml` depois de
+(explicados em `../SAME/README.md`) — só grava no `SAME.yaml` depois de
 uma confirmação explícita, nunca automaticamente.
 
 ### Estimar Coeficiente da Hélice
