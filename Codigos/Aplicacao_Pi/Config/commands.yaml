@@ -156,29 +156,6 @@ commands:
       soc_p3:     { help: "Coeficiente polinomial P3 do SOC" }
       soc_p4:     { help: "Coeficiente polinomial P4 do SOC" }
 
-  spmm:
-    help: "Bancada de caracterização mecânica (Telnet + UDP). Comandos de texto ao shell do Zephyr."
-
-    connect:    { help: "Abre o link da SPMM (Telnet + UDP log)" }
-    disconnect: { help: "Fecha o link (envia disarm + throttle 1000 — parada segura)" }
-    detect:     { help: "Descobre se a SPMM responde (pong via shell)" }
-    native:
-      help: "Firmware real via native_sim (só Linux): spmm native [start|stop]"
-      start: { help: "Sobe ../SPMM/build_native_sim/zephyr/zephyr.exe (shell via stdin, log UDP loopback)" }
-      stop:  { help: "Encerra o processo native_sim da SPMM" }
-
-    # Comandos de bancada (encaminhados como texto ao shell via Telnet)
-    arm:      { help: "Arma o ESC" }
-    disarm:   { help: "Desarma o ESC (motor parado)" }
-    throttle: { help: "PWM do ESC [us]: spmm throttle 1500", type: "string" }
-    ramp:     { help: "Rampa suave: spmm ramp <us> <s>", type: "string" }
-    rpm:      { help: "Lê a rotação atual" }
-    iq:       { help: "Lê o Iq médio atual" }
-    read:     { help: "Dump: rpm, Iq, Te" }
-    patamar:  { help: "Ensaio B/τc: spmm patamar <us> <s>", type: "string" }
-    coast:    { help: "Ensaio J: corta throttle e captura ω(t)" }
-    log:      { help: "Streaming binário: spmm log start <hz> | spmm log stop", type: "string" }
-
   graph:
     help: "Gerencia os graficos"
 

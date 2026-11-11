@@ -93,4 +93,3 @@ plots_mapping:
     vars:
       torque_eletrico: "Elétrico"
       torque_helice: "Hélice"
-      te: "Te (SPMM)"   # torque eletromagnético medido na bancada SPMM

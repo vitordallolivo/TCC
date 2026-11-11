@@ -34,7 +34,6 @@ from GUI.BoardManagerDialog import BoardManagerDialog
 from GUI.EstimationDialog import EstimationDialog
 from GUI.HeliceDialog import HeliceDialog
 from GUI.LoadCellDialog import LoadCellDialog
-from GUI.SPMMEnsaioDialog import SPMMEnsaioDialog
 from GUI.ErrorPanelDialog import ErrorPanelDialog
 from GUI.SensorConfigDialog import SensorConfigDialog
 from GUI.InfoDialog import InfoDialog
@@ -90,7 +89,7 @@ class AlbatrozGUI(QMainWindow):
         # ESCREVE (via _update_internal_buffers) enquanto a thread de UI LÊ
         # (update_plots_ui/pyqtgraph). Sem isso, o acesso concorrente aos mesmos
         # arrays numpy corrompe memória e causa Falha de segmentação (visto em
-        # alta taxa, ex.: SPMM a 200 Hz no ensaio).
+        # alta taxa).
         self._buf_lock = threading.Lock()
         self.time_buffer = np.full(self.max_ram, np.nan, dtype=np.float32)
         self.value_buffers = {}
@@ -117,7 +116,6 @@ class AlbatrozGUI(QMainWindow):
             self.siba_yaml_path,
             self.same_yaml_path,
             handle_callback=self.process_network_data,
-            sample_callback=self.on_decoded_sample  # amostras já decodificadas (ex.: SPMM)
         )
 
         # Ping antes de conectar + controle do aviso de "supervisório pronto"
@@ -138,7 +136,6 @@ class AlbatrozGUI(QMainWindow):
         self._setup_plots()
         
         # 6. Aplica Preferências e Conexões
-        self._spmm_sample_sink = None   # gancho de amostras p/ os ensaios SPMM
         self.prefs = self.load_user_prefs()
         self._setup_connections()
         self.apply_user_prefs()
@@ -254,25 +251,22 @@ class AlbatrozGUI(QMainWindow):
         lay = QHBoxLayout(self._mode_box); lay.setContentsMargins(4, 0, 8, 0)
         lay.addWidget(QLabel("Modo:"))
         self.cmb_mode = QComboBox()
-        self.cmb_mode.addItems(["SIBA+SAME", "SIBA", "SAME", "SPMM"])
+        self.cmb_mode.addItems(["SIBA+SAME", "SIBA", "SAME"])
         self.cmb_mode.currentTextChanged.connect(self.on_mode_changed)
         lay.addWidget(self.cmb_mode)
         self.ui.menubar.setCornerWidget(self._mode_box, Qt.TopRightCorner)
 
     def _boards_in_mode(self, mode):
-        return {"SPMM": ["SPMM"], "SIBA": ["SIBA"], "SAME": ["SAME"],
+        return {"SIBA": ["SIBA"], "SAME": ["SAME"],
                 "SIBA+SAME": ["SIBA", "SAME"]}.get(mode, [])
 
     def _motor_board(self, mode):
         """Placa que ACIONA o ESC no modo atual.
 
-        - SPMM: a bancada comanda o throttle do ESC (comandos de texto).
         - SIBA: a SIBA controla o ESC (inclusive no modo SIBA+SAME).
         - SAME: NÃO aciona — a SAME é só LEITURA das correntes/tensões a,b,c
           do ESC + estimativa (SMO). Por isso 'SAME' sozinho não tem throttle.
         """
-        if mode == "SPMM":
-            return "SPMM"
         if mode in ("SIBA", "SIBA+SAME"):
             return "SIBA"
         return None
@@ -288,39 +282,10 @@ class AlbatrozGUI(QMainWindow):
         self._apply_mode_plots(mode)
 
     def _refresh_motor_controls(self):
-        """Habilita slider/Atualizar só se o modo aciona um ESC E não há ensaio
-        travando os controles."""
-        en = (self._motor_board(self.op_mode) is not None) and not getattr(self, "_motor_locked", False)
+        """Habilita slider/Atualizar só se o modo aciona um ESC."""
+        en = self._motor_board(self.op_mode) is not None
         self.ui.Motor_action.setEnabled(en)
         self.ui.Motor_update.setEnabled(en)
-
-    def set_motor_locked(self, locked):
-        """Trava/destrava os controles de motor da tela principal (usado pelos
-        ensaios SPMM para não conflitar com os comandos do ensaio)."""
-        self._motor_locked = bool(locked)
-        self._refresh_motor_controls()
-
-    def _require_board_mode(self, mode, boards):
-        """Troca para `mode` (mostra os plots certos) e AVISA se as `boards` não
-        estão recebendo dados. Retorna True se todas estão conectadas."""
-        if getattr(self, "cmb_mode", None) is not None and self.op_mode != mode:
-            self.cmb_mode.setCurrentText(mode)   # troca modo + sobe links + plots
-        for b in boards:
-            self.eth.start_link(b)
-        # Dá um instante para a telemetria (contínua) chegar.
-        from PySide6.QtCore import QCoreApplication
-        t0 = time.time()
-        while time.time() - t0 < 0.6:
-            QCoreApplication.processEvents()
-            time.sleep(0.02)
-        faltando = [b for b in boards
-                    if not (self.eth.workers.get(b) and self.eth.workers[b].is_alive_link())]
-        if faltando:
-            QMessageBox.warning(self, "Placa não conectada",
-                f"A(s) placa(s) {', '.join(faltando)} não está(ão) recebendo dados.\n\n"
-                f"Conecte/detecte no Gerenciador de Placas — sem isso o ensaio "
-                f"não recebe amostras.")
-        return not faltando
 
     def _build_var_board_map(self):
         """var de telemetria -> conjunto de placas que a produzem (p/ filtrar
@@ -335,13 +300,6 @@ class AlbatrozGUI(QMainWindow):
             cfg = codecs.board_protocol_cfg(self.configs.get(board, {}), board)
             for f in codecs.telemetry_layout(cfg):
                 add(f.get("name"), board)
-        spmm = self.eth.registry.get("SPMM")
-        if spmm:
-            for f in spmm.raw_yaml.get("telemetry_fields", []):
-                add(f.get("name"), "SPMM")
-        # A SPMM também mede rotação/torque:
-        for v in ("rpm", "omega", "te", "iq"):
-            add(v, "SPMM")
 
     def _apply_mode_plots(self, mode):
         """REORDENA os gráficos do modo: os relevantes (variáveis das placas do
@@ -456,8 +414,6 @@ class AlbatrozGUI(QMainWindow):
         self.action_estimate_helice.triggered.connect(self.open_helice)
         self.action_calib_load_cell = QAction("Calibrar Célula de Carga", self)
         self.action_calib_load_cell.triggered.connect(self.open_load_cell_calib)
-        self.action_spmm_ensaio = QAction("Ensaios SPMM (B, τc, J)", self)
-        self.action_spmm_ensaio.triggered.connect(self.open_spmm_ensaio)
 
         # Traduz as ações existentes do .ui para português.
         for attr, txt in [("actionLoad", "Carregar"), ("actionCreate", "Criar"),
@@ -478,8 +434,7 @@ class AlbatrozGUI(QMainWindow):
         for act in list(mb.actions()):
             mb.removeAction(act)
 
-        # --- Motor (topo) — Carregar/Criar (a fonte SIBA+SAME do ensaio foi para
-        #     o diálogo de Ensaios SPMM, onde se escolhe a fonte de dados). ---
+        # --- Motor (topo) — Carregar/Criar ---
         self.ui.menuMotor.setTitle("Motor")
         mb.addMenu(self.ui.menuMotor)
 
@@ -487,7 +442,6 @@ class AlbatrozGUI(QMainWindow):
         self.menu_estim = QMenu("Estimativas", mb)
         self.menu_estim.addAction(self.action_estimate_smo)
         self.menu_estim.addAction(self.action_estimate_helice)
-        self.menu_estim.addAction(self.action_spmm_ensaio)
         mb.addMenu(self.menu_estim)
 
         # --- Bateria (topo) ---
@@ -531,8 +485,7 @@ class AlbatrozGUI(QMainWindow):
     def process_network_data(self, protocol, data, addr):
         """Recebe pacotes reais da Ethernet."""
         try:
-            # Placas sem struct TELEMETRY_LOG (ex.: SPMM) chegam decodificadas
-            # por on_decoded_sample — aqui só tratamos SIBA/SAME.
+            # Só SIBA/SAME (placas com TELEMETRY_LOG no YAML).
             if protocol not in self.configs:
                 return
             # Acessa a estrutura correta no YAML (structs -> TELEMETRY_LOG)
@@ -642,55 +595,6 @@ class AlbatrozGUI(QMainWindow):
         else:
             self._error_status_text = "⚠ " + " | ".join(texts)
             self._error_status_detail = "\n\n".join(details)
-
-    @Slot(str, dict)
-    def on_decoded_sample(self, protocol, decoded):
-        """Recebe amostras JÁ decodificadas de links que decodificam no
-        transporte (ex.: SPMM/TelnetLink). Alimenta os mesmos buffers/gráficos
-        que a telemetria struct de SIBA/SAME."""
-        try:
-            # Gancho para os ensaios da SPMM: recebe as amostras cruas
-            # (com t = n·Ts em decoded['timestamp']) sem passar pela base de
-            # tempo do PC dos buffers. Usado pelo SPMMEnsaioDialog (coast-down).
-            sink = getattr(self, "_spmm_sample_sink", None)
-            if sink is not None and protocol == "SPMM":
-                sink(decoded)
-            # Throttle do log no terminal (a SPMM streama ~100-200 Hz; logar tudo
-            # com appendHtml sobrecarrega a main thread). Buffers seguem em taxa
-            # cheia; só o texto do terminal é limitado a ~10 Hz.
-            if hasattr(self, 'terminal'):
-                now = time.time()
-                if now - getattr(self, "_last_sample_log", 0.0) > 0.1:
-                    self._last_sample_log = now
-                    self.terminal.log_board_data(protocol, b"", decoded)
-            self._update_internal_buffers(decoded)
-        except Exception as e:
-            print(f"Erro ao processar amostra decodificada [{protocol}]: {e}")
-
-    def now_buffer_time(self):
-        """Tempo atual na base do buffer/CSV (segundos desde a 1ª amostra).
-        Os ensaios usam isto para MARCAR janelas e depois filtrar os dados
-        já capturados — sem coleta paralela."""
-        t0 = getattr(self, "_t0", None)
-        return (time.time() - t0) if t0 is not None else 0.0
-
-    def snapshot_series(self, var_names):
-        """Foto (cópias, sob o lock) do histórico em RAM: (t, {var: y}).
-        Reaproveita os mesmos buffers do CSV; o ensaio filtra por timestamp."""
-        with self._buf_lock:
-            ptr = self.ptr
-            if ptr == 0:
-                return np.array([]), {v: np.array([]) for v in var_names}
-            if ptr < self.max_ram:
-                t = self.time_buffer[:ptr].copy()
-                ys = {v: self.value_buffers[v][:ptr].copy()
-                      for v in var_names if v in self.value_buffers}
-            else:
-                split = ptr % self.max_ram
-                t = np.concatenate([self.time_buffer[split:], self.time_buffer[:split]])
-                ys = {v: np.concatenate([self.value_buffers[v][split:], self.value_buffers[v][:split]])
-                      for v in var_names if v in self.value_buffers}
-        return t, ys
 
     def get_recent_average(self, var_name, n=10):
         """Média das últimas `n` medições válidas (não-NaN) de uma variável de
@@ -833,13 +737,12 @@ class AlbatrozGUI(QMainWindow):
         Gerenciador de Placas — e só sobe o link das placas que responderam."""
         if self.eth.running:
             self.eth.stop()
-            self._spmm_armed = False
             self._ready_announced.clear()
             self.ui.pushButton_2.setText("Conectar")
             print("Rede parada.")
             return
 
-        boards = self._boards_in_mode(getattr(self, "op_mode", "SPMM"))
+        boards = self._boards_in_mode(getattr(self, "op_mode", "SIBA+SAME"))
         print(f"Procurando placas do modo {self.op_mode}: {boards}")
         self.on_clear_all()
         self._ready_announced.clear()
@@ -1157,19 +1060,6 @@ class AlbatrozGUI(QMainWindow):
         self._loadcell_dlg.activateWindow()
 
     @Slot()
-    def open_spmm_ensaio(self):
-        """Abre o popout de ensaios da SPMM (atrito B/τc e inércia J).
-        Troca automaticamente para o modo SPMM (plots certos) e avisa se a SPMM
-        não estiver conectada."""
-        print("Abrindo Ensaios SPMM...")
-        self._require_board_mode("SPMM", ["SPMM"])
-        if not getattr(self, "_spmm_ensaio_dlg", None):
-            self._spmm_ensaio_dlg = SPMMEnsaioDialog(self, self)
-        self._spmm_ensaio_dlg.show()
-        self._spmm_ensaio_dlg.raise_()
-        self._spmm_ensaio_dlg.activateWindow()
-
-    @Slot()
     def open_helice(self):
         """Abre o popout de estimação do coeficiente da hélice (kQ via CSV)."""
         print("Abrindo Estimador de Coeficiente da Hélice...")
@@ -1208,8 +1098,8 @@ class AlbatrozGUI(QMainWindow):
         sliderReleased / 'Atualizar (Motor)' (evita inundar a rede)."""
         self.prefs["motor_val"] = val
         board = self._motor_board(self.op_mode)
-        # SPMM e SIBA acionam o ESC em µs (servo PWM); rótulo mostra os µs.
-        if board in ("SPMM", "SIBA"):
+        # A SIBA aciona o ESC em µs (servo PWM); rótulo mostra os µs.
+        if board == "SIBA":
             us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
             self.ui.Motor_update.setText(f"Atualizar (throttle {us}us)")
         else:
@@ -1220,23 +1110,12 @@ class AlbatrozGUI(QMainWindow):
     def apply_throttle(self):
         """Envia o throttle atual para quem ACIONA o ESC no modo atual.
 
-        SPMM: arma (uma vez) e manda `throttle <us>` (1000–2000).
         SIBA: manda um CMD FUNC_ESC com value = <us> (1000–2000) — a SIBA
               controla o ESC (servo PWM). A SAME NÃO aciona (só lê/estima)."""
         board = self._motor_board(self.op_mode)
         val = self.ui.Motor_action.value()
         us = 1000 + int(val * 10)   # 0%->1000us, 100%->2000us
-        if board == "SPMM":
-            if "SPMM" not in self.eth.workers:
-                self.eth.start_link("SPMM")
-            if not getattr(self, "_spmm_armed", False):
-                print("[NET] (SPMM) -> 'arm'")
-                self.eth.send_command("SPMM", "arm")
-                self._spmm_armed = True
-            print(f"[NET] (SPMM) -> 'throttle {us}'")
-            self.eth.send_command("SPMM", f"throttle {us}")
-            print(f"[Motor] SPMM throttle {us}us ({val}%)")
-        elif board == "SIBA":
+        if board == "SIBA":
             if "SIBA" not in self.eth.workers:
                 self.eth.start_link("SIBA")
             self._send_board_cmd("SIBA", "FUNC_ESC", float(us))
@@ -1248,12 +1127,7 @@ class AlbatrozGUI(QMainWindow):
     def motor_stop(self):
         """Para o motor com segurança conforme o modo e zera o slider."""
         board = self._motor_board(self.op_mode)
-        if board == "SPMM":
-            self.eth.send_command("SPMM", "throttle 1000")
-            self.eth.send_command("SPMM", "disarm")
-            self._spmm_armed = False
-            print("[Motor] SPMM parado (throttle 1000 + disarm).")
-        elif board == "SIBA":
+        if board == "SIBA":
             # ESC em idle (1000us) + corte imediato de potência (FUNC_STOP).
             self._send_board_cmd("SIBA", "FUNC_ESC", 1000.0)
             self._send_board_cmd("SIBA", "FUNC_STOP", 0.0)

@@ -52,7 +52,7 @@ class _BoardRow:
         self.name = QLabel(f"<b>{cfg.id}</b> <i>({cfg.transport})</i>")
         self.ip_edit = QLineEdit(cfg.ip)
         self.ip_edit.setMinimumWidth(130)
-        # Um campo por porta (pc_rx/board_rx ou telnet/udp_log).
+        # Um campo por porta (pc_rx/board_rx).
         self.port_edits = {}
         self.ports_box = QWidget()
         pb = QHBoxLayout(self.ports_box)
@@ -125,13 +125,6 @@ class BoardManagerDialog(QDialog):
             row.btn_detect.clicked.connect(lambda _=False, b=cfg.id: self._detect_one(b))
             row.btn_native.clicked.connect(lambda _=False, b=cfg.id: self._toggle_native(b))
             row.btn_reset.clicked.connect(lambda _=False, b=cfg.id: self._reset_board(b))
-            if cfg.transport != "udp_struct":
-                # FUNC_RESET é do protocolo binário CMD; a SPMM fala texto por
-                # Telnet e tem o próprio caminho de reinicialização.
-                row.btn_reset.setEnabled(False)
-                row.btn_reset.setToolTip(
-                    "Só para placas com protocolo CMD (SIBA/SAME)."
-                )
             if not linux_ok:
                 # native_sim (zephyr.exe) é um binário POSIX de Linux.
                 row.btn_native.setEnabled(False)

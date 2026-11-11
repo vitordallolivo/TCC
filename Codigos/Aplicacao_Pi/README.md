@@ -7,15 +7,14 @@
 ## Para que serve este programa
 
 Esta é a aplicação de PC (roda também num Raspberry Pi) que **comanda e lê
-as três placas** da bancada de ensaios de motopropulsão da equipe Albatroz
-Aerodesign — [SIBA](../SIBA/README.md) (aerodinâmica + bateria + ESC),
-[SAME](../SAME/README.md) (estimativa elétrica do motor) e
-[SPMM](../SPMM/README.md) (bancada provisória de atrito/inércia). Sem essa
-aplicação, cada placa só fala um protocolo binário/texto de baixo nível —
+as duas placas** da bancada de ensaios de motopropulsão da equipe Albatroz
+Aerodesign — [SIBA](../SIBA/README.md) (aerodinâmica + bateria + ESC) e
+[SAME](../SAME/README.md) (estimativa elétrica do motor). Sem essa
+aplicação, cada placa só fala um protocolo binário de baixo nível —
 é ela que transforma esses bytes em gráficos em tempo real, calibração
 guiada, e nos números que efetivamente interessam para quem projeta a
-aeronave: coeficientes de empuxo e torque da hélice, atrito e inércia do
-conjunto girante, ganhos do observador de motor.
+aeronave: coeficientes de empuxo e torque da hélice e ganhos do
+observador de motor.
 
 **Por que isso importa para quem calcula o desempenho da aeronave**: o
 time de desempenho/aerodesign precisa, para prever alcance, autonomia e
@@ -26,14 +25,13 @@ bancada instrumentada, esses números viriam só de datasheet (que raramente
 bate com o conjunto de peças específico realmente montado) ou de voos de
 teste (caros, arriscados, e difíceis de variar uma condição de cada vez).
 Esta aplicação é o que fecha o laço entre "girar o motor na bancada" e
-"ter uma tabela de coeficientes ($C_T$, $C_Q$, $B$, $\tau_c$, $J$, ganhos
+"ter uma tabela de coeficientes ($C_T$, $C_Q$, ganhos
 do observador) prontos para entrar no modelo de desempenho da aeronave" —
 sem precisar que quem está calculando desempenho leia telemetria bruta ou
 escreva scripts de regressão do zero.
 
 Escrita em **Python com PySide6** (Qt) e **pyqtgraph** para a interface e
-os gráficos. Os cálculos da própria GUI (Clarke/Park, regressões dos
-ensaios da SPMM) usam só **NumPy**; SciPy e Numba ficam restritos aos
+os gráficos. Os cálculos da própria GUI usam só **NumPy**; SciPy e Numba ficam restritos aos
 scripts de estimação em `Scripts/`, que rodam como subprocessos.
 
 Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
@@ -78,7 +76,7 @@ Aplicacao_Pi/
 |---|---|
 | `python native_cli.py SIBA` | Sobe o `zephyr.exe` da placa e abre um prompt que fala o mesmo protocolo da GUI. `--no-spawn` usa um processo já rodando; `-c "<cmd>"` roteiriza comandos (ex.: `-c arm -c tele`) |
 | `python Scripts/cmd_test.py [--board SAME] [--send]` | Monta e decodifica **todos** os `CMD` possíveis; com `--send` sobe o `native_sim` e mede se a telemetria muda após cada comando |
-| `python build.py` | Gera o executável com PyInstaller; no Linux embute os binários `native_sim` das três placas |
+| `python build.py` | Gera o executável com PyInstaller; no Linux embute os binários `native_sim` das duas placas |
 | `./debug_run.sh` | Roda a GUI sob o `gdb`; o backtrace vai para `logs/gdb_crash.log` |
 
 ---
@@ -87,12 +85,11 @@ Aplicacao_Pi/
 
 Antes de descrever os módulos internos, vale entender essa decisão porque
 ela aparece em quase toda tela da aplicação (no combo "Modo de Operação",
-no Gerenciador de Placas, no terminal). Para cada placa (SIBA, SAME, SPMM)
+no Gerenciador de Placas, no terminal). Para cada placa (SIBA, SAME)
 existem três formas independentes de "ligar":
 
 1. **Hardware real** — a placa física, ligada por cabo Ethernet
-   (SIBA/SAME) ou também Ethernet mas falando Telnet (SPMM), num IP
-   link-local fixo (por exemplo, `169.254.97.200` para a SIBA). É o modo
+   num IP link-local fixo (por exemplo, `169.254.97.200` para a SIBA). É o modo
    de verdade, usado em bancada com o motor de fato girando.
 
 2. **Simulador em Python (mock)** — quando não há placa nenhuma
@@ -126,7 +123,7 @@ existem três formas independentes de "ligar":
    `native_sim` elimina esse risco de falso-positivo sem precisar de
    bancada. Limitação: só funciona no Linux (o binário gerado é um ELF
    POSIX de Linux), e cada placa usa um endereço de loopback diferente
-   (SIBA `127.0.0.200`, SAME `127.0.0.100`, SPMM `127.0.0.1`) para as três
+   (SIBA `127.0.0.200`, SAME `127.0.0.100`) para as duas
    poderem rodar ao mesmo tempo sem se confundirem.
 
 ```mermaid
@@ -152,22 +149,19 @@ stateDiagram-v2
 
 ## Estrutura do programa e o porquê de cada camada
 
-O código é organizado em quatro camadas, de baixo para cima — essa
-separação existe porque a SPMM fala um protocolo **completamente
-diferente** (Telnet + log binário) do que a SIBA/SAME (comando binário
-compacto de 8 bytes): sem separar "como os bytes trafegam" de "o que a
-aplicação faz com eles", cada função nova precisaria tratar os dois
-protocolos com `if`s espalhados por todo canto. Com a separação, quem
-gerencia o ciclo de vida de uma conexão (camada de Serviço) não precisa
-saber se está falando com uma placa UDP ou Telnet — ela só chama `send`,
-e a implementação concreta de cada uma cuida do resto.
+O código é organizado em quatro camadas, de baixo para cima. A separação
+isola "como os bytes trafegam" de "o que a aplicação faz com eles": quem
+gerencia o ciclo de vida de uma conexão (camada de Serviço) só chama
+`send`, e a implementação concreta do transporte cuida do resto. Nada no
+`LinkManager` é escrito para uma placa específica — tudo vem do
+`registry`, lido dos `.yaml`.
 
 ```mermaid
 flowchart TD
     subgraph GUIL["Apresentação — GUI/"]
         Main["mainAlbatrozGUI.py"]
         Tiny["TinyTerminal.py"]
-        Dlgs["9 dialogs (Board Manager, Estimation, Hélice, SPMM, Load Cell...)"]
+        Dlgs["8 dialogs (Board Manager, Estimation, Hélice, Load Cell...)"]
     end
     subgraph Serv["Serviço"]
         Mgr["manager.py — LinkManager"]
@@ -179,14 +173,11 @@ flowchart TD
         Reg["registry.py"]
         Cod["codecs.py"]
         MC["motor_config.py"]
-        MM["motor_math.py"]
-        SA["spmm_analysis.py"]
         Errs["errors.py"]
     end
     subgraph Trans["Transporte"]
         Base["links/base.py — BoardLink"]
         Udp["links/udp_struct_link.py"]
-        Tel["links/telnet_link.py"]
         Sim["simulators/board_simulator.py"]
     end
 
@@ -195,9 +186,8 @@ flowchart TD
     Tiny --> Mgr
     Dlgs --> Mgr & Disc & EstR
     Mgr --> Reg & Base & Sim & NS
-    Base --> Udp & Tel
+    Base --> Udp
     Udp --> Cod
-    Tel --> Cod
 ```
 
 ### Camada de transporte (`Communication_Data/links/` e `simulators/`)
@@ -206,48 +196,35 @@ Define o contrato comum a qualquer placa: uma thread própria de entrada/
 saída (`BoardLink`, uma classe abstrata), com um método `send()` para
 mandar dado e contadores de pacotes recebidos/enviados que servem tanto
 para os LEDs de status na tela quanto para o diagnóstico de rede (seção
-"Testando a conexão", abaixo). Duas implementações concretas:
+"Testando a conexão", abaixo). A implementação concreta é:
 
 - **`UdpStructLink`** (SIBA/SAME): um único socket UDP faz recepção e
   envio no mesmo laço — a cada volta do laço, tenta receber um pacote (com
   um timeout curto de 0,1 segundo, para não travar indefinidamente) e, se
   houver algo na fila de envio, manda.
-- **`TelnetLink`** (SPMM): mais complexa porque o protocolo da SPMM tem
-  duas vias completamente separadas fisicamente — os **comandos** vão por
-  uma sessão TCP (Telnet, porta 23), e o **log de telemetria** chega por
-  um socket UDP à parte (porta 5000). O envio de comando (`send`) abre (ou
-  reaproveita) a sessão TCP e escreve o texto; a recepção só escuta o
-  socket UDP e decodifica cada pacote binário em uma amostra por vez.
-  Existe também um mecanismo de segurança crítico aqui: sempre que esse
-  link é encerrado — por qualquer motivo, inclusive a aplicação travando —
-  ele manda `disarm` seguido de `throttle 1000` antes de fechar a conexão,
-  porque o motor **nunca** pode continuar girando se o programa que o
-  comanda parar de responder.
 
-### Camada de domínio (`registry.py`, `codecs.py`, `motor_config.py`, `motor_math.py`, `spmm_analysis.py`, `errors.py`)
+O `BoardSimulator` (`simulators/`) implementa o modo mock: finge ser o
+firmware respondendo na mesma porta.
+
+### Camada de domínio (`registry.py`, `codecs.py`, `motor_config.py`, `errors.py`)
 
 São **funções puras** — sem rede, sem thread, sem estado global — que
 fazem a tradução entre bytes/YAML e valores com significado:
 
-- `registry.py` lê os arquivos `Config/SIBA.yaml`/`SAME.yaml`/`SPMM.yaml`
+- `registry.py` lê os arquivos `Config/SIBA.yaml`/`SAME.yaml`
   (o bloco `link:` de cada um) e monta um objeto simples por placa com IP,
   portas e qual protocolo usar — assim, o resto do programa não precisa
   saber, "na unha", que a SIBA usa a porta 5000 e a SAME usa a 4444: essa
   informação vem de um arquivo de configuração, editável sem mexer em
   código.
 - `codecs.py` empacota/desempacota os pacotes binários (`CMD` de 8 bytes,
-  `TELEMETRY_LOG`, e o log da SPMM) usando o módulo `struct` do Python,
+  `TELEMETRY_LOG`) usando o módulo `struct` do Python,
   com o formato `<BBBfb>` (o `<` força little-endian, compatível com o
   RISC-V de destino).
 - `motor_config.py` lida com os arquivos de perfil de motor
   (`Config/motors/*.yaml`) e sabe montar a lista de `CMD`s necessários
   para aplicar um perfil inteiro no hardware da SAME.
-- `motor_math.py` tem as transformadas de Clarke/Park em NumPy, usadas
-  quando o ensaio de atrito é feito lendo a SIBA (RPM) e a SAME (correntes
-  de fase) em vez da bancada SPMM — ver a seção de ensaios abaixo.
-- `spmm_analysis.py` tem a regressão linear e o cálculo de $J$ dos
-  ensaios da SPMM — ver a seção de ensaios abaixo.
-- `errors.py` traduz o `error_code` (mapa de bits) que a SIBA manda na
+- `errors.py` traduz o `error_code` (mapa de bits) que cada placa manda na
   telemetria para mensagens em português — por exemplo, o bit 4 vira
   "Bateria superaquecendo (temperatura acima do limite de alarme)" em vez
   de só "bit 4 ativo".
@@ -259,11 +236,9 @@ fazem a tradução entre bytes/YAML e valores com significado:
   `registry` disser sobre aquela placa, e expõe os três modos de conexão
   descritos acima (`start_link`, `set_mock_mode`, `start_native_sim`).
 - **`DiscoveryService`** resolve a pergunta "essa placa está presente
-  agora?" de um jeito específico por protocolo: para SIBA/SAME, manda um
-  comando neutro (que não muda nada no estado da placa) e espera qualquer
-  pacote de telemetria como confirmação; para a SPMM, abre a sessão Telnet
-  e manda o comando `rpm`, e qualquer resposta já confirma presença — a
-  ideia de "pong" (por analogia a um ping/pong).
+  agora?": manda um comando neutro (que não muda nada no estado da placa)
+  e espera qualquer pacote de telemetria como confirmação — a ideia de
+  "pong" (por analogia a um ping/pong). Se nada chegar, tenta um ping ICMP.
 - **`EstimationRunner`** roda os scripts de estimação (ganhos do SMO,
   coeficiente da hélice) como **subprocessos** Python separados — não
   dentro da mesma thread da interface — e retransmite, linha a linha, a
@@ -309,22 +284,13 @@ Python — isso é o que permite ao mesmo código Python (`codecs.py`) lidar
 com o layout diferente da SIBA e da SAME sem duplicar a lógica de
 decodificação.
 
-O protocolo da **SPMM** é diferente por natureza: não é um comando de
-formato fixo, é texto simples mandado por uma sessão Telnet
-(`b"throttle 1500\r\n"`, por exemplo) — quem decide o que cada palavra
-significa é o shell do próprio firmware da SPMM (ver
-`../SPMM/README.md`), não um `.yaml`. Só o log de dados da SPMM é binário
-(uma struct compacta com contador de amostra, rotação, torque e as 6
-grandezas elétricas — ver `../SPMM/README.md` para o layout exato).
-
 ---
 
 ## `TinyTerminal` — o shell embutido na interface
 
 O `TinyTerminal` é uma janela de terminal de texto **dentro da própria
 aplicação Python** — não confundir com o shell da SIBA (que roda dentro do
-firmware, acessado por UART) nem com o shell Telnet da SPMM (que roda
-dentro do firmware da SPMM). O `TinyTerminal` roda no PC e fala com as
+firmware, acessado por UART). O `TinyTerminal` roda no PC e fala com as
 placas exatamente pela mesma rede que o resto da interface usa — ele
 existe para dar acesso rápido a ações de diagnóstico e controle sem
 precisar abrir um menu, e para servir como uma ferramenta de depuração
@@ -393,15 +359,6 @@ flowchart TD
 | `siba set <alvo> linear\|offset\|reset\|max\|min <valor>` | Ajusta a calibração de um sensor — o terminal traduz o nome do alvo (`v_batt`, `load_cell_0`, etc.) para o índice correto do enum `target_type`, incluindo alguns apelidos necessários porque o nome que aparece na telemetria não bate literalmente com o nome do enum (por exemplo, `v_batt` na telemetria corresponde a `TARGET_VOLTAGE_DIVIDOR` no protocolo, não a um `TARGET_V_BATT` que não existe) |
 | `same set <alvo> ...` | Mesma ideia, para os alvos da SAME (correntes/tensões de fase, parâmetros do motor, ganhos do SMO) |
 
-**Comandos da SPMM** (`spmm`, protocolo Telnet — texto simples):
-
-| Comando | O que faz |
-|---|---|
-| `spmm connect` / `disconnect` | Abre/fecha o link Telnet+UDP (fechar dispara a parada segura do motor) |
-| `spmm detect` | Manda um `rpm` pela sessão Telnet e considera qualquer resposta como "placa presente" |
-| `spmm native start` / `stop` | `native_sim` da SPMM — nesse modo o "shell" vira o próprio stdin do processo, porque o backend Telnet TCP fica desligado quando compilado para `native_sim` |
-| `spmm <qualquer outro texto>` | Encaminhado cru para o shell da SPMM — por exemplo, `spmm throttle 1500` ou `spmm coast` funcionam exatamente como digitar isso direto numa sessão Telnet manual |
-
 **Comandos de gráfico** (`graph`): `graph clear` limpa os buffers de
 telemetria acumulados; `graph mock_data start/stop` liga/desliga o
 simulador (atalho equivalente a `siba mock start` + `same mock start`
@@ -432,7 +389,7 @@ sendo gerada) — isolando de forma rápida onde procurar.
 flowchart LR
     MB["Barra de menus"]
     MB --> Motor["Motor"] --> MLoad["Carregar"] & MCreate["Criar"]
-    MB --> Estim["Estimativas"] --> EstSMO["Ganhos SMO"] & EstHel["Coeficiente da Hélice"] & EstSpmm["Ensaios SPMM (B,τc,J)"]
+    MB --> Estim["Estimativas"] --> EstSMO["Ganhos SMO"] & EstHel["Coeficiente da Hélice"]
     MB --> Bat["Bateria"]
     MB --> Cells["Células de Carga"] --> CellsCal["Calibrar"]
     MB --> Opt["Opções"] --> OptSens["Config. de Sensores"] & OptBoard["Gerenciador de Placas"] & OptErr["Painel de Erros"] & OptInfo["Guia do Usuário"]
@@ -441,17 +398,14 @@ flowchart LR
 
 ### Tela principal
 
-Tem o combo **"Modo de Operação"** (`SPMM`, `SIBA`, `SAME`, ou
-`SIBA+SAME`), que decide quais placas ligam e quais gráficos aparecem —
-por exemplo, no modo `SPMM` só aparecem os gráficos de rotação/torque da
-bancada provisória; no modo `SIBA+SAME`, aparecem tanto a telemetria
-aerodinâmica/bateria quanto a estimativa elétrica do motor. O slider de
-throttle manda o comando de acelerar para quem quer que seja a placa que
-aciona o ESC no modo atual (a SIBA, seja sozinha ou junto com a SAME; a
-SPMM, no modo próprio dela — a SAME **nunca** aciona nada, ela só observa,
-então no modo `SAME` sozinho o slider fica desabilitado). O botão
-"Desligar (Motor)" sempre executa uma parada segura (throttle mínimo mais
-o comando de desarmar), não importa que placa esteja no controle.
+Tem o combo **"Modo de Operação"** (`SIBA`, `SAME` ou `SIBA+SAME`), que
+decide quais placas ligam e quais gráficos aparecem — no modo
+`SIBA+SAME`, aparecem tanto a telemetria aerodinâmica/bateria quanto a
+estimativa elétrica do motor. O slider de throttle manda o comando de
+acelerar para a SIBA, que é quem aciona o ESC (sozinha ou junto com a
+SAME). A SAME **nunca** aciona nada, ela só observa, então no modo `SAME`
+sozinho o slider fica desabilitado. O botão "Desligar (Motor)" executa
+uma parada segura (throttle mínimo mais `FUNC_STOP`).
 
 ### Gerenciador de Placas
 
@@ -521,46 +475,6 @@ coeficientes variam com a razão de avanço (a relação entre a velocidade do
 ar e a rotação); sem velocidade do ar medida, o cálculo cai para o modelo
 estático mais simples, $T = k_Q \omega^2$.
 
-### Ensaios SPMM — atrito e inércia
-
-```mermaid
-flowchart TD
-    Choice{"Tipo de ensaio"}
-    Choice -->|Atrito| A["N throttles × tempo de estabilização"]
-    Choice -->|Inércia| I["throttle alto → estabiliza → coast → captura N segundos"]
-    A --> MarkA["marca janela [t0,t1] de CADA throttle<br/>(SEM coletar em paralelo)"]
-    I --> MarkI["marca t_coast e t_end"]
-    MarkA --> Read["lê os dados que os gráficos JÁ capturavam,<br/>filtra pelas janelas marcadas"]
-    MarkI --> Read
-    Read --> Calc["regressão (B,τc) ou derivada (J)"]
-    Calc --> CSV["salva incremental, com índice de repetição"]
-    Calc -.SEMPRE, mesmo com erro.-> Safe["disarm + throttle 1000"]
-```
-
-Reproduz, de dentro da interface, exatamente a sequência de comandos que
-se digitaria manualmente no shell da SPMM (ver `../SPMM/README.md` para as
-equações completas): escolhe-se o tipo de ensaio (atrito ou inércia), os
-parâmetros (lista de throttles e tempo de espera, para o atrito; throttle
-alto, tempo de estabilização e duração de captura, para a inércia), e um
-nome de arquivo CSV. Um detalhe de implementação relevante para quem for
-mexer nesse código: o ensaio **não fica escutando dados em paralelo**
-enquanto comanda o motor — em vez disso, ele só **marca o instante de
-início e fim** de cada trecho relevante (usando o relógio do próprio
-programa), e, só depois de todos os comandos terem sido mandados, vai lá
-nos dados que os gráficos já estavam capturando continuamente e filtra
-apenas o que caiu dentro dessas janelas marcadas. Essa escolha evitou uma
-condição de corrida (que já causou uma falha de segmentação numa versão
-anterior) entre a thread do ensaio e a thread que atualiza os buffers de
-telemetria.
-
-Um recurso extra: em vez de usar os dados da própria bancada SPMM, dá para
-escolher medir o atrito usando o RPM da SIBA junto com as correntes de
-fase da SAME — nesse caso, o torque não é o `torque_eletrico` que a SAME
-já calcula (que depende de um $K_t$ do motor que pode estar impreciso),
-mas sim recalculado do zero a partir de $I_q$ (Clarke+Park aplicados sobre
-as correntes de fase, com o ângulo elétrico reconstruído por integração do
-RPM) multiplicado pela constante de torque.
-
 ### Motor → Carregar / Criar
 
 "Criar" abre um formulário com os parâmetros físicos do motor (polos,
@@ -596,8 +510,7 @@ só as telas envolvidas):
    placas do modo escolhido.
 4. **Rode o ensaio** propriamente dito: acelere o motor manualmente pelo
    slider (variando o throttle em alguns níveis diferentes, se for medir
-   uma curva) ou, se for um ensaio guiado (Estimativas → Ensaios SPMM), use
-   o diálogo correspondente, que comanda o throttle sozinho.
+   uma curva).
 5. **Exporte os dados**: botão "Salvar CSV" na tela principal — isso grava
    todo o histórico de telemetria acumulado (da RAM e do que já tiver ido
    para o arquivo de swap em disco, caso o ensaio tenha durado o
@@ -615,7 +528,7 @@ só as telas envolvidas):
 
 O mesmo roteiro geral (ligar → escolher modo → conectar → rodar → exportar
 → processar → confirmar antes de aplicar) se repete para os outros
-ensaios (ganhos do SMO, atrito/inércia da SPMM), só trocando qual diálogo
+ensaios (como os ganhos do SMO), só trocando qual diálogo
 processa os dados e quais parâmetros de entrada ele pede.
 
 ---

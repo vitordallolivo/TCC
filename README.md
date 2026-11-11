@@ -60,16 +60,14 @@ contraeletromotriz (BEMF) a partir das correntes e tensões de fase.
 
 ## Arquitetura
 
-A bancada é formada por **dois nós de aquisição definitivos** e uma **bancada
-provisória**, todos baseados no microcontrolador **CH32V307VCT6** (RISC-V,
+A bancada é formada por **dois nós de aquisição**, ambos baseados no microcontrolador **CH32V307VCT6** (RISC-V,
 144 MHz, FPU e Ethernet MAC+PHY integrados) e rodando **Zephyr RTOS**. Um único
-programa de PC comanda os três.
+programa de PC comanda os dois.
 
 | Placa | Nome | Papel |
 |:---:|---|---|
 | **SIBA** | Sistema Integrado da Bancada Aerodinâmica | Células de carga (6× HX711), Pitot, RPM, bateria e relés. **É a placa que aciona o ESC.** |
 | **SAME** | Sistema de Aquisição do Motor Elétrico | Lê tensões e correntes das 3 fases e roda o SMO + PLL embarcado. **Só observa, nunca aciona.** |
-| **SPMM** | Sistema Provisório de Medição Mecânica | Bancada provisória com ESC próprio, usada para medir atrito (B, τc) e inércia (J). |
 
 ```mermaid
 flowchart LR
@@ -80,17 +78,14 @@ flowchart LR
 
     SIBA["SIBA<br/>aero + bateria + ESC"]
     SAME["SAME<br/>SMO + PLL"]
-    SPMM["SPMM<br/>bancada provisória"]
     ESC["ESC"] --> MOTOR["Motor BLDC + hélice"]
 
     GUI <-->|"UDP 5000 / 5555"| SIBA
     GUI <-->|"UDP 4444 / 4445"| SAME
-    GUI <-->|"Telnet 23 + UDP 5000"| SPMM
     YAML -.->|"generate.py → headers C"| SIBA & SAME
 
     SIBA -->|PWM| ESC
     SAME -.->|"mede fases"| ESC
-    SPMM -->|"PWM (ESC próprio)"| MOTOR
 ```
 
 **Firmware.** SIBA e SAME seguem a mesma arquitetura: nenhuma thread mexe
@@ -126,7 +121,6 @@ firmware de verdade como processo Linux, com UDP real em loopback.
 │   │   └── Config/           YAMLs do protocolo, templates Jinja2 e generate.py
 │   ├── SIBA/                 Firmware Zephyr do nó aerodinâmico e da bateria
 │   ├── SAME/                 Firmware Zephyr do nó elétrico (SMO + PLL) + testes do observador
-│   ├── SPMM/                 Firmware Zephyr da bancada provisória (B, τc, J)
 │   ├── Equations/            Scripts de referência: simulação do SMO, autotuning, hélice
 │   └── Teste/                Scripts de experimentos pontuais
 ├── Simulacoes/               LTspice (front-end AMC1301, SS49E) e FEMM (toroide do sensor de corrente)
@@ -141,7 +135,6 @@ firmware de verdade como processo Linux, com UDP real em loopback.
 | `Codigos/Aplicacao_Pi/` | [Aplicação de supervisão](Codigos/Aplicacao_Pi/README.md) · [Geração do protocolo](Codigos/Aplicacao_Pi/Config/README.md) |
 | `Codigos/SIBA/` | [Firmware SIBA](Codigos/SIBA/README.md) |
 | `Codigos/SAME/` | [Firmware SAME](Codigos/SAME/README.md) |
-| `Codigos/SPMM/` | [Firmware SPMM](Codigos/SPMM/README.md) |
 | `Textual/` | [Como compilar o texto](Textual/README.md) |
 | `apresentacao/` | [Como compilar os slides](apresentacao/README.md) |
 
@@ -162,7 +155,7 @@ python mainApp.py            # instala dependências faltantes do pyproject.toml
 cd Codigos
 make help                    # lista os alvos
 make siba                    # compila a SIBA para a placa real
-make native_sim              # compila SIBA, SAME e SPMM para rodar no PC (Linux)
+make native_sim              # compila SIBA e SAME para rodar no PC (Linux)
 ```
 
 **Protocolo** (sempre que `SIBA.yaml` ou `SAME.yaml` mudar)
@@ -259,8 +252,7 @@ Q = C_Q·ρ·n²·D⁵   ⇒   Q = k_Q·ω_m²,   com   k_Q = C_Q·ρ·D⁵ / (4
 |---|---|
 | Firmware SIBA | Compila para a placa e para `native_sim`; UDP validado em `native_sim`. ADC desligado nesta versão da placa (circuitos analógicos não montados) |
 | Firmware SAME | SMO + PLL embarcado, diagnóstico por `error_code`, calibração persistente em EEPROM; compila para a placa e para `native_sim` |
-| Bancada provisória SPMM | Implementada; usada para caracterizar B, τc e J |
-| Aplicação de supervisão | Funcional; cliente único das três placas, nos modos hardware, simulador e `native_sim` |
+| Aplicação de supervisão | Funcional; cliente único das duas placas, nos modos hardware, simulador e `native_sim` |
 | Simulação do SMO + autotuning | Validada (prova de conceito) |
 | Identificação dos parâmetros elétricos | Concluída |
 | Validação experimental integrada (SIBA + SAME) | Em andamento |

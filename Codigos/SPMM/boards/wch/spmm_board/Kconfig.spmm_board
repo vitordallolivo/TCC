@@ -1,6 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-config BOARD_SPMM_BOARD
-	select SOC_CH32V307
-
-if BOARD_SPMM_BOARD
-endif

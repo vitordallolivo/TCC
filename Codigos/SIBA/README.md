@@ -645,9 +645,8 @@ O `14` no denominador é o número de polos do motor (a contagem de pulsos
 por volta), e o `60000/100` converte de "voltas por janela de 100 ms" para
 "voltas por minuto". Essa medida é feita de forma totalmente independente
 do acionamento do motor (ela não depende de nenhum sinal do ESC) —
-isso é importante porque, em ensaios de desaceleração livre (coast-down,
-feitos na bancada SPMM, ver `../SPMM/README.md`), a excitação elétrica do
-motor é cortada de propósito, e um método de medir rotação que dependesse
+isso é importante porque, em ensaios de desaceleração livre (coast-down),
+a excitação elétrica do motor é cortada de propósito, e um método de medir rotação que dependesse
 da comutação elétrica do motor pararia de funcionar justamente na parte
 mais importante do ensaio.
 

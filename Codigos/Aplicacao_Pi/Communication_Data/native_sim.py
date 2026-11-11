@@ -4,9 +4,8 @@ Sobe o binário compilado pra board `native_sim` do Zephyr como processo POSIX
 no host, com UDP real em loopback (NSOS). Diferente do BoardSimulator (fake
 Python), é o firmware de verdade. Só roda no Linux (zephyr.exe é ELF POSIX).
 
-SIBA/SAME (udp_struct) recebem comando por UDP; SPMM (telnet) usa o shell
-serial via stdin (-uart_stdinout), já que o backend Telnet fica desligado
-em native_sim.
+SIBA/SAME recebem comando por UDP; o stdin do processo (-uart_stdinout) dá
+acesso ao shell de diagnóstico do firmware.
 """
 import os
 import re
@@ -107,8 +106,8 @@ class NativeSimProcess:
     def write_stdin(self, text):
         """Envia um comando de texto ao shell serial do firmware (via stdin).
 
-        Usado no modo native da SPMM (shell serial `-uart_stdinout`). Retorna
-        True se escreveu."""
+        Usado por `siba native shell` e pelo native_cli.py. Retorna True se
+        escreveu."""
         if self.proc is None or self.proc.stdin is None:
             return False
         try:

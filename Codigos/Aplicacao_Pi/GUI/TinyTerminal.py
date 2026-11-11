@@ -350,10 +350,6 @@ class TinyTerminal(QWidget):
         self.eth.set_mock_mode("SAME", False)
         self.eth.stop_native_sim("SIBA")
         self.eth.stop_native_sim("SAME")
-        # Encerra o link da SPMM com parada segura (disarm) se estiver ativo.
-        spmm = self.eth.workers.pop("SPMM", None)
-        if spmm:
-            spmm.stop(); spmm.join(timeout=1.0)
         e.accept()
 
     # --- Implementações de Comandos Específicos ---
@@ -549,52 +545,6 @@ class TinyTerminal(QWidget):
 
     def _cmd_siba_test_io(self, args): self._test_io_flow("SIBA")
     def _cmd_same_test_io(self, args): self._test_io_flow("SAME")
-
-    def _cmd_spmm(self, args):
-        """SPMM (Telnet + UDP): connect/disconnect/detect ou encaminha o texto
-        restante como comando de bancada ao shell do Zephyr."""
-        if not args:
-            return self.append_log("ERR", "Uso: spmm [connect|disconnect|detect|arm|throttle <us>|coast|log start <hz>|...]", "#FF4500")
-        sub = args[0].lower()
-
-        if sub == "connect":
-            self.eth.start_link("SPMM")
-            self.append_log("SYS", "Link SPMM iniciado (Telnet TCP + UDP log).", "#ADFF2F")
-            return
-        if sub == "disconnect":
-            w = self.eth.workers.pop("SPMM", None)
-            if w:
-                w.stop(); w.join(timeout=1.0)
-            self.append_log("SYS", "Link SPMM encerrado (disarm + throttle 1000 enviados).", "#FFFF00")
-            return
-        if sub == "detect":
-            from Communication_Data.discovery import DiscoveryService
-            st = DiscoveryService(self.eth).probe("SPMM")
-            col = "#32CD32" if st.present else "#FF4500"
-            self.append_log("SPMM", f"{'PRESENTE' if st.present else 'AUSENTE'} — {st.detail}", col)
-            return
-        if sub == "native":
-            action = args[1].lower() if len(args) > 1 else "start"
-            if action == "stop":
-                self.eth.stop_native_sim("SPMM")
-                self.append_log("SYS", "native_sim SPMM encerrado.", "#FFFF00")
-            else:
-                from Communication_Data.native_sim import native_sim_supported
-                if not native_sim_supported():
-                    return self.append_log("ERR", "native_sim só é possível no Linux.", "#FF4500")
-                if self.eth.start_native_sim_auto("SPMM"):
-                    self.append_log("SYS", "Firmware SPMM (native_sim) rodando — shell via stdin, log UDP em 127.0.0.1.", "#ADFF2F")
-                else:
-                    self.append_log("ERR", "Falha: rode 'make native_sim' em ../SPMM/.", "#FF4500")
-            return
-
-        # Demais: encaminha como texto ao shell (garante o link ativo antes).
-        if "SPMM" not in self.eth.workers:
-            self.eth.start_link("SPMM")
-        text = " ".join(args)
-        ok = self.eth.send_command("SPMM", text)
-        col = "#00FFFF" if ok else "#FF4500"
-        self.append_log("SPMM", f"CMD -> '{text}'{'' if ok else '  (FALHOU — placa conectada?)'}", col)
 
     def _test_io_flow(self, board):
         """Testa RX e TX da placa de forma isolada — envia um CMD neutro e

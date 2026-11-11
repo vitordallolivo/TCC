@@ -16,10 +16,6 @@ SIBA e da SAME.
 3. **Templates (`.j2`)**: modelos que definem a implementação final dos
    headers C.
 
-`SPMM.yaml` **não** passa por `generate.py` — a SPMM fala um protocolo
-diferente (Telnet + log binário), fixo em `../../SPMM/src/spmm.h`; o YAML
-aqui só descreve endereçamento/`Ts`/comandos do lado do PC.
-
 ## Estrutura de arquivos e outputs
 
 ### Arquivos deste diretório
@@ -27,7 +23,6 @@ aqui só descreve endereçamento/`Ts`/comandos do lado do PC.
 | Arquivo | Papel |
 | :--- | :--- |
 | `SIBA.yaml` / `SAME.yaml` | Protocolo de cada placa: `link`, `enums`, `structs`, `error_bits`, `sensor_defaults` e (SAME) `security_limits` |
-| `SPMM.yaml` | Só endereçamento/`Ts`/comandos do lado do PC (não gera nada) |
 | `generate.py` | Renderiza os templates para SIBA e SAME |
 | `*_template.h.j2` | Templates Jinja2 dos headers C |
 | `plots.yaml` | Mapeamento telemetria → gráficos da GUI (títulos, eixos, legendas) |

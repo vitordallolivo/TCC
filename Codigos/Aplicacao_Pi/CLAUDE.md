@@ -8,14 +8,10 @@ das placas do projeto:
 - **SIBA** (gerenciamento de energia/telemetria aerodinâmica, `../SIBA/`) e
   **SAME** (controle de inversor/motor, `../SAME/`) — via **UDP/Ethernet** com
   o protocolo compacto (`CMD` 8 bytes + `TELEMETRY_LOG`).
-- **SPMM** (bancada provisória de caracterização mecânica do motor BLDC,
-  `../SPMM/`) — via **Telnet (TCP)** para o shell de comandos + **UDP binário**
-  para o log rápido. Protocolo *diferente* do da SIBA/SAME (ver
-  `../SPMM/CLAUDE.md`).
 
-As quatro pastas (`Aplicacao_Pi/`, `SIBA/`, `SAME/`, `SPMM/`) são irmãs dentro
-de `Codigos/`. O usuário escolhe um **Modo de Operação** (`SPMM`/`SIBA`/
-`SAME`/`SIBA+SAME`) e a GUI adapta transporte, comandos e telemetria.
+As três pastas (`Aplicacao_Pi/`, `SIBA/`, `SAME/`) são irmãs dentro de
+`Codigos/`. O usuário escolhe um **Modo de Operação** (`SIBA`/`SAME`/
+`SIBA+SAME`) e a GUI adapta comandos e telemetria.
 
 Projeto de TCC — Equipe Albatroz Aerodesign, UDESC Joinville.
 
@@ -34,36 +30,31 @@ Aplicacao_Pi/
 ├── Communication_Data/              # Camadas 1–3 (transporte / domínio / serviço)
 │   ├── Ethernet.py                  # shim de compat: EthernetManager=LinkManager, BoardWorker=UdpStructLink
 │   ├── registry.py                  # [domínio] BoardConfig + BoardRegistry (lê Config/<board>.yaml)
-│   ├── codecs.py                    # [domínio] encode/decode CMD, TELEMETRY_LOG, log SPMM (funções puras)
+│   ├── codecs.py                    # [domínio] encode/decode CMD, TELEMETRY_LOG (funções puras)
 │   ├── manager.py                   # [serviço] LinkManager (genérico, dirigido pelo registry)
 │   ├── discovery.py                 # [serviço] DiscoveryService (ping/pong por transporte)
 │   ├── estimation.py                # [serviço] EstimationRunner (roda scripts de Scripts/ como subprocesso)
 │   ├── native_sim.py                # [serviço] NativeSimProcess (modo 3 — subprocesso do firmware)
 │   ├── motor_config.py              # [domínio] perfis de motor (Config/motors/*.yaml) + build_motor_cmds
-│   ├── motor_math.py                # [domínio] Clarke/Park (numpy) para recalcular Iq/Id offline
-│   ├── spmm_analysis.py             # [domínio] regressão B/τc, derivada/J do coast-down (numpy puro)
 │   ├── errors.py                    # [domínio] decodifica error_code (bitfield) POR PLACA em pt-BR (tabela vinda da seção error_bits do yaml de cada placa)
 │   ├── links/                       # [transporte] BoardLink (ABC)
 │   │   ├── base.py                  #   contrato: send()* abstrato, is_alive_link(), stop()
-│   │   ├── udp_struct_link.py       #   UdpStructLink — SIBA/SAME (CMD 8B / TELEMETRY_LOG)
-│   │   └── telnet_link.py           #   TelnetLink — SPMM (Telnet TCP + UDP binário; parada segura)
+│   │   └── udp_struct_link.py       #   UdpStructLink — SIBA/SAME (CMD 8B / TELEMETRY_LOG)
 │   └── simulators/
 │       └── board_simulator.py       #   BoardSimulator (modo 2 — fake Python)
 ├── Config/
 │   ├── SIBA.yaml / SAME.yaml        # Protocolo + bloco `link:` (endereçamento, fonte de verdade)
-│   ├── SPMM.yaml                    # Idem SPMM (transport: telnet, IP .150, Ts)
 │   ├── motors/*.yaml                # Perfis de motor salvos (Motor → Criar/Carregar)
-│   ├── commands.yaml                # Schema dos comandos do TinyTerminal (siba/same/spmm/graph...)
+│   ├── commands.yaml                # Schema dos comandos do TinyTerminal (siba/same/graph...)
 │   ├── plots.yaml                   # Mapeamento telemetria -> widgets de gráfico
 │   ├── user_prefs.yaml              # Preferências persistidas da GUI
 │   └── generate.py                  # Gera headers C para SIBA/SAME a partir dos .yaml
 ├── GUI/                             # Camada 4 (apresentação)
 │   ├── mainAlbatrozGUI.py           # Janela principal — menus, gráficos, slider do motor, buffers
-│   ├── TinyTerminal.py              # Shell embutido — comandos siba/same/spmm/mock/native/test_io/...
+│   ├── TinyTerminal.py              # Shell embutido — comandos siba/same/mock/native/test_io/...
 │   ├── BoardManagerDialog.py        # Popout: procurar placas, editar IP/porta (runtime), LED
 │   ├── EstimationDialog.py          # Popout (Estimativas): ganhos SMO — R/L, custo/iterações ao vivo
 │   ├── HeliceDialog.py              # Popout (Estimativas): coeficientes CT/CQ/J via CSV
-│   ├── SPMMEnsaioDialog.py          # Popout (Estimativas): ensaios de atrito (B,τc) e inércia (J)
 │   ├── LoadCellDialog.py            # Popout (Células de Carga): tara/ganho por peso conhecido
 │   ├── SAMEConfigDialog.py          # Popout (Motor → Criar): perfil de motor + aplica no hardware
 │   ├── SensorConfigDialog.py        # Popout (Opções): ganho/offset/limites de todos os sensores em lote
@@ -80,7 +71,7 @@ Aplicacao_Pi/
 
 > **Arquitetura em camadas** (refactor do antigo `Ethernet.py` monolítico):
 > Transporte (`links/`, agnóstico à placa) ↔ Domínio (`codecs`/`registry`/
-> `motor_config`/`motor_math`/`spmm_analysis`/`errors`, funções puras) ↔
+> `motor_config`/`errors`, funções puras) ↔
 > Serviço (`LinkManager`/`DiscoveryService`/`EstimationRunner`) ↔
 > Apresentação (`GUI/`). O `LinkManager` itera o **registry** (sem
 > `if board == "SIBA"` hardcoded) e escolhe o `BoardLink` por `transport`.
@@ -95,18 +86,10 @@ Aplicacao_Pi/
 |-------|-------------------------------|-------------------------------|----------------------------------|
 | SIBA  | `169.254.97.200` (link-local) | `5555`                        | `5000`                           |
 | SAME  | `169.254.97.100` (link-local) | `4445`                        | `4444`                           |
-| SPMM  | `169.254.97.150` (link-local) | UDP log `5000`                | shell **Telnet TCP `23`**        |
 
 - **TX (PC → Placa)**: `CMD` — 8 bytes, `<BBBfb>` (`func, instr, target, value, action`)
 - **RX (Placa → PC)**: `TELEMETRY_LOG` — struct packed little-endian, definido
   em `structs.TELEMETRY_LOG` no `.yaml` de cada placa, a 10 Hz
-
-> **SPMM não segue esse protocolo.** Comandos vão por **Telnet (TCP 23)** em
-> texto (`arm`, `throttle <us>`, `coast`, `log start <hz>`…) e o log sai como
-> **struct binário empacotado** por UDP na porta `5000` — cabeçalho `<HH>`
-> (`count, ts_us`) + N amostras `<I11f>` (medição completa: n, omega, te, iq,
-> id, theta_e, ia, ib, ic, va, vb, vc). Ver `../SPMM/CLAUDE.md` "Protocolo UDP
-> de log".
 
 `BoardLink` (`links/base.py` + subclasses) é a thread que faz RX/TX real por
 placa; `LinkManager` gerencia um link por placa (`workers["SIBA"]`, etc.).
@@ -134,7 +117,7 @@ Só disponível para placas `udp_struct` (SIBA/SAME).
 ### 3. Firmware real via `native_sim` (`<board> native start/stop`)
 `start_native_sim(board, exe_path)` → sobe o **binário real do firmware**,
 compilado para a board `native_sim` do Zephyr (roda como processo POSIX no
-host — ver `SIBA/CLAUDE.md`/`SAME/CLAUDE.md`/`SPMM/CLAUDE.md`, seção
+host — ver `SIBA/CLAUDE.md`/`SAME/CLAUDE.md`, seção
 "native_sim"), como subprocesso, e redireciona o link para um **loopback
 distinto por placa** (`_native_loopback(cfg)` = `127.0.0.<último octeto do
 IP real>`: SIBA `127.0.0.200`, SAME `127.0.0.100`), para SIBA e SAME
@@ -151,17 +134,11 @@ o simulador Python (modo 2) não consegue detectar.
 > `native_sim_supported()` guarda `start_native_sim`, e o botão "Sim.
 > Nativa" do Board Manager fica desabilitado (com tooltip) fora do Linux.
 >
-> **`native_sim` é genérico por transporte** (`LinkManager.start_native_sim`):
-> - **udp_struct (SIBA/SAME)**: comandos por UDP; swap do IP para o loopback
->   distinto da placa. Assim as duas rodam juntas sem colidir no `127.0.0.1`.
-> - **telnet (SPMM)**: em native o firmware usa o **shell serial via stdin**
->   (`-uart_stdinout`), pois o backend Telnet TCP fica OFF em `native_sim`.
->   Os comandos de texto vão pelo **stdin do processo**
->   (`NativeSimProcess.write_stdin` → `TelnetLink.command_sink`), não por
->   socket TCP. A SPMM fica em `127.0.0.1` (o filtro de udp_log casa
->   `127.0.0.1`); a telemetria continua por UDP (NSOS).
+> **`LinkManager.start_native_sim`**: comandos por UDP; swap do IP para o
+> loopback distinto da placa. Assim SIBA e SAME rodam juntas sem colidir no
+> `127.0.0.1`.
 >
-> ✅ **SIBA, SAME e SPMM têm binário `native_sim`** — `make native_sim` em
+> ✅ **SIBA e SAME têm binário `native_sim`** — `make native_sim` em
 > cada pasta gera `build_native_sim/zephyr/zephyr.exe`. O filtro de RX do
 > `UdpStructLink` aceita `self.ip` OU qualquer loopback
 > (`addr[0].startswith('127.')`), pois o kernel reporta a origem como
@@ -178,9 +155,8 @@ siba native start        # sobe o processo, conecta o link em 127.0.0.200:5000/5
 siba test_io             # testa RX/TX isoladamente (ver abaixo)
 siba native stop         # encerra o processo e restaura IP original
 ```
-(equivalente para `same ...` em `127.0.0.100:4444/4445`, e `spmm native
-start/stop` — via stdin, log em `127.0.0.1:5000`. Todas podem rodar ao
-mesmo tempo.)
+(equivalente para `same ...` em `127.0.0.100:4444/4445`. As duas podem
+rodar ao mesmo tempo.)
 
 ### Bugs históricos já corrigidos (relevantes se algo parecido reaparecer)
 
@@ -242,22 +218,22 @@ siba test_io     # ou: same test_io
 
 > `EthernetManager` é um **alias** do `LinkManager` (via `Ethernet.py`),
 > mantido por compat. Ele é **genérico**: itera o `BoardRegistry` e cria o
-> link certo por `transport` (UDP struct ou Telnet).
+> link certo por `transport` (hoje só `udp_struct`).
 
 | Método | O que faz |
 |--------|-----------|
 | `start_link(board)` (alias `start_worker`) | Cria/inicia o `BoardLink` (thread I/O) da placa, conforme o transporte do registry |
-| `send_command(board, data)` | Enfileira um `CMD` (SIBA/SAME) **ou** texto de shell (SPMM) para TX |
+| `send_command(board, data)` | Enfileira um `CMD` para TX |
 | `update_link(board, ip, ports)` | Atualiza IP/portas **em runtime** (Board Manager) — não grava YAML |
 | `set_mock_mode(board, bool)` | Liga/desliga o `BoardSimulator` (fake Python) — modo 2 (só udp_struct) |
 | `start_native_sim(board, exe)` / `stop_native_sim(board)` | Sobe/encerra o firmware real (`native_sim`) — modo 3 |
 | `test_io(board, timeout)` | Testa RX/TX isoladamente via contadores do link |
 | `check_connectivity(ip)` / `check_subnet(ip)` | Ping / verificação de sub-rede (modo 1, hardware real) |
-| `stop()` | Encerra links (parada segura da SPMM), simuladores e `native_sim` |
+| `stop()` | Encerra links, simuladores e `native_sim` |
 
 `mock_enabled[board]`/`native_enabled[board]` são dicts de estado
 consultáveis pela GUI. `registry.get(id)` devolve o `BoardConfig` (ip/
-ports/transport/Ts). Descoberta de placas: `DiscoveryService(manager).
+ports/transport). Descoberta de placas: `DiscoveryService(manager).
 probe(id)` / `.probe_all()`.
 
 ---
@@ -265,7 +241,7 @@ probe(id)` / `.probe_all()`.
 ## Funcionalidades da GUI
 
 - **Modo de Operação** (combo no canto da barra de menus:
-  `SPMM|SIBA|SAME|SIBA+SAME`) — define quais links sobem
+  `SIBA|SAME|SIBA+SAME`) — define quais links sobem
   (`_boards_in_mode`), para qual placa vai o throttle do slider
   (`_motor_board`) e quais gráficos ficam visíveis (`_apply_mode_plots`,
   que reordena os widgets `Plot_N` — os relevantes ao modo atual vão para
@@ -276,21 +252,13 @@ probe(id)` / `.probe_all()`.
   ESC + estimativa (SMO) — no modo SAME sozinho, o slider/controles de
   motor da tela principal ficam desabilitados.
 - **Controle do motor (slider `Motor_action`)**: `sliderReleased`/botão
-  "Atualizar" envia o throttle atual (0-100% → 1000-2000µs); SPMM manda
-  `arm`+`throttle <us>` por texto, SIBA manda `CMD FUNC_ESC`. "Desligar
-  (Motor)" faz parada segura (SPMM: `throttle 1000`+`disarm`; SIBA:
-  `FUNC_ESC(1000)`+`FUNC_STOP`) e zera o slider.
+  "Atualizar" envia o throttle atual (0-100% → 1000-2000µs) à SIBA por
+  `CMD FUNC_ESC`. "Desligar (Motor)" faz parada segura
+  (`FUNC_ESC(1000)`+`FUNC_STOP`) e zera o slider.
 - **Menus (barra em português)**: **Motor** (Carregar/Criar perfil de
-  motor), **Estimativas** (Ganhos SMO / Coeficiente da Hélice / Ensaios
-  SPMM), **Bateria**, **Células de Carga** (Calibrar), **Opções**
+  motor), **Estimativas** (Ganhos SMO / Coeficiente da Hélice), **Bateria**, **Células de Carga** (Calibrar), **Opções**
   (Configuração de Sensores, Gerenciador de Placas, Painel de Erros,
   Ajuda).
-- **`SPMMEnsaioDialog`** — ensaios de atrito (patamares → regressão
-  `Te=B·ω+τc`, R²) e inércia (coast-down → `J=-(B·ω+τc)/(dω/dt)` em
-  janelas). Aceita como fonte dos dados tanto a bancada SPMM quanto
-  SIBA(RPM)+SAME(correntes, com `Te=Kt·Iq` recalculado via Clarke/Park em
-  `motor_math.py`). Roda em thread separada da UI, salva CSV incremental,
-  parada segura sempre no `finally`/`closeEvent`.
 - **`LoadCellDialog`** — calibração das células de carga (HX711): tara
   (offset = raw atual) e ganho por **peso conhecido** (não um ganho
   calculado à mão — o firmware resolve `scale=(raw-tare)/peso`).
@@ -308,7 +276,7 @@ probe(id)` / `.probe_all()`.
   estimação (`Scripts/autotune_cost.py`, `Scripts/helice_coeff.py`) como
   subprocessos, com progresso em tempo real (pyqtgraph) e confirmação
   antes de gravar no `SAME.yaml`.
-- **`TinyTerminal`** — shell embutido com comandos `siba`/`same`/`spmm`/
+- **`TinyTerminal`** — shell embutido com comandos `siba`/`same`/
   `graph`/`ping`/`sudo`/etc. Ver detalhe completo no
   [`README.md`](README.md#8-tinyterminal--shell-embutido-da-gui) (árvore
   de comandos, parser de `CMD`, aliases de `target_type`).
@@ -328,7 +296,7 @@ siba native shell arm
 ```
 
 Como funciona: o `LinkManager` passou a subir TODAS as placas com
-`-uart_stdinout` (antes era só a SPMM), então o shell do firmware fica no
+`-uart_stdinout`, então o shell do firmware fica no
 stdin/stdout do processo. `LinkManager.native_shell(board, line)` escreve
 nesse stdin; a resposta sai no relay de log, com o prefixo
 `[<placa>-native_sim]`. Para as placas `udp_struct` é um canal EXTRA — os

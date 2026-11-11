@@ -1,11 +1,9 @@
 """Camada 3 · Serviço — descoberta/identificação de placas (ping/pong).
 
 Responde "quais placas estão presentes?" por transporte, reaproveitando a
-infra do LinkManager (test_io, check_connectivity) e do TelnetLink (read_reply).
+infra do LinkManager (test_io, check_connectivity).
 Usado pelo Board Manager (LED verde/vermelho) e pelo "Modo de Operação".
 """
-import socket
-import time
 from dataclasses import dataclass
 
 
@@ -35,8 +33,6 @@ class DiscoveryService:
 
         if cfg.transport == "udp_struct":
             return self._probe_udp(cfg, timeout)
-        if cfg.transport == "telnet":
-            return self._probe_telnet(cfg, timeout)
         return BoardStatus(board_id, cfg.transport, False, "transporte desconhecido")
 
     def probe_all(self, timeout=2.0):
@@ -53,17 +49,3 @@ class DiscoveryService:
         if self.manager.check_connectivity(cfg.ip):
             return BoardStatus(cfg.id, cfg.transport, True, "ping OK (sem telemetria)")
         return BoardStatus(cfg.id, cfg.transport, False, "sem resposta")
-
-    def _probe_telnet(self, cfg, timeout):
-        # Pong via shell: abre TCP, manda 'rpm', espera qualquer resposta.
-        try:
-            with socket.create_connection((cfg.ip, cfg.telnet_port), timeout=timeout) as s:
-                s.settimeout(timeout)
-                s.sendall(b"rpm\r\n")
-                time.sleep(0.1)
-                reply = s.recv(1024)
-                if reply:
-                    return BoardStatus(cfg.id, cfg.transport, True, "pong (shell)")
-        except Exception as e:
-            return BoardStatus(cfg.id, cfg.transport, False, f"sem shell ({e})")
-        return BoardStatus(cfg.id, cfg.transport, False, "shell sem resposta")

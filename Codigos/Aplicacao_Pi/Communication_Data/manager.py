@@ -21,15 +21,11 @@ from Communication_Data.simulators.board_simulator import BoardSimulator
 
 
 class LinkManager:
-    def __init__(self, config_dir=None, handle_callback=None, sample_callback=None,
-                 registry=None, board_ids=("SIBA", "SAME", "SPMM")):
+    def __init__(self, config_dir=None, handle_callback=None,
+                 registry=None, board_ids=("SIBA", "SAME")):
         self.running = False
         self.config_dir = config_dir
         self.callback = handle_callback
-        # Callback de amostras já decodificadas (board, dict) — usado por links
-        # que decodificam no transporte (ex.: TelnetLink/SPMM). SIBA/SAME
-        # continuam decodificando na GUI via `handle_callback` (bytes).
-        self.sample_callback = sample_callback
         self.registry = registry or BoardRegistry.load(config_dir, board_ids)
 
         self.workers = {}          # id -> BoardLink
@@ -48,14 +44,6 @@ class LinkManager:
     def _make_link(self, cfg):
         if cfg.transport == "udp_struct":
             return UdpStructLink(cfg.id, cfg.ip, cfg.pc_rx_port, cfg.board_rx_port, self.callback)
-        if cfg.transport == "telnet":
-            # Import tardio: TelnetLink chega no Estágio 3 (SPMM).
-            try:
-                from Communication_Data.links.telnet_link import TelnetLink
-            except ImportError:
-                print(f"[NET] TelnetLink ainda não disponível para {cfg.id}.")
-                return None
-            return TelnetLink(cfg, self.callback, sample_callback=self.sample_callback)
         print(f"[NET] Transporte desconhecido '{cfg.transport}' para {cfg.id}.")
         return None
 
@@ -168,10 +156,10 @@ class LinkManager:
     def native_exe_path(self, board):
         """Resolve o binário native_sim da placa.
 
-        Em dev, as placas (SIBA/SAME/SPMM) são pastas irmãs de Aplicacao_Pi
+        Em dev, as placas (SIBA/SAME) são pastas irmãs de Aplicacao_Pi
         dentro do repo git: ../<board>/build_native_sim/zephyr/zephyr.exe.
         Num build empacotado (PyInstaller) esse repo não existe na máquina
-        de destino — os 3 `zephyr.exe` precisam ter sido copiados PRA DENTRO
+        de destino — os `zephyr.exe` precisam ter sido copiados PRA DENTRO
         do próprio bundle em build-time (--add-binary, ver build/pyinstaller),
         então aí a busca é relativa ao executável, não ao git.
         """
@@ -187,11 +175,8 @@ class LinkManager:
     def start_native_sim(self, board, exe_path=None):
         """Sobe o firmware real (native_sim) e aponta o link para loopback.
 
-        Genérico por transporte:
-        - udp_struct (SIBA/SAME): comandos por UDP; só swap do IP p/ 127.0.0.1.
-        - telnet (SPMM): em native o shell é serial (stdin) — sobe com
-          `-uart_stdinout` e roteia os comandos de texto ao stdin do processo
-          (command_sink), pois o backend Telnet TCP fica off em native_sim.
+        Os comandos continuam indo por UDP; só o IP do link troca para o
+        loopback da placa (127.0.0.<último octeto do IP real>).
 
         Só Linux (zephyr.exe é ELF POSIX). Se exe_path for None, resolve
         automaticamente via native_exe_path().
@@ -215,23 +200,19 @@ class LinkManager:
         worker = self.workers.get(board)
         if worker is None:
             return False
-        is_telnet = (cfg.transport == "telnet")
 
-        # Só as placas udp_struct (SIBA/SAME) ganham loopback distinto por
-        # placa — elas se distinguem por IP+porta e podem rodar juntas. A SPMM
-        # (telnet) fica em 127.0.0.1: seu native_sim usa o shell serial (stdin)
-        # e o filtro de udp_log casa 127.0.0.1.
+        # Cada placa ganha um loopback distinto (SIBA .200, SAME .100), para
+        # as duas poderem rodar juntas sem misturar pacotes.
         worker.original_ip = worker.ip
-        loopback = "127.0.0.1" if is_telnet else self._native_loopback(cfg)
+        loopback = self._native_loopback(cfg)
         if hasattr(worker, "update_ip"):
             worker.update_ip(loopback)
         else:
             worker.ip = loopback
 
-        # -uart_stdinout para TODAS as placas: além da SPMM (que usa o shell
-        # como único canal de comando), ele dá acesso ao shell de diagnóstico
-        # do firmware da SIBA por `siba native shell <comando>`. Para as placas
-        # udp_struct é um canal EXTRA — o comando normal continua indo por UDP.
+        # -uart_stdinout dá acesso ao shell de diagnóstico do firmware da SIBA
+        # por `siba native shell <comando>`. É um canal EXTRA — o comando
+        # normal continua indo por UDP.
         proc = NativeSimProcess(
             board, exe_path,
             extra_args=['-uart_stdinout'],
@@ -240,10 +221,6 @@ class LinkManager:
         if not proc.start():
             worker.ip = getattr(worker, 'original_ip', worker.ip)
             return False
-
-        # SPMM: roteia comandos de texto ao stdin do firmware (shell serial).
-        if is_telnet:
-            worker.command_sink = proc.write_stdin
 
         self.native[board] = proc
         self.native_enabled[board] = True
@@ -272,10 +249,6 @@ class LinkManager:
         proc = self.native.pop(board, None)
         self.native_enabled[board] = False
         worker = self.workers.get(board)
-        # Desfaz o roteamento por stdin ANTES de matar o processo, para a
-        # parada segura da SPMM ir pelo caminho certo (TCP, se reconectar).
-        if worker is not None and hasattr(worker, "command_sink"):
-            worker.command_sink = None
         if proc is not None:
             proc.stop()
         if worker is not None:

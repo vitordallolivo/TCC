@@ -1,6 +1,0 @@
-board:
-  name: spmm_board
-  full_name: SPMM Board
-  vendor: wch
-  socs:
-    - name: ch32v307

@@ -779,14 +779,14 @@ Com o rotor travado (sem BEMF), o motor vira uma malha RL passiva em estrela.
   (impedância máxima) → **`L_linha = 1/(C·(2π f_r)²)`**, **`L_fase = L_linha/2`**.
   Motor SPM (ímãs na superfície) ⇒ `L_d ≈ L_q ≈ L_s`.
 
-## Parâmetros mecânicos B, τc, J (compartilhados com a SPMM)
+## Parâmetros mecânicos B, τc, J
 
 - **Atrito** (viscoso `B` + Coulomb `τc`): rotação a vazio em patamares; em
   regime (`dω/dt=0`) o torque eletromagnético anula as perdas:
   **`T_e,k = B·ω_m,k + τc`** → regressão linear sobre `(ω_m,k, T_e,k)`.
 - **Inércia `J`**: **coast-down** — na rotação máxima corta-se o ESC (torque
   motriz zera); a desaceleração obedece **`J·dω/dt = -B·ω - τc`**; isola-se `J`
-  da curva `ω(t)` e da derivada. Ver `../Aplicacao_Pi/Communication_Data/spmm_analysis.py`.
+  da curva `ω(t)` e da derivada.
 
 ---
 
@@ -926,8 +926,7 @@ tq_lpf ← α_tq·Te + (1 − α_tq)·tq_lpf           # → torque_eletrico
 Codigos/
 ├── Aplicacao_Pi/   # GUI + Config/SAME.yaml (protocolo) + scripts de estimação
 ├── SIBA/           # firmware aero+bateria (Zephyr) — MODELO/DRIVERS p/ a SAME
-├── SAME/           # ESTA pasta — firmware do nó do motor (IMPLEMENTADO)
-└── SPMM/           # bancada provisória — mesmos ensaios B/τc/J
+└── SAME/           # ESTA pasta — firmware do nó do motor (IMPLEMENTADO)
 ```
 
 ## Decisões em aberto / a validar em bancada

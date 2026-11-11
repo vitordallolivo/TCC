@@ -368,8 +368,7 @@ de emergência.
 em regime permanente (rotação constante), o torque que a hélice exige do
 eixo é igual ao torque eletromagnético que o motor produz, então a
 distinção só passaria a importar quando o atrito mecânico do conjunto
-(coeficiente viscoso $B$ e de Coulomb $\tau_c$, medidos na bancada
-[SPMM](../SPMM/README.md)) forem subtraídos: $\tau_{h\acute{e}lice} =
+(coeficiente viscoso $B$ e de Coulomb $\tau_c$) for subtraído: $\tau_{h\acute{e}lice} =
 T_e - (B\omega + \tau_c)$. Essa subtração ainda não está implementada.
 
 ---
@@ -743,7 +742,7 @@ o modelo para uma única indutância de fase.)
 
 ---
 
-## Relação com a SIBA e com a SPMM
+## Relação com a SIBA
 
 ```mermaid
 flowchart TD
@@ -757,10 +756,6 @@ flowchart TD
         b2["mede bateria, Pitot, RPM óptico"]
         b3["ACIONA o ESC (recebe o throttle)"]
     end
-    subgraph SPMM["SPMM — bancada provisória"]
-        p1["mesmos ensaios mecânicos de atrito/inércia (B, τc, J)"]
-        p2["protocolo diferente (Telnet+UDP binário)"]
-    end
     PC["Aplicacao_Pi — SAME.yaml é a fonte de verdade do protocolo"]
     PC <-->|"UDP 4444 (comando) / 4445 (telemetria)"| SAME
     PC <-->|"UDP 5000 (comando) / 5555 (telemetria)"| SIBA
@@ -769,11 +764,7 @@ flowchart TD
 A SAME reaproveita da SIBA o driver de ADC customizado (necessário porque
 o driver de ADC genérico do Zephyr, neste chip, conflita com o registrador
 de Ethernet — ver a explicação completa em `../SIBA/README.md`) e o
-esquema de `native_sim`. A SPMM é uma bancada **provisória** — ela existiu
-para caracterizar o atrito viscoso ($B$), o atrito de Coulomb ($\tau_c$) e
-o momento de inércia ($J$) do conjunto mecânico antes de SIBA e SAME
-estarem prontas para uso em bancada; esses três parâmetros mecânicos são
-os que, um dia, entrarão na conta de `torque_helice` mencionada acima.
+esquema de `native_sim`.
 
 ## Decisões em aberto / a confirmar em bancada
 

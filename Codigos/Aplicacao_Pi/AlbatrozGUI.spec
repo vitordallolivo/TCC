@@ -4,7 +4,7 @@
 a = Analysis(
     ['mainApp.py'],
     pathex=[],
-    binaries=[('/home/vitor/projetos/TCC/Codigos/SIBA/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SIBA'), ('/home/vitor/projetos/TCC/Codigos/SAME/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SAME'), ('/home/vitor/projetos/TCC/Codigos/SPMM/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SPMM')],
+    binaries=[('/home/vitor/projetos/TCC/Codigos/SIBA/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SIBA'), ('/home/vitor/projetos/TCC/Codigos/SAME/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SAME')],
     datas=[('Config', 'Config'), ('Scripts', 'Scripts'), ('GUI/mainAlbatrozGUI.ui', 'GUI')],
     hiddenimports=[],
     hookspath=[],

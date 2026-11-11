@@ -1,6 +1,6 @@
 """InfoDialog — "Sobre / Ajuda": explica o software do ponto de vista do usuário.
 
-Texto em português, sem jargão de código: o que é cada placa (SIBA/SAME/SPMM),
+Texto em português, sem jargão de código: o que é cada placa (SIBA/SAME),
 como conectar, como calibrar, o que os menus fazem e como ler os erros.
 """
 from PySide6.QtCore import Qt
@@ -13,7 +13,7 @@ _HTML = """
 projeto. Ele conecta ao hardware pela rede, mostra a telemetria em gráficos,
 envia comandos, calibra sensores e roda as estimativas do motor.</p>
 
-<h3>As três placas</h3>
+<h3>As duas placas</h3>
 <ul>
   <li><b>SIBA</b> — placa de <b>energia e telemetria aerodinâmica</b>. Lê as
       <b>células de carga</b> (força/empuxo e momentos), a <b>bateria</b>
@@ -23,14 +23,11 @@ envia comandos, calibra sensores e roda as estimativas do motor.</p>
   <li><b>SAME</b> — placa de <b>controle do inversor/motor</b>. Lê as correntes
       e tensões das três fases do motor e <b>estima</b> parâmetros do controle
       (observador SMO). É só leitura/estimativa — não aciona o motor sozinha.</li>
-  <li><b>SPMM</b> — <b>bancada de caracterização mecânica</b> do motor. Mede
-      atrito, inércia e coeficientes da hélice em ensaios (patamares e
-      coast-down). Fala um protocolo diferente (Telnet + log rápido).</li>
 </ul>
 
 <h3>Modo de Operação</h3>
-<p>No canto da barra de menus você escolhe o modo: <b>SIBA</b>, <b>SAME</b>,
-<b>SPMM</b> ou <b>SIBA+SAME</b>. O modo define quais placas conectam e quais
+<p>No canto da barra de menus você escolhe o modo: <b>SIBA</b>, <b>SAME</b>
+ou <b>SIBA+SAME</b>. O modo define quais placas conectam e quais
 gráficos/comandos aparecem.</p>
 
 <h3>Como conectar (3 formas)</h3>
@@ -69,8 +66,8 @@ erro e quais estão ativas no momento — em linguagem clara.</p>
 <h3>Menus</h3>
 <ul>
   <li><b>Motor</b> — carregar/criar perfil do motor.</li>
-  <li><b>Estimativas</b> — rodar os scripts (ganhos SMO, coeficiente da hélice,
-      ensaios da SPMM) e aplicar os resultados.</li>
+  <li><b>Estimativas</b> — rodar os scripts (ganhos SMO e coeficiente da
+      hélice) e aplicar os resultados.</li>
   <li><b>Bateria</b> — parâmetros da bateria.</li>
   <li><b>Células de Carga</b> — assistente de tara/calibração.</li>
   <li><b>Opções</b> — Configuração de Sensores, Gerenciador de Placas

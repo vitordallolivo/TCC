@@ -635,7 +635,7 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
     out_amp_e     = amp_E;      /* saúde: amplitude da BEMF (lock da PLL) */
     out_phase_err = erro_fase;  /* saúde: erro de fase da PLL */
     /* torque_helice: em regime a carga da hélice = torque eletromagnético
-     * estimado. Quando B/τc (atrito, compartilhados com a SPMM) forem
+     * estimado. Quando B/τc (atrito do conjunto) forem
      * embarcados, subtrair (B·ω+τc). Por ora, espelha Te. */
     out_torque_helice = tq_lpf;
 }

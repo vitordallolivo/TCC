@@ -21,8 +21,6 @@ _DEFAULT_LINKS = {
              "ports": {"pc_rx": 5555, "board_rx": 5000}},
     "SAME": {"transport": "udp_struct", "ip": "169.254.97.100",
              "ports": {"pc_rx": 4445, "board_rx": 4444}},
-    "SPMM": {"transport": "telnet", "ip": "169.254.97.150",
-             "ports": {"telnet": 23, "udp_log": 5000}, "Ts": 0.0002},
 }
 
 
@@ -30,11 +28,10 @@ _DEFAULT_LINKS = {
 class BoardConfig:
     """Descrição completa de uma placa para as camadas de transporte/serviço."""
     id: str
-    transport: str                       # "udp_struct" | "telnet"
+    transport: str                       # "udp_struct"
     ip: str
     ports: dict = field(default_factory=dict)
     protocol_cfg: dict = field(default_factory=dict)  # enums/structs do YAML
-    Ts: float = None                     # período de amostragem (SPMM)
     raw_yaml: dict = field(default_factory=dict)      # YAML bruto (motors, etc.)
 
     # Acessos nomeados às portas — cada transporte usa as que precisa.
@@ -45,14 +42,6 @@ class BoardConfig:
     @property
     def board_rx_port(self):
         return self.ports.get("board_rx")
-
-    @property
-    def telnet_port(self):
-        return self.ports.get("telnet", 23)
-
-    @property
-    def udp_log_port(self):
-        return self.ports.get("udp_log")
 
 
 def _protocol_cfg(raw, board_id):
@@ -78,7 +67,6 @@ def board_config_from_yaml(board_id, raw):
     ip = link.get("ip") or raw.get("DEFAULT_IP_BOARD") or defaults.get("ip", "127.0.0.1")
     ports = dict(defaults.get("ports", {}))
     ports.update(link.get("ports", {}))
-    Ts = link.get("Ts", defaults.get("Ts"))
 
     return BoardConfig(
         id=board_id,
@@ -86,7 +74,6 @@ def board_config_from_yaml(board_id, raw):
         ip=ip,
         ports=ports,
         protocol_cfg=_protocol_cfg(raw, board_id),
-        Ts=Ts,
         raw_yaml=raw if isinstance(raw, dict) else {},
     )
 
@@ -114,7 +101,7 @@ class BoardRegistry:
         return board_id.upper() in self._boards
 
     @classmethod
-    def load(cls, config_dir, board_ids=("SIBA", "SAME", "SPMM")):
+    def load(cls, config_dir, board_ids=("SIBA", "SAME")):
         """Carrega Config/<board>.yaml para cada id (ignora ausentes)."""
         reg = cls()
         for bid in board_ids:

@@ -5,7 +5,7 @@ Sempre --onedir: Config/*.yaml precisa ser gravável entre execuções, e
 --contents-directory . mantém Config/GUI/native_sim_bin ao lado do
 executável (sem o _internal/ padrão), como mainApp.py/manager.py esperam.
 
-No Linux embute os zephyr.exe (SIBA/SAME/SPMM) de `make native_sim`. Os
+No Linux embute os zephyr.exe (SIBA/SAME) de `make native_sim`. Os
 scripts de Scripts/ viram executáveis próprios (sys.executable no app
 congelado não é um Python genérico) em pastas separadas, pra não misturar
 numpy/scipy de um build com o outro.
@@ -35,7 +35,7 @@ def native_sim_binary_args():
     if platform.system() != "Linux":
         return []
     args = []
-    for board in ("SIBA", "SAME", "SPMM"):
+    for board in ("SIBA", "SAME"):
         exe = os.path.join(CODIGOS_DIR, board, "build_native_sim", "zephyr", "zephyr.exe")
         if os.path.exists(exe):
             args += ["--add-binary", f"{exe}{SEP}native_sim_bin/{board}"]

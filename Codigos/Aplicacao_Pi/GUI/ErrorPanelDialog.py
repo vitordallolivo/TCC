@@ -92,7 +92,7 @@ class ErrorPanelDialog(QDialog):
         for board, cfg in configs.items():
             table = errors.ensure_registered(board, cfg or {})
             if not table:
-                continue  # placa sem error_bits (ex.: SPMM)
+                continue  # placa sem error_bits
 
             # Agrupa por área, preservando a ordem dos bits.
             por_grupo = {}
