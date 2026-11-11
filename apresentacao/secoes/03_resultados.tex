@@ -1,0 +1,109 @@
+%%=====================================================================
+%% RESULTADOS
+%% Slides com \ilustrativo trazem dados provisórios: substituir.
+%%=====================================================================
+\secaoudesc{Resultados}
+
+\begin{frame}{Parâmetros elétricos}
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    & \textbf{Fase (Y)} & \textbf{Método} \\
+    \midrule
+    Resistência & \SI{8,69}{\milli\ohm} & Kelvin (4 fios) \\
+    Indutância  & \SI{6,95}{\micro\henry} & Ressonância LC \\
+    \bottomrule
+  \end{tabular}
+  \fonte
+
+  \destaque{Dispersão abaixo de 1\,\% entre ensaios independentes.}
+\end{frame}
+
+\begin{frame}{Perdas mecânicas}
+  \begin{columns}[c]
+    \begin{column}{0.36\textwidth}
+      \begin{itemize}
+        \item Ensaio em vazio
+        \item Balanço de potência por fase
+        \item Atrito viscoso e seco
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.64\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{Resultados/bancada_te_omega.png}
+      \fonte
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Observador em bancada}
+  \begin{columns}[c]
+    \begin{column}{0.36\textwidth}
+      \begin{itemize}
+        \item Rotação: erro de \SI{0,09}{\percent}
+        \item Ângulo: \SI{0,3}{\degree} do tacômetro
+        \item Válido acima de \num{1930} RPM
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.64\textwidth}
+      \centering
+      \includegraphics[height=0.72\textheight]{Resultados/bancada_smo_rpm_torque.png}
+      \fonte
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Torque da hélice}
+  \begin{columns}[c]
+    \begin{column}{0.36\textwidth}
+      \begin{itemize}
+        \item APC 15x6E e 17x10E
+        \item $C_Q$ estimado só com grandezas elétricas
+        \item Comparado ao fabricante
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.64\textwidth}
+      \centering
+      \includegraphics[height=0.72\textheight]{Desenvolvimento/Algortimo_Coeficiente_helice_17x10E.png}
+      \fonte[Autor, com dados de APC Propellers (2026)]
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%% ----- a partir daqui: RESULTADOS ILUSTRATIVOS (substituir) -----
+
+\begin{frame}{Validação da SIBA}
+  \ilustrativo
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    \textbf{Sensor} & \textbf{Erro vs. referência} \\
+    \midrule
+    Tensão da bateria   & $< 1\,\%$ \\
+    Corrente da bateria & $< 2\,\%$ \\
+    Células de carga    & $< 1\,\%$ \\
+    Tubo de Pitot       & $< 3\,\%$ \\
+    \bottomrule
+  \end{tabular}
+  \fonte
+
+  \destaque{Cadeia aerodinâmica dentro da faixa exigida pela equipe.}
+\end{frame}
+
+\begin{frame}{Ensaio integrado}
+  \ilustrativo
+  \begin{columns}[c]
+    \begin{column}{0.36\textwidth}
+      \begin{itemize}
+        \item SIBA e SAME sincronizadas
+        \item Tração, torque e rotação no mesmo registro
+        \item Exportação em CSV
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.64\textwidth}
+      \centering
+      \placeholder{8.5cm}{5.2cm}{Tração e torque estimado\\em função da rotação\\(ensaio integrado, hélice 17x10E)}
+      \fonte
+    \end{column}
+  \end{columns}
+\end{frame}

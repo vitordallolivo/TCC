@@ -1,0 +1,54 @@
+%%=====================================================================
+%% Apresentação do TCC — padrão UDESC (tema beamerthemeUDESC.sty)
+%%
+%%   make            (ou: pdflatex apresentacao.tex, duas passadas)
+%%
+%% As figuras são lidas direto de ../Textual/Textuais/Imgs, sem cópia.
+%% Slides com a etiqueta "RESULTADO ILUSTRATIVO" trazem conteúdo
+%% provisório: substituir pelos dados reais antes da defesa.
+%%=====================================================================
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[brazil]{babel}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}}
+
+\usetheme[semtrilha]{UDESC}
+
+\graphicspath{{../Textual/Textuais/Imgs/}}
+
+% marca de conteúdo provisório (resultado ilustrativo)
+\newcommand{\ilustrativo}{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north east, fill=udescvermelhoB, text=white,
+          font=\tiny\bfseries, inner sep=3pt, rounded corners=2pt]
+      at ([xshift=-0.6cm, yshift=-0.45cm]current page.north east)
+      {RESULTADO ILUSTRATIVO};
+  \end{tikzpicture}}
+
+%%---------------------------------------------------------------------
+\title{Bancada de Medição para Sistemas Propulsivos Elétricos com Motor BLDC}
+\subtitulo{Trabalho de Conclusão de Curso\\Engenharia Elétrica}
+\author{Vitor Dall'Olivo Gonçalves}
+\orientador{Prof.\textsuperscript{a} Ana Teruko Yokomizo Watanabe}
+\coorientador{Aureo Guilherme Dobrikopf}
+\local{Joinville, 2026}
+
+\begin{document}
+
+\capaudesc
+
+\input{secoes/01_introducao}
+\input{secoes/02_metodologia}
+\input{secoes/03_resultados}
+\input{secoes/04_conclusao}
+\input{secoes/05_referencias}
+
+\fechamentoudesc
+
+\end{document}

@@ -1,0 +1,316 @@
+%%=====================================================================
+%% beamerthemeUDESC.sty
+%%
+%% Tema Beamer com a identidade visual da Universidade do Estado de
+%% Santa Catarina. Cores e geometria da marca foram medidas sobre o
+%% logotipo e o modelo de apresentação institucionais.
+%%
+%% Uso mínimo:
+%%
+%%   \documentclass[aspectratio=169,11pt]{beamer}
+%%   \usetheme{UDESC}
+%%   \title{...}  \subtitulo{...}  \author{...}
+%%   \orientador{...}  \local{Joinville, 2026}
+%%   \begin{document}
+%%   \capaudesc
+%%   ... frames ...
+%%   \fechamentoudesc
+%%   \end{document}
+%%
+%% Opções da classe do tema:
+%%   \usetheme[semtrilha]{UDESC}   desliga a trilha lateral
+%%
+%% Requer: tikz, pgf. Testado com pdflatex.
+%%=====================================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemeUDESC}[2026/08/26 Tema Beamer UDESC]
+
+\RequirePackage{tikz}
+\usetikzlibrary{calc}
+
+\newif\ifudesc@trilha \udesc@trilhatrue
+\DeclareOptionBeamer{semtrilha}{\udesc@trilhafalse}
+\ProcessOptionsBeamer
+
+%%---------------------------------------------------------------------
+%% 1. PALETA
+%%---------------------------------------------------------------------
+\definecolor{udescverde}{RGB}{7,77,41}        % verde escuro institucional
+\definecolor{udescverdeclaro}{RGB}{21,156,87} % verde claro
+\definecolor{udescvermelhoA}{RGB}{238,68,53}  % disco superior da marca
+\definecolor{udescvermelhoB}{RGB}{197,42,40}  % disco inferior da marca
+\definecolor{udescfundo}{RGB}{242,242,244}    % fundo dos slides
+\definecolor{udesccinza}{RGB}{226,228,231}    % preenchimento de caixas
+\definecolor{udesctexto}{RGB}{26,26,26}       % texto corrido
+\definecolor{udescapagado}{RGB}{198,202,206}  % elementos inativos
+
+% apelidos curtos, para uso no corpo do documento
+\colorlet{verde}{udescverde}
+\colorlet{verdeclaro}{udescverdeclaro}
+
+%%---------------------------------------------------------------------
+%% 2. MARCA
+%%
+%% O símbolo é desenhado em TikZ; os vãos internos são buracos reais
+%% (even odd rule), de modo que a marca funciona sobre qualquer fundo.
+%%
+%% Para usar o arquivo vetorial oficial no lugar do desenho:
+%%   \renewcommand{\simboloudesc}[1][0.6cm]{%
+%%     \includegraphics[height=#1]{caminho/logo_udesc.pdf}}
+%%---------------------------------------------------------------------
+\newcommand{\udesc@peca}[2]{% #1 = cor do bloco, #2 = cor do disco
+  \fill[#1, even odd rule]
+    [rounded corners=0.141cm] (0,0) rectangle (1,0.445)
+    [sharp corners] (0.136,0.445) -- (0.136,0.277)
+      arc[start angle=180, end angle=360, radius=0.215]
+    -- (0.566,0.445) -- cycle;
+  \fill[#2] (0.356,0.262) circle (0.152);}
+
+\newcommand{\simboloudesc}[1][0.6cm]{%
+  \resizebox{!}{#1}{%
+  \begin{tikzpicture}[x=1cm, y=1cm]
+    \begin{scope}[shift={(1,0.445)}, rotate=180]
+      \udesc@peca{udescverde}{udescvermelhoB}
+    \end{scope}
+    \begin{scope}[shift={(0,0.513)}]
+      \udesc@peca{udescverdeclaro}{udescvermelhoA}
+    \end{scope}
+  \end{tikzpicture}}}
+
+% símbolo + palavra ao lado
+\newcommand{\logoudesc}[1][0.5cm]{%
+  \raisebox{-0.32\height}{\simboloudesc[#1]}%
+  \hspace{0.34em}%
+  {\sffamily\bfseries\color{udesctexto}%
+   \fontsize{\dimexpr#1*1/2}{\dimexpr#1*1/2}\selectfont UDESC}}
+
+% símbolo com a palavra embaixo
+\newcommand{\logoudescv}[1][1.0cm]{%
+  \begin{tabular}{@{}c@{}}
+    \simboloudesc[#1]\\[0.15em]
+    {\sffamily\bfseries\color{udesctexto}%
+     \fontsize{\dimexpr#1*2/5}{\dimexpr#1*2/5}\selectfont UDESC}
+  \end{tabular}}
+
+%%---------------------------------------------------------------------
+%% 3. DADOS DA APRESENTAÇÃO
+%%---------------------------------------------------------------------
+\newcommand{\udesc@subtitulo}{}
+\newcommand{\subtitulo}[1]{\renewcommand{\udesc@subtitulo}{#1}}
+
+\newcommand{\udesc@orientador}{}
+\newcommand{\orientador}[1]{\renewcommand{\udesc@orientador}{#1}}
+
+\newcommand{\udesc@coorientador}{}
+\newcommand{\coorientador}[1]{\renewcommand{\udesc@coorientador}{#1}}
+
+\newcommand{\udesc@local}{}
+\newcommand{\local}[1]{\renewcommand{\udesc@local}{#1}}
+
+\newcommand{\udesc@centro}{Centro de Ciências Tecnológicas}
+\newcommand{\centro}[1]{\renewcommand{\udesc@centro}{#1}}
+
+%%---------------------------------------------------------------------
+%% 4. TRILHA LATERAL
+%%
+%%   \trilha{CAD,SIBA,SAME,PC}   define as etiquetas (até 6)
+%%   \frente{SIBA}               acende uma delas
+%%   \frente{}                   apaga a trilha no slide
+%%---------------------------------------------------------------------
+\newcommand{\udesc@frentes}{}
+\newcommand{\trilha}[1]{\renewcommand{\udesc@frentes}{#1}}
+
+\def\frenteatual{}
+\def\udesc@vazio{}
+\newcommand{\frente}[1]{\def\frenteatual{#1}}
+
+\newcount\udesc@n
+\newcount\udesc@i
+
+% conta quantas etiquetas há na lista
+\newcommand{\udesc@conta}{%
+  \udesc@n=0
+  \expandafter\@for\expandafter\udesc@x\expandafter:\expandafter=\udesc@frentes\do{%
+    \advance\udesc@n by 1}}
+
+\newcommand{\udesc@desenhatrilha}{%
+  \udesc@conta
+  \ifnum\udesc@n>0
+    \pgfmathsetmacro{\udesc@passo}{1.0/(\the\udesc@n+1)}%
+    \udesc@i=0
+    \@for\udesc@x:=\udesc@frentes\do{%
+      \advance\udesc@i by 1
+      \pgfmathsetmacro{\udesc@y}{-\udesc@passo*\the\udesc@i}%
+      \edef\udesc@rot{\udesc@x}%
+      \node[fill=\ifx\frenteatual\udesc@rot udescverdeclaro\else udescapagado\fi,
+            text=white, minimum width=2.0cm, minimum height=0.6cm,
+            rounded corners=1pt, font=\bfseries\scriptsize,
+            inner sep=1pt, rotate=90]
+        at (0.5,\udesc@y\paperheight) {\udesc@x};}%
+  \fi}
+
+%%---------------------------------------------------------------------
+%% 5. ESTRUTURA DOS SLIDES
+%%---------------------------------------------------------------------
+\usetheme{default}
+\setbeamercolor{normal text}{fg=udesctexto,bg=udescfundo}
+\setbeamercolor{structure}{fg=udescverde}
+\setbeamercolor{itemize item}{fg=udescverdeclaro}
+\setbeamercolor{itemize subitem}{fg=udescverdeclaro}
+\setbeamercolor{alerted text}{fg=udescverde}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\raisebox{0.12em}{\rule{0.42em}{0.42em}}}
+\setbeamertemplate{itemize subitem}{\raisebox{0.14em}{\rule{0.30em}{0.30em}}}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\usebeamercolor[fg]{normal text}
+
+\setbeamertemplate{background}{%
+  \begin{tikzpicture}[overlay, remember picture]
+    \fill[udescfundo]
+      (current page.south west) rectangle (current page.north east);
+    \ifudesc@trilha
+      \ifx\frenteatual\udesc@vazio\else
+        \begin{scope}[shift={(current page.north west)}]
+          \fill[white] (0,0) rectangle (1.0,-\paperheight);
+          \udesc@desenhatrilha
+        \end{scope}
+      \fi
+    \fi
+  \end{tikzpicture}}
+
+\setbeamersize{text margin left=1.35cm, text margin right=0.7cm}
+
+% título do slide: marcador verde + texto escuro, sem faixa cheia
+\setbeamertemplate{frametitle}{%
+  \vspace{0.55em}
+  \hspace{-0.55em}%
+  {\color{udescverdeclaro}\rule[-0.02em]{0.62em}{0.62em}}\hspace{0.45em}%
+  {\usebeamerfont{frametitle}\color{udesctexto}\insertframetitle}%
+  \vspace{-0.2em}}
+
+% Altura do rodapé. Aumente \udescrodape para subir a marca e a
+% numeração; diminua para aproximá-las da borda inferior.
+\newcommand{\udescrodape}{1.0em}
+
+\setbeamertemplate{footline}{%
+  \hspace{1.35cm}\logoudesc[0.42cm]
+  \hfill\raisebox{0.15ex}{\scriptsize\color{gray}%
+    \insertframenumber/\inserttotalframenumber}\hspace{0.9cm}
+  \vspace{\udescrodape}}
+
+%%---------------------------------------------------------------------
+%% 6. CAPA, DIVISÓRIA E FECHAMENTO
+%%
+%% A composição gráfica reproduz o modelo institucional: bloco à
+%% esquerda com canto superior direito arredondado, faixa superior à
+%% direita e disco verde claro.
+%%---------------------------------------------------------------------
+\newcommand{\udesc@formacapa}{%
+  \fill[udescfundo] (0,0) rectangle (\paperwidth,-\paperheight);
+  \fill[udescverde]
+    (\paperwidth,0) -- (8.1,0) [rounded corners=1.05cm]
+    -- (8.1,-1.2) [sharp corners] -- (\paperwidth,-1.2) -- cycle;
+  \fill[udescverde]
+    (0,-0.6) [rounded corners=1.65cm] -- (6.45,-0.6) [sharp corners]
+    -- (6.45,-\paperheight) -- (0,-\paperheight) -- cycle;
+  \fill[udescfundo] (2.55,-6.05) circle (2.95);
+  \fill[udescverdeclaro] (2.55,-6.05) circle (2.48);}
+
+\newcommand{\capaudesc}{%
+  \frente{}%
+  {\setbeamertemplate{background}{}%
+   \setbeamertemplate{footline}{}%
+   \begin{frame}[plain]
+     \begin{tikzpicture}[remember picture, overlay]
+       \begin{scope}[shift={(current page.north west)}, x=1cm, y=1cm]
+         \udesc@formacapa
+
+         \node[anchor=north east, align=right, text=udesctexto,
+               text width=8.4cm] at (15.3,-2.05)
+           {\bfseries\large\inserttitle};
+
+         \ifx\udesc@subtitulo\@empty\else
+           \node[anchor=north east, align=right, text=gray,
+                 text width=8.4cm] at (15.3,-4.45)
+             {\normalsize\udesc@subtitulo};
+         \fi
+
+         \node[anchor=south east, align=right, text=udesctexto,
+               font=\small] at (15.3,-8.05)
+           {\insertauthor
+            \ifx\udesc@orientador\@empty\else
+              \\Orientador(a): \udesc@orientador\fi
+            \ifx\udesc@coorientador\@empty\else
+              \\Coorientador(a): \udesc@coorientador\fi
+            \ifx\udesc@local\@empty\else\\\udesc@local\fi};
+
+         \node[anchor=south east] at (15.3,-8.75) {\logoudesc[0.5cm]};
+       \end{scope}
+     \end{tikzpicture}
+   \end{frame}}}
+
+% divisória de seção
+\newcommand{\secaoudesc}[1]{%
+  \frente{}%
+  {\setbeamertemplate{footline}{}%
+   \begin{frame}[plain]
+     \begin{tikzpicture}[remember picture, overlay]
+       \begin{scope}[shift={(current page.north west)}, x=1cm, y=1cm]
+         \fill[udescfundo] (0,0) rectangle (\paperwidth,-\paperheight);
+         \fill[udescverde] (0,0) rectangle (2.1,-\paperheight);
+         \fill[udescverdeclaro] (2.1,-4.5) circle (0.62);
+         \node[anchor=west, text=udesctexto, font=\Huge\bfseries]
+           at (3.4,-4.5) {#1};
+         \node[anchor=south east] at (15.3,-8.55) {\logoudesc[0.45cm]};
+       \end{scope}
+     \end{tikzpicture}
+   \end{frame}}}
+
+% slide de encerramento
+\newcommand{\fechamentoudesc}[1][Obrigado.]{%
+  \frente{}%
+  {\setbeamertemplate{background}{}%
+   \setbeamertemplate{footline}{}%
+   \begin{frame}[plain]
+     \begin{tikzpicture}[remember picture, overlay]
+       \begin{scope}[shift={(current page.north west)}, x=1cm, y=1cm]
+         \udesc@formacapa
+         \node[anchor=east, text=udesctexto, font=\Huge\bfseries]
+           at (15.3,-3.4) {#1};
+         \node[anchor=east, align=right, text=udesctexto, font=\small]
+           at (15.3,-5.4)
+           {\insertauthor
+            \ifx\udesc@orientador\@empty\else
+              \\Orientador(a): \udesc@orientador\fi
+            \ifx\udesc@coorientador\@empty\else
+              \\Coorientador(a): \udesc@coorientador\fi};
+         \node[anchor=south east] at (15.3,-8.55) {\logoudesc[0.45cm]};
+       \end{scope}
+     \end{tikzpicture}
+   \end{frame}}}
+
+%%---------------------------------------------------------------------
+%% 7. AUXILIARES DE CONTEÚDO
+%%---------------------------------------------------------------------
+% linha de fonte sob figuras e tabelas
+\newcommand{\fonte}[1][Autor]{%
+  \par\vspace{-0.4em}{\tiny\color{gray} Fonte: #1.}\par}
+
+% frase em destaque, sem usar bloco
+\newcommand{\destaque}[1]{%
+  \par\vspace{0.7em}
+  {\color{udescverde}%
+   \raisebox{-0.05em}{\rule{2.5pt}{0.9em}}\hspace{0.45em}#1\par}%
+  \vspace{0.3em}}
+
+% reserva de espaço para figura ainda inexistente
+%   \placeholder{largura}{altura}{descrição}
+\newcommand{\placeholder}[3]{%
+  \begin{tikzpicture}
+    \node[draw=gray, dashed, thick, align=center, rounded corners,
+          minimum width=#1, minimum height=#2,
+          text width={#1-1cm}, font=\small, text=gray] {#3};
+  \end{tikzpicture}}
+
+\mode<all>
+\endinput
