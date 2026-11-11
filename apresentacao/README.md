@@ -26,9 +26,9 @@ secoes/05_referencias.tex
 Os slides marcados com a etiqueta vermelha **RESULTADO ILUSTRATIVO** trazem
 conteúdo provisório, escrito supondo o trabalho concluído com bons resultados:
 
-- **Validação da SIBA**: erros por sensor são valores de exemplo.
+- **Validação da SIBA**: a tabela por sensor é provisória.
 - **Ensaio integrado**: espaço reservado para o gráfico de tração e torque.
 - **Conclusão**: redigida supondo a validação integrada bem-sucedida.
 
-Os demais resultados (R, L, perdas mecânicas, observador em bancada, torque
-da hélice) são os do texto do TCC.
+Os demais resultados vêm do texto do TCC. A apresentação foi pensada para
+20 minutos e não traz valores numéricos nos slides.

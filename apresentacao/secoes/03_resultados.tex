@@ -5,18 +5,20 @@
 \secaoudesc{Resultados}
 
 \begin{frame}{Parâmetros elétricos}
-  \centering
-  \begin{tabular}{lcc}
-    \toprule
-    & \textbf{Fase (Y)} & \textbf{Método} \\
-    \midrule
-    Resistência & \SI{8,69}{\milli\ohm} & Kelvin (4 fios) \\
-    Indutância  & \SI{6,95}{\micro\henry} & Ressonância LC \\
-    \bottomrule
-  \end{tabular}
-  \fonte
-
-  \destaque{Dispersão abaixo de 1\,\% entre ensaios independentes.}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}
+        \item Resistência por quatro fios (Kelvin)
+        \item Indutância por ressonância LC
+        \item Ensaios independentes convergentes
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{Resultados/bancada_ke.png}
+      \fonte[Autor; Fitzgerald, Kingsley e Umans (2014)]
+    \end{column}
+  \end{columns}
 \end{frame}
 
 \begin{frame}{Perdas mecânicas}
@@ -31,7 +33,7 @@
     \begin{column}{0.64\textwidth}
       \centering
       \includegraphics[width=\linewidth]{Resultados/bancada_te_omega.png}
-      \fonte
+      \fonte[Autor; Krishnan (2017)]
     \end{column}
   \end{columns}
 \end{frame}
@@ -40,15 +42,15 @@
   \begin{columns}[c]
     \begin{column}{0.36\textwidth}
       \begin{itemize}
-        \item Rotação: erro de \SI{0,09}{\percent}
-        \item Ângulo: \SI{0,3}{\degree} do tacômetro
-        \item Válido acima de \num{1930} RPM
+        \item Rotação acompanha o tacômetro
+        \item Ângulo coerente com os pulsos
+        \item Limite em baixa rotação
       \end{itemize}
     \end{column}
     \begin{column}{0.64\textwidth}
       \centering
       \includegraphics[height=0.72\textheight]{Resultados/bancada_smo_rpm_torque.png}
-      \fonte
+      \fonte[Autor; Nidec (2026)]
     \end{column}
   \end{columns}
 \end{frame}
@@ -57,7 +59,7 @@
   \begin{columns}[c]
     \begin{column}{0.36\textwidth}
       \begin{itemize}
-        \item APC 15x6E e 17x10E
+        \item Duas hélices APC
         \item $C_Q$ estimado só com grandezas elétricas
         \item Comparado ao fabricante
       \end{itemize}
@@ -65,7 +67,7 @@
     \begin{column}{0.64\textwidth}
       \centering
       \includegraphics[height=0.72\textheight]{Desenvolvimento/Algortimo_Coeficiente_helice_17x10E.png}
-      \fonte[Autor, com dados de APC Propellers (2026)]
+      \fonte[Autor; APC Propellers (2026); Selig (2026); McCormick (1995)]
     \end{column}
   \end{columns}
 \end{frame}
@@ -79,13 +81,13 @@
     \toprule
     \textbf{Sensor} & \textbf{Erro vs. referência} \\
     \midrule
-    Tensão da bateria   & $< 1\,\%$ \\
-    Corrente da bateria & $< 2\,\%$ \\
-    Células de carga    & $< 1\,\%$ \\
-    Tubo de Pitot       & $< 3\,\%$ \\
+    Tensão da bateria   & Dentro da tolerância \\
+    Corrente da bateria & Dentro da tolerância \\
+    Células de carga    & Dentro da tolerância \\
+    Tubo de Pitot       & Dentro da tolerância \\
     \bottomrule
   \end{tabular}
-  \fonte
+  \fonte[Autor; Northrup (2018); Brandt et al.\ (2015)]
 
   \destaque{Cadeia aerodinâmica dentro da faixa exigida pela equipe.}
 \end{frame}
@@ -102,7 +104,7 @@
     \end{column}
     \begin{column}{0.64\textwidth}
       \centering
-      \placeholder{8.5cm}{5.2cm}{Tração e torque estimado\\em função da rotação\\(ensaio integrado, hélice 17x10E)}
+      \placeholder{8.5cm}{5.2cm}{Tração e torque estimado\\em função da rotação\\(ensaio integrado)}
       \fonte
     \end{column}
   \end{columns}
