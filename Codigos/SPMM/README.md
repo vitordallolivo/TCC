@@ -8,7 +8,7 @@
 | **Rede** | Telnet `169.254.97.150:23` (comandos) + UDP `:5000` (log binário, 100 Hz por padrão) |
 | **Mede** | Tensões e correntes das 3 fases e RPM (sensor independente da comutação) |
 | **Aciona** | ESC comercial próprio (PWM 50 Hz) |
-| **Ensaios** | Atrito viscoso $B$ e de Coulomb $\tau_c$ (patamares) · inércia $J$ (coast-down) |
+| **Ensaios** | Atrito viscoso B e de Coulomb τc (patamares) · inércia J (coast-down) |
 
 **Sumário:** [Build](#build) · [Arquitetura](#como-a-placa-é-organizada-por-dentro) · [Shell](#comandos-do-shell-telnet) · [Log UDP](#protocolo-do-log-de-telemetria-udp-binário) · [Ensaios](#os-ensaios--o-que-cada-um-mede-e-por-quê) · [Parâmetros](#parâmetros-do-motor-sob-ensaio)
 

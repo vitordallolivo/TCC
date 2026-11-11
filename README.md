@@ -69,7 +69,7 @@ programa de PC comanda os três.
 |:---:|---|---|
 | **SIBA** | Sistema Integrado da Bancada Aerodinâmica | Células de carga (6× HX711), Pitot, RPM, bateria e relés. **É a placa que aciona o ESC.** |
 | **SAME** | Sistema de Aquisição do Motor Elétrico | Lê tensões e correntes das 3 fases e roda o SMO + PLL embarcado. **Só observa, nunca aciona.** |
-| **SPMM** | Sistema Provisório de Medição Mecânica | Bancada provisória com ESC próprio, usada para medir atrito ($B$, $\tau_c$) e inércia ($J$). |
+| **SPMM** | Sistema Provisório de Medição Mecânica | Bancada provisória com ESC próprio, usada para medir atrito (B, τc) e inércia (J). |
 
 ```mermaid
 flowchart LR
@@ -185,55 +185,53 @@ cd apresentacao && make      # gera apresentacao.pdf
 
 ### Modelo do motor
 
-Tensão de fase do BLDC em estrela, para $k \in \{a, b, c\}$:
+Tensão de fase do BLDC em estrela, para k ∈ {a, b, c}:
 
-$$v_k = R\,i_k + L\,\frac{di_k}{dt} + e_k$$
+```text
+v_k = R·i_k + L·(di_k/dt) + e_k
+```
 
 No referencial estacionário αβ (transformada de Clarke):
 
-$$
-\begin{bmatrix} v_\alpha \\ v_\beta \end{bmatrix}
-= R \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
-+ L_s \frac{d}{dt}\begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
-+ \begin{bmatrix} e_\alpha \\ e_\beta \end{bmatrix}
-$$
+```text
+⎡v_α⎤     ⎡i_α⎤         d ⎡i_α⎤   ⎡e_α⎤
+⎢   ⎥ = R ⎢   ⎥ + L_s · ──⎢   ⎥ + ⎢   ⎥
+⎣v_β⎦     ⎣i_β⎦        dt ⎣i_β⎦   ⎣e_β⎦
+```
 
 ### Observador por Modos Deslizantes
 
 Discretizado por Euler progressivo, com coeficientes invariantes ao passo de
-amostragem $T_s$:
+amostragem T_s:
 
-$$
-\Phi_i = 1 - \frac{R_s T_s}{L_s}, \qquad
-\Gamma_v = \frac{T_s}{L_s}, \qquad
-\Gamma_{s1} = K_{s1} T_s, \qquad
-\Gamma_{s2} = K_{s2} T_s
-$$
+```text
+Φ_i = 1 − R_s·T_s / L_s      Γ_v = T_s / L_s      Γ_s1 = K_s1·T_s      Γ_s2 = K_s2·T_s
 
-$$
-\begin{aligned}
-\hat{i}_{k+1} &= \Phi_i\,\hat{i}_k + \Gamma_v\,(v_k - \hat{e}_k) + \Gamma_{s1}\,\mathrm{Sat}(i_k - \hat{i}_k) \\
-\hat{e}_{k+1} &= \hat{e}_k + \Gamma_{s2}\,\mathrm{Sat}(i_k - \hat{i}_k)
-\end{aligned}
-$$
+î[k+1] = Φ_i·î[k] + Γ_v·(v[k] − ê[k]) + Γ_s1·Sat(i[k] − î[k])
+ê[k+1] = ê[k] + Γ_s2·Sat(i[k] − î[k])
+```
 
 Posição e velocidade são extraídas por um PLL a partir da BEMF estimada. O
 torque eletromagnético é
 
-$$\hat{T}_e = \frac{3p}{4\,\omega_e}\left(\hat{e}_\alpha i_\alpha + \hat{e}_\beta i_\beta\right)$$
+```text
+T̂_e = (3p / 4ω_e) · (ê_α·i_α + ê_β·i_β)
+```
 
 ### Autotuning
 
-Os ganhos ($K_{s1}$, $K_{s2}$, $K_t$) são ajustados offline por **Evolução
-Diferencial**, otimizando diretamente os ganhos discretizados $\Gamma$ (que vão
-para o firmware sem depender de $T_s$). A função-custo combina **torque e RPM**
-com perda de **Huber**, priorizando o torque ($w_T = 1{,}0$; $w_\omega = 0{,}5$).
+Os ganhos (K_s1, K_s2, K_t) são ajustados offline por **Evolução
+Diferencial**, otimizando diretamente os ganhos discretizados Γ (que vão
+para o firmware sem depender de T_s). A função-custo combina **torque e RPM**
+com perda de **Huber**, priorizando o torque (w_T = 1,0; w_ω = 0,5).
 
 ### Carga da hélice
 
-No ensaio estático ($V_\infty \approx 0$):
+No ensaio estático (V∞ ≈ 0):
 
-$$Q = C_Q\,\rho\,n^2 D^5 \quad\Rightarrow\quad Q = k_Q\,\omega_m^2, \qquad k_Q = \frac{C_Q\,\rho\,D^5}{4\pi^2}$$
+```text
+Q = C_Q·ρ·n²·D⁵   ⇒   Q = k_Q·ω_m²,   com   k_Q = C_Q·ρ·D⁵ / (4π²)
+```
 
 ---
 
@@ -250,8 +248,8 @@ $$Q = C_Q\,\rho\,n^2 D^5 \quad\Rightarrow\quad Q = k_Q\,\omega_m^2, \qquad k_Q =
 
 | Parâmetro | Linha | Fase (estrela) | Método |
 |---|---|---|---|
-| Resistência | $R_{LL} = 17{,}37\ \text{m}\Omega$ | $R_Y = 8{,}69\ \text{m}\Omega$ | 4 fios (Kelvin) |
-| Indutância | $L_{LL} = 13{,}90\ \mu\text{H}$ | $L_Y = 6{,}95\ \mu\text{H}$ | Ressonância LC |
+| Resistência | R_LL = 17,37 mΩ | R_Y = 8,69 mΩ | 4 fios (Kelvin) |
+| Indutância | L_LL = 13,90 µH | L_Y = 6,95 µH | Ressonância LC |
 
 ---
 
@@ -261,7 +259,7 @@ $$Q = C_Q\,\rho\,n^2 D^5 \quad\Rightarrow\quad Q = k_Q\,\omega_m^2, \qquad k_Q =
 |---|---|
 | Firmware SIBA | Compila para a placa e para `native_sim`; UDP validado em `native_sim`. ADC desligado nesta versão da placa (circuitos analógicos não montados) |
 | Firmware SAME | SMO + PLL embarcado, diagnóstico por `error_code`, calibração persistente em EEPROM; compila para a placa e para `native_sim` |
-| Bancada provisória SPMM | Implementada; usada para caracterizar $B$, $\tau_c$ e $J$ |
+| Bancada provisória SPMM | Implementada; usada para caracterizar B, τc e J |
 | Aplicação de supervisão | Funcional; cliente único das três placas, nos modos hardware, simulador e `native_sim` |
 | Simulação do SMO + autotuning | Validada (prova de conceito) |
 | Identificação dos parâmetros elétricos | Concluída |
