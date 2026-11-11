@@ -1,0 +1,49 @@
+%% Extraído de Textual/Textuais/Metodologia/08_SAME.tex (figura: cadeia de medida e configurações)
+\begin{tikzpicture}[
+        bloco/.style={rectangle, draw, thick, fill=white, text width=2.3cm,
+                      text centered, minimum height=1.0cm, font=\small},
+        seta/.style={draw, thick, -{Stealth[length=2.4mm, width=1.4mm]}}
+    ]
+        \node[bloco] (fonte) {Fonte Minipa\\ (limitação de corrente)};
+        \node[bloco, right=0.9cm of fonte] (ampe) {Multímetro\\ corrente $I$};
+        \node[bloco, right=0.9cm of ampe] (nucleo) {Conjunto\\ núcleo--sensor};
+        \node[bloco, right=0.9cm of nucleo] (volt) {Multímetro\\ tensão $V_{out}$};
+        \node[bloco, above=0.8cm of nucleo] (vcc) {Alimentação\\ \SI{5}{\volt}};
+        \draw[seta] (fonte) -- (ampe);
+        \draw[seta] (ampe) -- (nucleo);
+        \draw[seta] (nucleo) -- (volt);
+        \draw[seta] (vcc) -- (nucleo);
+
+        % --- N = 1: condutor perpendicular ao plano, pelo furo central
+        \begin{scope}[shift={($(fonte.south)+(0.4,-2.6)$)}]
+            \draw[thick] (0,0) circle (0.85);
+            \draw[thick] (0,0) circle (0.45);
+            \fill[white] (-0.13,-0.9) rectangle (0.13,-0.4);
+            \draw[thick] (-0.13,-0.9) -- (-0.13,-0.4);
+            \draw[thick] (0.13,-0.9) -- (0.13,-0.4);
+            \fill[black!20, draw=black, thick] (-0.11,-0.85) rectangle (0.11,-0.45);
+            \draw[thick] (0,0) circle (0.13);
+            \fill (0,0) circle (0.035);
+            \node[font=\small, align=center] at (0,-1.45) {$N = 1$\\ (furo central)};
+        \end{scope}
+
+        % --- N = 4 e N = 8: espiras externas
+        \foreach \dx/\N/\passo in {4.6/4/90, 8.6/8/45} {
+            \begin{scope}[shift={($(fonte.south)+(\dx,-2.6)$)}]
+                \draw[thick] (0,0) circle (0.85);
+                \draw[thick] (0,0) circle (0.45);
+                \foreach \a in {0,\passo,...,359} {
+                    \draw[thick] (\a+20:0.35) -- (\a+20:0.95);
+                }
+                \fill[white] (-0.13,-0.9) rectangle (0.13,-0.4);
+                \draw[thick] (-0.13,-0.9) -- (-0.13,-0.4);
+                \draw[thick] (0.13,-0.9) -- (0.13,-0.4);
+                \fill[black!20, draw=black, thick] (-0.11,-0.85) rectangle (0.11,-0.45);
+                \node[font=\small, align=center] at (0,-1.45) {$N = \N$\\ (espiras externas)};
+            \end{scope}
+        }
+
+        \node[font=\small, anchor=north, align=center]
+             at ($(fonte.south)+(4.6,-5.0)$)
+             {Campo no elemento sensor proporcional a $N\,I$; em cinza, o elemento Hall no entreferro.};
+    \end{tikzpicture}

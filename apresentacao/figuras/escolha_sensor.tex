@@ -1,0 +1,25 @@
+%% Figura própria da apresentação, no estilo dos fluxos do TCC
+\begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=3.6cm, minimum height=1cm, text width=3.3cm},
+        dark/.style={draw, rounded corners, fill=black!85, text=white, align=center, minimum width=3.6cm, minimum height=1cm, text width=3.3cm},
+        nok/.style={font=\scriptsize, text=red!60!black, align=center},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[flowbox] (req) at (0,0) {Isolação galvânica\\e resposta em CC};
+
+        \node[flowbox] (shunt) at (-6,-2) {\textit{Shunt} + amplificador\\isolado};
+        \node[flowbox] (tc)    at (-2,-2) {Transformador\\de corrente};
+        \node[flowbox] (rog)   at (2,-2)  {Bobina de\\Rogowski};
+        \node[dark]    (hall)  at (6,-2)  {Hall com núcleo\\toroidal};
+
+        \draw[arrow] (req) -- (shunt.north);
+        \draw[arrow] (req) -- (tc.north);
+        \draw[arrow] (req) -- (rog.north);
+        \draw[arrow] (req) -- (hall.north);
+
+        \node[nok] at (-6,-3.1) {custo por fase};
+        \node[nok] at (-2,-3.1) {sem CC};
+        \node[nok] at (2,-3.1)  {sem CC};
+        \node[font=\scriptsize, text=green!40!black, align=center] at (6,-3.1) {isolado, CC e barato};
+    \end{tikzpicture}

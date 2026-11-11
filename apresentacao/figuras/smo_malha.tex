@@ -1,0 +1,23 @@
+%% Extraído de Textual/Textuais/Resultados/01_ModelagemSMO.tex (figura: Malha de estimação)
+\begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (in_i) {};
+        \node [sum, right=1.5cm of in_i] (sum_i) {$\Sigma$};
+        \node [block, right=1cm of sum_i] (sat) {Função de Chaveamento \\ $s_{\alpha\beta} = \text{Sat}\!\left(\frac{e_i}{8{,}0}\right)$};
+        \node [block, right=1cm of sat] (gain_smo) {Ganhos Deslizantes \\ $K_{s1} \cdot T_s, \quad K_{s2} \cdot T_s$};
+        \node [block, below=1cm of gain_smo] (est_i) {Integração da Corrente \\ $\hat{i}_k = \Phi_i \hat{i}_{k-1} + \Gamma_v u + \Gamma_{s1} s$};
+        \node [block, left=1.5cm of est_i] (est_e) {Estimativa BEMF  \\ $\hat{e}_{raw} = \Phi_e \hat{e}_{k-1} + K_{s2} s$};
+        \draw [line] (in_i) -- node {$i_{\alpha\beta}$} (sum_i);
+        \draw [line] (sum_i) -- node {$e_{i}$} (sat);
+        \draw [line] (sat) -- node {$s_{\alpha\beta}$} (gain_smo);
+        \draw [line] ([xshift=1cm]gain_smo.south) -- node [right] {$+ \Gamma_{s1} s$} ([xshift=1cm]est_i.north);
+        \draw [line] ([xshift=-1cm]gain_smo.south) -- ++(0, -0.6cm) coordinate (drop) -- node [above] {$+ K_{s2} s$} (drop -| est_e.north) -- (est_e.north);
+        \draw [line] (est_i.south) -- ++(0,-1.5) -| node [near end, right] {$\hat{i}_{\alpha\beta}$} (sum_i.south);
+        \draw [line] (est_e.east) -- node [above] {$\hat{e}_{raw}$} (est_i.west);
+        \coordinate (out_e) at ($(est_e.south) + (0,-1cm)$);
+        \draw [line] (est_e.south) -- node [right] {$\hat{e}_{\alpha\beta, raw}$ para o PLL} (out_e);
+    \end{tikzpicture}

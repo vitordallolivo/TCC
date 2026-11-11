@@ -1,0 +1,26 @@
+%% Extraído de Textual/Textuais/Revisao/00_MotorBLDC.tex (figura: Configuração Estrela)
+\begin{circuitikz}[american, scale=1.2]
+        
+        % Fase A
+        \draw (0,2) node[left] {$v_{an}(t)$} to[short, o-] (0.5,2)
+              to[L, l=$L$, i=$i_a$] (2.5,2)
+              to[R, l=$R$] (4.5,2)
+              to[V, l=$e_a(t)$,invert] (6.5,2) coordinate (Na);
+              
+        % Fase B
+        \draw (0,0) node[left] {$v_{bn}(t)$} to[short, o-] (0.5,0)
+              to[L, l=$L$, i=$i_b$] (2.5,0)
+              to[R, l=$R$] (4.5,0)
+              to[V, l=$e_b(t)$,invert] (6.5,0) coordinate (Nb);
+              
+        % Fase C
+        \draw (0,-2) node[left] {$v_{cn}(t)$} to[short, o-] (0.5,-2)
+              to[L, l=$L$, i=$i_c$] (2.5,-2)
+              to[R, l=$R$] (4.5,-2)
+              to[V, l=$e_c(t)$,invert] (6.5,-2) coordinate (Nc);
+              
+        % Fechamento do Ponto Neutro (Conexão Estrela)
+        \draw (Na) -- (Nc); % Linha vertical conectando os três ramos
+        \filldraw (Nb) circle (1.5pt) node[right=4pt] {$n$}; % Nó central (Neutro)
+        
+    \end{circuitikz}

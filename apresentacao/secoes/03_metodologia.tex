@@ -1,0 +1,76 @@
+%%=====================================================================
+%% METODOLOGIA: interface, camadas, YAML, observador, sensor
+%%=====================================================================
+\begin{frame}{Arquitetura}
+  \centering
+  \tikzfig{1}{0.72}{arq_comunicacao}
+  \destaque{Qualquer parâmetro de calibração ajustável pela interface.}
+  \fonte[Autor; An (2026)]
+\end{frame}
+
+\begin{frame}{Supervisório}
+  \begin{columns}[c]
+    \begin{column}{0.6\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{Metodologia/gui tela principal.png}\\[0.3em]
+      {\small Tela principal}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{Metodologia/gui ganho e offset.png}\\[0.3em]
+      {\small Ganho e \textit{offset} dos sensores}
+    \end{column}
+  \end{columns}
+  \fonte
+\end{frame}
+
+\begin{frame}{Camadas da interface}
+  \begin{columns}[c]
+    \begin{column}{0.4\textwidth}
+      \centering
+      \tikzfig{1}{0.68}{gui_camadas}
+    \end{column}
+    \begin{column}{0.6\textwidth}
+      \centering
+      \tikzfig{1}{0.68}{gui_modos}
+    \end{column}
+  \end{columns}
+  \fonte[Autor; Zephyr Project (2026b)]
+\end{frame}
+
+\begin{frame}{Configuração por YAML}
+  \centering
+  \tikzfig{1}{0.78}{yaml_fluxo}
+  \fonte
+\end{frame}
+
+\begin{frame}{Observador de estados}
+  \begin{columns}[c]
+    \begin{column}{0.32\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{Metodologia/Motor_batata.jpeg}\\[0.3em]
+      {\small Scorpion A-5025}
+    \end{column}
+    \begin{column}{0.68\textwidth}
+      \centering
+      \tikzfig{1}{0.72}{smo_generico}
+    \end{column}
+  \end{columns}
+  \fonte[Adaptado de Utkin (1992); Slotine e Li (1991)]
+\end{frame}
+
+\begin{frame}{Sensor de corrente customizado}
+  \begin{columns}[c]
+    \begin{column}{0.35\textwidth}
+      \begin{itemize}
+        \item Núcleo toroidal e sensor Hall
+        \item Custo menor que sensores comerciais
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.65\textwidth}
+      \centering
+      \tikzfig{1}{0.68}{same_sensor_topologia}
+      \fonte[Autor; Northrup (2018)]
+    \end{column}
+  \end{columns}
+\end{frame}

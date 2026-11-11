@@ -1,0 +1,21 @@
+%% Extraído de Textual/Textuais/Resultados/01_ModelagemSMO.tex (figura: estimação híbrido)
+\begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, text width=3.5cm, text centered, minimum height=1.5cm, font=\small},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}},
+        coord/.style={coordinate}
+    ]
+        \node [block] (motor) {Planta Dinâmica \\ Máquina BLDC};
+        \node [block, right=2cm of motor] (clarke) {Transformada \\ de Clarke};
+        \node [block, right=2cm of clarke] (smo) {Observador \\ Modos Deslizantes \\ (SMO)};
+        \node [block, below=1.5cm of smo] (pll) {Extrator de Fase \\ (PLL)};
+        \node [block, left=2cm of pll] (recon) {Reconstrutor \\ Analítico BEMF};
+        \node [block, left=2cm of recon] (torque) {Cálculo de \\ Torque ($\hat{T}_e$)};
+        \draw [line] (motor) -- node [above] {$i_{a,b,c}$} (clarke);
+        \draw [line] (clarke) -- node [above] {$i_{\alpha}, i_{\beta}$} (smo);
+        \draw [line] (smo) -- node [right] {$\hat{e}_{\alpha, raw}, \hat{e}_{\beta, raw}$} (pll);
+        \draw [line] (pll) -- node [above] {$\hat{\theta}, \hat{\omega}$} (recon);
+        \draw [line] (recon) -- node [above] {$\hat{e}_{\alpha, cln}, \hat{e}_{\beta, cln}$} (torque);
+        \coordinate (mid_clarke_smo) at ($(clarke.east)!0.5!(smo.west)$);
+        \draw [line, dashed] (mid_clarke_smo) -- ++(0,-1.5) -| node [near end, left] {$i_{\alpha}, i_{\beta}$} (torque.north);
+    \end{tikzpicture}

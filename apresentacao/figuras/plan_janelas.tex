@@ -1,0 +1,21 @@
+%% Extraído de Textual/Textuais/Metodologia/00_Introducao.tex (figura: Janelas de transição)
+\begin{tikzpicture}[
+        font=\small,
+        gate/.style={draw, diamond, aspect=2, align=center, minimum width=2.3cm, minimum height=1.4cm, fill=black!85, text=white, font=\bfseries\small},
+        lbl/.style={align=center, text width=3.6cm, font=\small},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[gate] (q1) at (0,0)    {Q1};
+        \node[gate] (q2) at (5,0)    {Q2};
+        \node[gate] (q3) at (10,0)   {Q3};
+        \node[gate, fill=black!60] (fim) at (15,0)  {FIM};
+
+        \draw[arrow] (q1) -- (q2);
+        \draw[arrow] (q2) -- (q3);
+        \draw[arrow] (q3) -- (fim);
+
+        \node[lbl] at (0,-1.6)  {Decisão de projeto:\\restrições e definições};
+        \node[lbl] at (5,-1.6)  {Validação individual\\de cada \textit{feature}};
+        \node[lbl] at (10,-1.6) {Finalização\\do projeto};
+        \node[lbl] at (15,-1.6) {Término\\do TCC};
+    \end{tikzpicture}

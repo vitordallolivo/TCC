@@ -14,11 +14,15 @@ As figuras vêm direto de `../Textual/Textuais/Imgs/`, então compile a partir d
 ```
 apresentacao.tex          # dados da capa e ordem das seções
 beamerthemeUDESC.sty      # tema UDESC
+figuras/                  # diagramas TikZ extraídos dos .tex do TCC
 secoes/01_introducao.tex
-secoes/02_metodologia.tex
-secoes/03_resultados.tex
-secoes/04_conclusao.tex
-secoes/05_referencias.tex
+secoes/02_planejamento.tex
+secoes/03_metodologia.tex
+secoes/04_resultados.tex
+secoes/05_conclusao.tex
+secoes/06_referencias.tex
+roteiro.md                # texto falado, slide a slide (⏭ = próxima página)
+apresentacao.pdf          # versão compilada
 ```
 
 ## O que ainda é ilustrativo
@@ -26,7 +30,7 @@ secoes/05_referencias.tex
 Os slides marcados com a etiqueta vermelha **RESULTADO ILUSTRATIVO** trazem
 conteúdo provisório, escrito supondo o trabalho concluído com bons resultados:
 
-- **Validação da SIBA**: a tabela por sensor é provisória.
+- **Validação com breakpoints**: espaço reservado para a captura da depuração.
 - **Ensaio integrado**: espaço reservado para o gráfico de tração e torque.
 - **Conclusão**: redigida supondo a validação integrada bem-sucedida.
 

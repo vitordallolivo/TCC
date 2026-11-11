@@ -1,0 +1,16 @@
+%% Extraído de Textual/Textuais/Metodologia/02_MotorBLDC.tex (figura: coeficiente de torque da hélice)
+\begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=1cm, minimum width=3.1cm, text width=2.9cm},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[box] (duty)  at (0,0)   {Novo patamar\\de rotação};
+        \node[box] (estab) at (3.6,0) {Aguarda\\estabilizar};
+        \node[box] (reg)   at (7.2,0) {Registra rotação,\\torque e $\rho$};
+        \node[box] (calc)  at (10.8,0){Calcula $C_Q$\\do patamar};
+
+        \draw[arrow] (duty) -- (estab);
+        \draw[arrow] (estab) -- (reg);
+        \draw[arrow] (reg) -- (calc);
+        \draw[arrow] (calc.south) -- ++(0,-0.45) -| node[pos=0.25, below, font=\scriptsize]{próximo patamar} (duty.south);
+    \end{tikzpicture}

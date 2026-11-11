@@ -1,5 +1,5 @@
 %%=====================================================================
-%% INTRODUÇÃO
+%% INTRODUÇÃO: contexto, problema, conjugado da hélice, objetivos
 %%=====================================================================
 \begin{frame}{Albatroz Aerodesign}
   \begin{columns}[c]
@@ -18,33 +18,67 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Problema}
+\begin{frame}{Ensaios descentralizados}
   \begin{columns}[c]
-    \begin{column}{0.45\textwidth}
-      \begin{itemize}
-        \item Medições isoladas
-        \item Sem sincronismo entre grandezas
-        \item Sem torque no eixo
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.55\textwidth}
+    \begin{column}{0.4\textwidth}
       \centering
-      \includegraphics[width=0.85\linewidth]{Introducao/BancadaDesempenho.png}
-      \fonte[Souza e Veber (2023); Costa (2021)]
+      \includegraphics[height=0.5\textheight]{Metodologia/Motor_batata.jpeg}\\[0.3em]
+      {\small Motor e bateria}
+    \end{column}
+    \begin{column}{0.6\textwidth}
+      \centering
+      \includegraphics[height=0.5\textheight]{Introducao/BancadaDesempenho.png}\\[0.3em]
+      {\small Bancada atual}
+    \end{column}
+  \end{columns}
+  \destaque{Sem medida direta de rotação e torque: só estimativas.}
+  \fonte[Autor; Souza e Veber (2023); Costa (2021)]
+\end{frame}
+
+\begin{frame}{Conjugado da hélice}
+  \[ Q = C_Q\,\rho\,n^2 D^5 \]
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[height=0.5\textheight]{Revisao/Selig_propeller_data_ct.png}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[height=0.5\textheight]{Revisao/Selig_propeller_data_cp.png}
+    \end{column}
+  \end{columns}
+  \fonte[McCrink e Gregory (2015); McCormick (1995)]
+\end{frame}
+
+\begin{frame}{Torque define o envelope}
+  \begin{columns}[c]
+    \begin{column}{0.36\textwidth}
+      Hélices de referência
+      \begin{itemize}
+        \item APC 15x6E
+        \item APC 17x10E
+      \end{itemize}
+      \vspace{0.5em}
+      Simuladas com o catálogo e ensaiadas em bancada
+    \end{column}
+    \begin{column}{0.64\textwidth}
+      \centering
+      \tikzfig{1}{0.7}{helice_ponto_op}
+      \fonte[Autor; APC Propellers (2026); Brandt et al.\ (2015)]
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Objetivo}
-  \destaque{Integrar a bancada de ensaios motopropulsores da equipe
-            em um sistema único de aquisição sincronizada.}
+\begin{frame}{Objetivos}
+  \destaque{Desenvolver um sistema integrado de aquisição de dados,
+            adaptando a bancada de ensaios motopropulsores da equipe.}
 
-  \vspace{0.8em}
+  \vspace{0.6em}
   \begin{itemize}
-    \item Hardware de medição elétrica do motor
-    \item Observador de velocidade e torque \textit{sensorless}
-    \item Instrumentação aerodinâmica
-    \item Rede Ethernet entre os nós
-    \item Software de supervisão
+    \item Sistema de medição do motor BLDC
+    \item Modelo do motor e observador de estados
+    \item Medição aerodinâmica da hélice
+    \item Rede Ethernet entre os nós e o supervisório
+    \item Software de supervisão em Python
   \end{itemize}
 \end{frame}

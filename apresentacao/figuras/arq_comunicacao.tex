@@ -1,0 +1,65 @@
+%% Extraído de Textual/Textuais/Metodologia/03_Interface.tex (figura: Arquitetura de Comunicação)
+\begin{tikzpicture}[
+        node distance=1.5cm and 2cm,
+        font=\sffamily,
+        % Estilos das caixas principais
+        box/.style={draw=black, thick, rounded corners, align=center, fill=none},
+        % Estilos das caixas internas do Computador
+        innerbox/.style={draw=black, thick, rounded corners, align=center, minimum height=1.2cm, fill=none},
+        % Estilo das setas duplas
+        arrow/.style={<->, >=stealth, thick, draw=black}
+    ]
+
+        % ==========================================
+        % LADO ESQUERDO: SIBA e SAME
+        % ==========================================
+        \node[box, text width=4cm, minimum height=2.8cm] (siba) {
+            \textbf{SIBA}\\[0.3cm]
+            Monitoramento\\da Bancada e\\Bateria
+        };
+
+        \node[box, text width=4cm, minimum height=2.8cm, below=0.5cm of siba] (same) {
+            \textbf{SAME}\\[0.3cm]
+            Monitoramento\\do motor
+        };
+
+        % ==========================================
+        % CENTRO: SWITCH DE REDE
+        % ==========================================
+        % Pega o ponto central entre SIBA e SAME para alinhar o Switch
+        \path (siba) -- (same) coordinate[midway] (midLeft);
+
+        \node[box, right=3cm of midLeft, minimum height=6.1cm, minimum width=1.0cm] (switch) {
+            \rotatebox{90}{\textbf{SWITCH DE REDE}}
+        };
+
+        % ==========================================
+        % LADO DIREITO: COMPUTADOR PYTHON E NÓS INTERNOS
+        % ==========================================
+        % Título do PC
+        \node[right=2.5cm of switch, yshift=2cm, align=center, font=\sffamily\Large\bfseries] (pctitle) {Computador};
+
+        % Bloco Observador
+        \node[innerbox, text width=5cm, below=0.8cm of pctitle] (obs) {Interface de Usuário};
+
+        % Blocos Plot, CSV, Terminal (Centralizados pelo CSV)
+        \node[innerbox, minimum width=1.5cm, below=0.8cm of obs] (csv) {CSV};
+        \node[innerbox, minimum width=1.5cm, left=0.3cm of csv] (plot) {Plot};
+        \node[innerbox, minimum width=1.5cm, right=0.3cm of csv] (Terminal) {Terminal};
+
+        % Caixa externa que engloba tudo do Computador
+        \node[draw=black, thick, rounded corners, inner sep=0.6cm, fit=(pctitle) (obs) (plot) (csv) (Terminal)] (pc) {};
+
+        % ==========================================
+        % CONEXÕES (SETAS)
+        % ==========================================
+        % Seta SIBA <-> Switch (alinhada com o meio da SIBA)
+        \draw[arrow] (siba.east) -- (switch.west |- siba.east);
+
+        % Seta SAME <-> Switch (alinhada com o meio da SAME)
+        \draw[arrow] (same.east) -- (switch.west |- same.east);
+
+        % Seta Switch <-> Computador (alinhada com o meio do Switch)
+        \draw[arrow] (switch.east) -- (pc.west |- switch.east);
+
+    \end{tikzpicture}

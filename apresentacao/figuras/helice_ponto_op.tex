@@ -1,0 +1,45 @@
+%% Extraído de Textual/Textuais/Revisao/01_Helice.tex (figura: Ponto de Operação)
+\begin{tikzpicture}
+        \begin{axis}[
+            axis lines = left,
+            xlabel = {Rotação Mecânica ($\omega$) [pu]},
+            ylabel = {Torque ($T$) [pu]},
+            xmin=0, xmax=1.5,
+            ymin=0, ymax=1.2,
+            xtick={0, 0.5, 1.0, 1.5},
+            ytick={0, 0.5, 1.0, 1.5},
+            grid=both,
+            grid style={dotted, gray},
+            legend style={at={(0.95,0.95)}, anchor=north east, nodes={scale=0.8}},
+            height=7cm,
+            width=12cm,
+            legend style={
+                at={(0.97,0.03)}, 
+                anchor=south east, 
+                nodes={scale=0.8, text=black}, % Texto sempre preto
+                cells={anchor=west}
+            },
+        ]
+        
+        % Curva do Motor em PU
+        % Zona 1: Torque constante até a rotação base (w = 1)
+        \addplot[domain=0:1.0, blue, thick, name path=motor2, forget plot] {1};
+        % Zona 2: Enfraquecimento de campo (T decai com 1/w)
+        \addplot[domain=1.0:1.5, blue, thick, name path=motor] {1/x}; 
+        \addlegendentry{Torque Motor}
+        % Curva da Hélice em PU
+        % Modelo proporcional a w^2. O coeficiente (ex: 0.6) define o "peso" da hélice.
+        \addplot[domain=0:1.5, red, thick, name path=helice] {2*x^2};
+        \addlegendentry{Torque Hélice}
+        % Encontra a intersecção automaticamente
+        \path [name intersections={of=motor2 and helice, by={point1}}];
+        
+        % Marca o ponto de intersecção
+        \fill (point1) circle (2.5pt) node[above left=0.1cm, fill=white, inner sep=1pt, draw, rounded corners, scale=0.8] {Ponto de Operação};
+
+        % Linhas tracejadas de auxílio para os eixos (usando projeção ortogonal |- e -| para evitar erros de compilação)
+        \draw[dotted, thick] (point1) -- (point1 |- {axis cs:0,0}) node[below, fill=white, inner sep=2pt] {\scriptsize $\omega_{op}$};
+        \draw[dotted, thick] (point1) -- (point1 -| {axis cs:0,0}) node[left, fill=white, inner sep=2pt] {\scriptsize $T_{op}$};
+
+        \end{axis}
+    \end{tikzpicture}

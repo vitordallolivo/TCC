@@ -1,0 +1,39 @@
+%% Extraído de Textual/Textuais/Resultados/05_SAME.tex
+\begin{tikzpicture}
+        \begin{axis}[
+            width=0.85\textwidth, height=6.5cm,
+            xlabel={$I$ [\si{\ampere}]}, ylabel={$V_{out}$ [\si{\volt}]},
+            xmin=0, xmax=5.6, ymin=2.47, ymax=3.23,
+            grid=both, grid style={dotted,gray!40},
+            legend pos=north west,
+            legend style={font=\scriptsize, inner sep=2pt},
+            legend columns=2,
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \addplot[dashed, green!55!black, thick, domain=0:5.6] {0.018750*x + 2.486645};
+            \addlegendentry{$N=1$ (ajuste)}
+            \addplot[only marks, mark=triangle*, mark size=2pt, green!55!black]
+                coordinates {
+                    (0.000,2.48570)(0.159,2.48975)(1.040,2.50530)(1.539,2.51590)
+                    (2.012,2.52550)(2.529,2.53520)(2.939,2.54200)
+                    (3.113,2.54490)(4.082,2.56270)(5.041,2.58050)};
+            \addlegendentry{$N=1$}
+            \addplot[dashed, red!65!black, thick, domain=0:5.6] {0.090866*x + 2.487632};
+            \addlegendentry{$N=4$ (ajuste)}
+            \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
+                coordinates {
+                    (0.000,2.48640)(0.101,2.49780)(0.355,2.52050)(0.620,2.54420)
+                    (1.056,2.58320)(1.662,2.63800)(2.094,2.67800)
+                    (2.522,2.71710)(2.766,2.73900)(3.034,2.76340)
+                    (4.038,2.85450)(5.077,2.94880)(5.329,2.97200)};
+            \addlegendentry{$N=4$}
+            \addplot[dashed, blue!65!black, thick, domain=0:4.4] {0.165417*x + 2.490699};
+            \addlegendentry{$N=8$ (ajuste)}
+            \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
+                coordinates {
+                    (0.000,2.49150)(0.580,2.58630)(1.022,2.65960)(1.514,2.74090)
+                    (2.014,2.82410)(2.989,2.98440)(3.319,3.03893)
+                    (4.164,3.18070)};
+            \addlegendentry{$N=8$}
+        \end{axis}
+    \end{tikzpicture}

@@ -3,7 +3,8 @@
 %%
 %%   make            (ou: pdflatex apresentacao.tex, duas passadas)
 %%
-%% As figuras são lidas direto de ../Textual/Textuais/Imgs, sem cópia.
+%% Figuras PNG/JPG: ../Textual/Textuais/Imgs (sem cópia).
+%% Diagramas TikZ: figuras/*.tex, extraídos dos .tex do TCC.
 %% Slides com a etiqueta "RESULTADO ILUSTRATIVO" trazem conteúdo
 %% provisório: substituir pelos dados reais antes da defesa.
 %%=====================================================================
@@ -13,14 +14,42 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage[brazil]{babel}
-\usepackage{amsmath}
+\usepackage{amsmath,amssymb,bm}
 \usepackage{booktabs}
 \usepackage{siunitx}
 \sisetup{output-decimal-marker={,}}
+\usepackage{adjustbox}
+
+% --- mesmo ambiente TikZ do TCC (PacotesBasicos.tex) ---
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tikz}
+\usepackage[american, cuteinductors, smartlabels, fulldiode, siunitx,
+            americanvoltages, oldvoltagedirection]{circuitikz}
+\usetikzlibrary{quotes,angles,arrows,through,calc,math,graphs,backgrounds,
+                fit,shapes,positioning,patterns,shadows,
+                decorations.pathreplacing,shapes.geometric,arrows.meta,
+                intersections}
+\ctikzset{bipoles/thickness=1}
+\ctikzset{monopoles/ground/width/.initial=.2}
+\ctikzset{bipoles/resistor/height=0.25}
+\ctikzset{bipoles/resistor/width=0.6}
+\ctikzset{bipoles/capacitor/height=0.5}
+\ctikzset{bipoles/capacitor/width=0.15}
+\ctikzset{bipoles/generic/height=0.25}
+\ctikzset{bipoles/generic/width=0.6}
+\ctikzset{bipoles/vsourcesin/height=.5}
+\ctikzset{bipoles/vsourcesin/width=.5}
 
 \usetheme[semtrilha]{UDESC}
 
-\graphicspath{{../Textual/Textuais/Imgs/}}
+\graphicspath{{../Textual/Textuais/Imgs/}{./}}
+
+% diagrama TikZ ajustado ao espaço: \tikzfig{largura}{altura}{nome}
+\newcommand{\tikzfig}[3]{%
+  \begin{adjustbox}{max width=#1\linewidth, max totalheight=#2\textheight}
+    \input{figuras/#3}
+  \end{adjustbox}}
 
 % marca de conteúdo provisório (resultado ilustrativo)
 \newcommand{\ilustrativo}{%
@@ -44,10 +73,11 @@
 \capaudesc
 
 \input{secoes/01_introducao}
-\input{secoes/02_metodologia}
-\input{secoes/03_resultados}
-\input{secoes/04_conclusao}
-\input{secoes/05_referencias}
+\input{secoes/02_planejamento}
+\input{secoes/03_metodologia}
+\input{secoes/04_resultados}
+\input{secoes/05_conclusao}
+\input{secoes/06_referencias}
 
 \fechamentoudesc
 
