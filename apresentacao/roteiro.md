@@ -96,9 +96,7 @@ Ambas utilizam o microcontrolador CH32V307, RISC-V com unidade de ponto flutuant
 
 *[14] Camadas da interface*
 
-Como a comunicação é por rede e os dados chegam em alta frequência, a aplicação foi dividida em quatro camadas independentes, de modo que a recepção de pacotes não trave a interface gráfica.
-
-Essa separação permite trocar o que está do outro lado da rede sem alterar o restante: a mesma interface opera com o hardware real, com um simulador ou com o native_sim, recurso do Zephyr que executa o próprio firmware no computador. Foi assim que se detectou, ainda em desenvolvimento, uma divergência no tamanho dos pacotes de comando entre o microcontrolador e o computador, que só apareceria na integração física.
+A interface opera com o hardware real, com um simulador ou com o native_sim, recurso do Zephyr que executa o próprio firmware no computador, alterando apenas a última camada, a de transporte. O restante da aplicação permanece o mesmo nos três casos.
 
 **⏭**
 
