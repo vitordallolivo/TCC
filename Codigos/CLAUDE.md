@@ -52,10 +52,12 @@ Transporte UDP, `CMD` de 8 bytes (PC→placa) e `TELEMETRY_LOG` packed LE a
 
 ## Suporte da placa (CH32V307) no Zephyr 4.4 — conferido no código-fonte
 
-- Driver `drivers/ethernet/eth_wch.c` (upstream desde 2025), PHY interno
-  `phy-connection-type = "internal"`, PLL3 configurado pelo próprio driver.
-  PHY interno é **10BASE-T**: o switch precisa aceitar 10 Mbit/s (LED de link
-  aceso é o teste).
+- Driver Ethernet: o **oficial do Zephyr** (`zephyr/drivers/ethernet/eth_wch.c`,
+  `CONFIG_ETH_WCH`, ligado sozinho pelo `&mac` no DTS). Não há driver de
+  Ethernet próprio no repositório. O DTS usa `phy-connection-type =
+  "internal"`, que significa o **PHY embutido no chip** CH32V307 (não um driver
+  nosso); o driver oficial configura o PLL3 dele. Esse PHY embutido é
+  **10BASE-T**: o switch precisa aceitar 10 Mbit/s (LED de link aceso é o teste).
 - Link detectado pelo `phy_mii` genérico **por polling MDIO** (a IRQ
   `PHYLINK` é só limpa). O commit `ec5f1fb` registra que o `phy_mii` deu
   problema na SIBA e o `4e920ee` diz que o ETH foi resolvido. Testar
