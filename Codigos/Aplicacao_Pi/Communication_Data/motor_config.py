@@ -39,25 +39,24 @@ def ke_kt_from_kv(kv, pole_pairs, connection="Y"):
 # o formulário abrir coerente com a placa em vez de tudo zerado.
 #
 # Procedência:
-#   físicos   : P = 14 do motor; R e L do ensaio de rotor bloqueado
-#               (R = V/2I; L por ressonância LC). Kv 310 é o COMERCIAL
-#               (Delta) — a conversão Δ→Y (Kv_Y = 310/√3 = 179,0) é feita
-#               pelo próprio diálogo.
-#   ganhos Γ  : autotune_cost.py contra a planta COM O ADC MODELADO, métrica
-#               rmse (Scripts/smo_gains.json). Γ carrega Ts embutido: mudou
-#               Ts, roda o autotune de novo em vez de reescalar.
+#   físicos   : P = 14 do motor; R e L do ensaio de rotor bloqueado do TCC,
+#               já por fase em Y (R_Y = R_LL/2 = 8,69 mΩ; L_Y = 6,95 µH).
+#               Kv 310 é usado direto, sem √3 (conexão "Y").
+#   ganhos Γ  : tabela do autotune no TCC (hélice APC 15x6E). Γ carrega Ts
+#               embutido: mudou Ts, roda o autotune de novo em vez de
+#               reescalar.
 #   amostragem: ts_adc_us = OBS_TS do firmware.
 MOTOR_DEFAULTS = {
     "poles": 14,
     "pole_pairs": 7,
-    "connection": "Delta",     # Kv de catálogo é Delta; o diálogo converte p/ Y
+    "connection": "Y",         # Kv já é o valor a usar: sem conversão por √3
     "kv_rating": 310.0,
-    "resistance": 0.0173,      # Ω por fase, em Y
-    "inductance": 7.0e-6,      # H por fase, em Y
+    "resistance": 8.69e-3,     # Ω por fase, em Y (TCC)
+    "inductance": 6.95e-6,     # H por fase, em Y (TCC)
     "v_bus": 30.0,
-    "gamma1": 31.622777,
-    "gamma2": -10.0,
-    "gammat": 0.013139,
+    "gamma1": 31.62,
+    "gamma2": -10.00,
+    "gammat": 0.154,
     "bl": 18.0,
     "switch_func": "tanh",
     "pll_wn": 150.0,

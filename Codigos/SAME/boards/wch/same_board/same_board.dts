@@ -65,8 +65,8 @@
 
     /* ================================================================ *
      * ADC2 — três TENSÕES de fase (V_a, V_b, V_c) — ESCRAVO do ADC1   *
-     *   CH12 = PC2 = V_a   CH11 = PC1 = V_b   CH10 = PC0 = V_c          *
-     *   (PC0/V_c: conexão solta na placa montada — leitura suspeita)    *
+     *   CH12 = PC2 = V_a   CH13 = PC3 = V_b   CH14 = PC4 = V_c          *
+     *   PC0/PC1 ficam livres: vão aos LEDs do conector de rede da placa *
      *                                                                    *
      * SEM `dmas` de propósito: o manual de referência (Table 11-2,     *
      * "Peripheral mapping table of each DMA1 channel") confirma que só *
@@ -109,8 +109,8 @@
 
     adc2_default: adc2_default {
         group1 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 2, ADC2, 0)>; };  /* CH12 - V_a */
-        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 1, ADC2, 0)>; };  /* CH11 - V_b */
-        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 0, ADC2, 0)>; };  /* CH10 - V_c (conexão solta) */
+        group2 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 3, ADC2, 0)>; };  /* CH13 - V_b */
+        group3 { pinmux = <CH32V20X_V30X_PINMUX_DEFINE(PC, 4, ADC2, 0)>; };  /* CH14 - V_c */
     };
 
     usart1_default: usart1_default {

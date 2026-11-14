@@ -200,11 +200,11 @@ static const struct adc_channel_cfg adc1_ch_cfg[HAL_ADC1_NUM_CH] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 1  },
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0  },
 };
-/* ADC2 (escravo): PC2=CH12(V_a), PC1=CH11(V_b), PC0=CH10(V_c — conexão solta). */
+/* ADC2 (escravo): PC2=CH12(V_a), PC3=CH13(V_b), PC4=CH14(V_c). */
 static const struct adc_channel_cfg adc2_ch_cfg[HAL_ADC2_NUM_CH] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 12 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 11 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 10 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 13 },
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL, .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 14 },
 };
 
 static inline float raw_to_mv(uint16_t raw)
@@ -292,7 +292,11 @@ static void hal_batch_work_fn(struct k_work *w)
         float Vc = apply_calib(TARGET_VOLTAGE_C, rVc);
         float ia = apply_calib(TARGET_CURRENT_A, ria);
         float ib = apply_calib(TARGET_CURRENT_B, rib);
+#if SAME_I_C_DERIVED
+        float ic = -(ia + ib);   /* estrela sem neutro: i_a + i_b + i_c = 0 */
+#else
         float ic = apply_calib(TARGET_CURRENT_C, ric);
+#endif
 
         /* Clarke + SMO ficam dentro do Observer_Manager. */
         Observer_Step_ABC(Va, Vb, Vc, ia, ib, ic);
@@ -561,6 +565,9 @@ static void hal_calibration_finish(void)
     bool ok = true;
 
     for (int k = 0; k < 3; k++) {
+#if SAME_I_C_DERIVED
+        if (k == 2) continue;      /* fase C derivada: o canal não é usado */
+#endif
         float mean = hal_cal_mean[k];
         float var  = hal_cal_m2[k] / (float)hal_cal_n;
         float sd   = (var > 0.0f) ? sqrtf(var) : 0.0f;
@@ -752,6 +759,9 @@ static void HAL_thread_ADC_fn(void *p1, void *p2, void *p3)
                 k_sleep(K_MSEC(1));
                 break;
             }
+#if SAME_I_C_DERIVED
+            ic = -(ia + ib);    /* mesma regra do hardware: fase C derivada */
+#endif
 
             /* Enquanto o offset do Hall não estiver levantado, o observador
              * NÃO roda: a corrente fantasma entraria no Clarke e viraria BEMF

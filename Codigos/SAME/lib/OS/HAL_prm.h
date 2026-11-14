@@ -17,16 +17,23 @@
  * constantes de projeto do hardware, usadas pelo gerador sintético do
  * native_sim e pela calibração de offset do boot.
  *
- * CORRENTE — SS49E (N=1) + divisor 2k0/18k:
- *     18,750 mV/A x 0,900 = 16,875 mV/A, repouso em 2,4866 V x 0,900
+ * CORRENTE — SS49E (N=1) + divisor 4k7/10k:
+ *     18,750 mV/A x 0,6803 = 12,755 mV/A, repouso médio medido de 1,7675 V
  * TENSÃO — divisor 130k/7k5: k = 7,5/137,5 = 0,0545455 */
-#define HAL_CURR_MV_PER_A    16.875f     /* ganho da cadeia de corrente */
-#define HAL_HALL_ZERO_MV   2238.0f       /* repouso NOMINAL do Hall no pino */
+#define HAL_CURR_MV_PER_A    12.755f     /* ganho da cadeia de corrente */
+#define HAL_HALL_ZERO_MV   1767.5f       /* repouso NOMINAL do Hall no pino */
 #define HAL_VOLT_MV_PER_V    54.5455f    /* mV no pino por volt de fase */
 
 /* Calibração automática de offset no boot desligada: ganho e offset dos
  * sensores vêm exclusivamente do NVM (salvo pelo usuário via CMD pela rede).
  * HAL_CALIBRATE_ON_BOOT=1 pode ser ativado para depuração se necessário. */
+/* Corrente da fase C: 1 = derivada, i_c = -(i_a + i_b) (motor em estrela sem
+ * neutro); 0 = medida no PA0. O canal C segue sendo convertido pelo ADC, só
+ * não entra no cálculo. */
+#ifndef SAME_I_C_DERIVED
+#define SAME_I_C_DERIVED        1
+#endif
+
 #ifndef HAL_CALIBRATE_ON_BOOT
 #define HAL_CALIBRATE_ON_BOOT   0
 #endif

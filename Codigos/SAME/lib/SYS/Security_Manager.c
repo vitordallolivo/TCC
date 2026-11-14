@@ -114,9 +114,17 @@ bool Security_Manager_Is_MCU_Ready(void)
  * @param Va,Vb,Vc tensões de fase [V]
  * @param ia,ib,ic correntes de fase [A]
  */
+/* Checagem de desequilíbrio (soma das fases ≈ 0) desligada por padrão: com
+ * duas fases de corrente a soma é zero por construção, e as tensões medidas
+ * contra o terra não somam zero. Pôr 1 para religar. */
+#ifndef SM_CHECK_IMBALANCE
+#define SM_CHECK_IMBALANCE 0
+#endif
+
 void Security_Manager_Check_Electrical(float Va, float Vb, float Vc,
                                        float ia, float ib, float ic)
 {
+#if SM_CHECK_IMBALANCE
     /* Desequilíbrio de corrente: num motor em estrela sem neutro, i_a+i_b+i_c≈0.
      * Fugir disso indica sensor com falha, fase aberta ou calibração fora. */
     float sum_i = ia + ib + ic;
@@ -129,6 +137,10 @@ void Security_Manager_Check_Electrical(float Va, float Vb, float Vc,
     float mag_v = fabsf(Va) + fabsf(Vb) + fabsf(Vc);
     Security_Manager_Error_Set(ERROR_MEAS_VOLTAGE_IMBALANCE,
         fabsf(sum_v) > (SM_IMBAL_ABS_V + SM_IMBAL_FRAC * mag_v));
+#else
+    Security_Manager_Error_Set(ERROR_MEAS_CURRENT_IMBALANCE, false);
+    Security_Manager_Error_Set(ERROR_MEAS_VOLTAGE_IMBALANCE, false);
+#endif
 
     /* Sobrecorrente de fase. */
     Security_Manager_Error_Set(ERROR_MEAS_OVERCURRENT,

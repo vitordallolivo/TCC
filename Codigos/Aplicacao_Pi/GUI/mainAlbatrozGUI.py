@@ -1115,7 +1115,6 @@ class AlbatrozGUI(QMainWindow):
         """Só atualiza o estado/rótulo enquanto arrasta — o envio é no
         sliderReleased / 'Atualizar (Motor)' (evita inundar a rede)."""
         self.prefs["motor_val"] = val
-        board = self._motor_board(self.op_mode)
         self.ui.Motor_update.setText(f"Atualizar (Motor {val}%)")
         self.save_user_prefs()
 
@@ -1130,6 +1129,16 @@ class AlbatrozGUI(QMainWindow):
         if board == "SIBA":
             if "SIBA" not in self.eth.workers:
                 self.eth.start_link("SIBA")
+            # A SIBA ignora throttle com o ESC desarmado. Mexer no slider é ato
+            # explícito do operador: arma a bancada (pré-carga → potência → ESC)
+            # e retoma o "pronto" periódico que o Desligar suspendeu. A placa
+            # processa os CMDs em ordem, então o throttle entra já armado.
+            if self._ready_paused or "SIBA" not in self._ready_announced:
+                self._ready_paused = False
+                self._ready_announced.add("SIBA")
+                print("[Motor] Armando a bancada antes do throttle.")
+                self._send_board_cmd("SIBA", "FUNC_START", 1.0,
+                                     instr="INSTR_WRITE", status="STATUS_OK")
             self._send_board_cmd("SIBA", "FUNC_ESC", float(val), instr="INSTR_WRITE")
             print(f"[Motor] SIBA ESC throttle {val}%")
         else:

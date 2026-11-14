@@ -75,9 +75,9 @@ enum { SW_SAT = 0, SW_TANH = 1, SW_SIGMOID = 2 };
 
 /* ---- Defaults de fábrica (referência test_coeff_auto.py) ---------------- */
 #define DEF_POLE_PAIRS   7.0f
-#define DEF_RS           17.3e-3f
-#define DEF_LS           7.0e-6f
-#define DEF_KV           (310.0f / 1.7320508075688772f)  /* Kv já em estrela (Y) */
+#define DEF_RS           8.69e-3f   /* R_Y = R_LL/2 (TCC, tab. de resistência) */
+#define DEF_LS           6.95e-6f   /* L_Y = L_LL/2 (TCC) */
+#define DEF_KV           310.0f     /* Kv de catálogo já é o valor a usar: sem /√3 */
 /* Γ do autotuning (autotune_cost.py, differential-evolution, Ts_sim = 10 µs
  * == DEF_TS). Fonte: Aplicacao_Pi/Scripts/smo_gains.json.
  *
@@ -109,13 +109,16 @@ enum { SW_SAT = 0, SW_TANH = 1, SW_SIGMOID = 2 };
  * |Γ2| ≤ 10), não num ótimo interior. Alargar exige subir BL junto, porque o
  * limite de chattering é BL > Γ1/(1+Φi) — com Γ1 = 31,62 e BL = 18 a folga é
  * de só 1,12×. */
-#define DEF_GAMMA1       31.622777f   /* Γ_s1 > 0 */
-#define DEF_GAMMA2      (-10.0f)      /* Γ_s2 < 0 */
-#define DEF_GAMMAT       0.013139f    /* Γ_t  > 0 */
+#define DEF_GAMMA1       31.62f       /* Γ_s1 > 0 (TCC, APC 15x6E) */
+#define DEF_GAMMA2      (-10.00f)     /* Γ_s2 < 0 (TCC, APC 15x6E) */
+#define DEF_GAMMAT       0.154f       /* Γ_t  > 0 (TCC, APC 15x6E) */
 #define DEF_TORQUE_LPF   10000.0f  /* fc_torque do script */
 #define DEF_BEMF_LPF     0.0f      /* 0 = desligado → PLL usa ê direto (== script) */
 #define DEF_TS           10.0e-6f  /* 10 µs */
 #define DEF_BL           18.0f
+/* Filtro passa-baixas das SAÍDAS publicadas (rpm e torque), igual ao
+ * fc_plot do script (test_coeff_auto.py). Não entra na malha do observador. */
+#define OBS_OUT_LPF_HZ   2.0f
 
 /* tanh nas duas variantes (== SMO_SWITCH_FUNC=1 do test_coeff_auto.py, que é
  * com o que os Γ do smo_gains.json foram otimizados). A sigmoide é opt-in —
@@ -165,6 +168,7 @@ typedef struct {
     float Phi_e;       /* 1 − gammat */
     float alpha_tq;    /* LPF de torque */
     float alpha_bemf;  /* LPF de BEMF (0 = desligado) */
+    float alpha_out;   /* LPF das saídas publicadas (OBS_OUT_LPF_HZ) */
     float Kp_pll;      /* 2ζω_n */
     float Ki_pll;      /* ω_n² */
     float Ke;          /* Ke_mec/p */
@@ -350,6 +354,9 @@ static void Observer_Recompute(const obs_params *p, obs_const *c)
 
     float wt = TWO_PI * p->torque_lpf * ts;
     c->alpha_tq = wt / (1.0f + wt);
+
+    float wo = TWO_PI * OBS_OUT_LPF_HZ * ts;
+    c->alpha_out = wo / (1.0f + wo);
 
     if (p->bemf_lpf > 0.0f) {
         float wb = TWO_PI * p->bemf_lpf * ts;
@@ -630,14 +637,15 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
 
     /* ── Saídas (rad/s elétrico → rpm mecânico) ── */
     register float omega_mech = omega_est_elec * inv_p;   /* rad/s mecânico */
-    out_rpm = omega_mech * (30.0f / (float)M_PI);          /* rad/s → rpm */
-    out_te  = tq_lpf;
+    /* Saídas publicadas passam pelo LPF de exibição (OBS_OUT_LPF_HZ). */
+    out_rpm += live_const.alpha_out * (omega_mech * (30.0f / (float)M_PI) - out_rpm);
+    out_te  += live_const.alpha_out * (tq_lpf - out_te);
     out_amp_e     = amp_E;      /* saúde: amplitude da BEMF (lock da PLL) */
     out_phase_err = erro_fase;  /* saúde: erro de fase da PLL */
     /* torque_helice: em regime a carga da hélice = torque eletromagnético
      * estimado. Quando B/τc (atrito do conjunto) forem
      * embarcados, subtrair (B·ω+τc). Por ora, espelha Te. */
-    out_torque_helice = tq_lpf;
+    out_torque_helice = out_te;
 }
 
 #else /* OBS_IMPL >= 5 */
@@ -749,11 +757,12 @@ Observer_Step(float v_alpha, float v_beta, float i_alpha, float i_beta)
 
     /* ── Saídas (rad/s elétrico → rpm mecânico) ── */
     register float omega_mech = omega_est_elec * inv_p;
-    out_rpm = omega_mech * (30.0f / (float)M_PI);
-    out_te  = tq_lpf;
+    /* Saídas publicadas passam pelo LPF de exibição (OBS_OUT_LPF_HZ). */
+    out_rpm += live_const.alpha_out * (omega_mech * (30.0f / (float)M_PI) - out_rpm);
+    out_te  += live_const.alpha_out * (tq_lpf - out_te);
     out_amp_e     = amp_E;
     out_phase_err = erro_fase;
-    out_torque_helice = tq_lpf;
+    out_torque_helice = out_te;
 }
 
 #endif /* OBS_IMPL */

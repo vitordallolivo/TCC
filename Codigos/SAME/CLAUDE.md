@@ -6,9 +6,14 @@ registradores do ADC, benchmarks do observador, histórico de decisões):
 [`docs/notas_tecnicas.md`](docs/notas_tecnicas.md) — ler só quando mexer em
 ADC, DMA ou `Observer_Manager`.
 
-Firmware Zephyr 4.4.0 do nó elétrico do motor (CH32V307). Lê V e i das três
-fases (ADC1 = correntes, ADC2 = tensões, **dual simultâneo**, um DMA de 32 bits)
-e estima ω e torque com **SMO + PLL** (motor Scorpion A-5025-310Kv).
+Firmware Zephyr 4.4.0 do nó elétrico do motor (CH32V307). Lê V e i das fases
+(ADC1 = correntes PA3/PA1/PA0, ADC2 = tensões PC2/PC3/PC4, **dual
+simultâneo**, um DMA de 32 bits) e estima ω e torque com **SMO + PLL** (motor
+Scorpion A-5025-310Kv). **Corrente C derivada** por padrão
+(`SAME_I_C_DERIVED` em `HAL_prm.h`): `i_c = -(i_a + i_b)`; o canal PA0 segue
+convertido, mas fora do cálculo. Checagem de desequilíbrio desligada
+(`SM_CHECK_IMBALANCE`). PC0/PC1 não servem de ADC: vão aos LEDs do conector de
+rede da placa do micro (~1,14 V).
 **Só observa**: quem aciona o ESC é a SIBA. Sem shell UART; todo ajuste é por
 CMD. UDP: escuta CMD na 4444, envia telemetria para a 4445.
 
@@ -33,6 +38,13 @@ parâmetro marca `reconfig`; a thread do ADC aplica no topo do laço
 - `BL` não pode ser constante cega: estabilidade pede `BL > Γ1/(1+Φi)`.
 - `Te = 1.5·ke_mec·(…)`: `pole_pairs` cancela no torque de propósito; só afeta
   `rpm_same`.
+- `Kv` = 310 direto, **sem /√3**. Defaults (`DEF_*`) = valores do TCC:
+  R_Y 8,69 mΩ, L_Y 6,95 µH, Γ 31,62 / −10,00 / 0,154. Perfil igual em
+  `Aplicacao_Pi/Config/motors/Scorpion_A-5025-310Kv.yaml`.
+- `rpm_same` e `torque_eletrico` publicados passam por LPF de 2 Hz
+  (`OBS_OUT_LPF_HZ`, o `fc_plot` do script); fora da malha do observador.
+- Calibração das correntes (ganho 0,0784 A/mV, divisor 4k7/10k) vive na
+  EEPROM: o `.yaml` é só default. Gravar por `FUNC_SENSOR` pela rede.
 - `TELEMETRY_LOG`/`CMD`/enums vêm do `SAME.yaml`. Enums do `CMD` são
   `packed` para `sizeof(CMD) = 8` em qualquer compilador.
 
@@ -62,7 +74,11 @@ parâmetro marca `reconfig`; a thread do ADC aplica no topo do laço
 
 - Medir `Observer_Step` com GPIO toggle + osciloscópio para fechar `SMPx`.
 - Ligar `dropped_frames` a um bit de `error_bits` no `SAME.yaml`.
-- PC0 (V_c) com conexão solta na placa montada: V_c suspeito até o reparo.
+- Sensor de corrente da fase C (PA0) lendo ~313 mV em vez de ~1,75 V: hardware
+  a verificar. Enquanto isso, fase C derivada.
+- Γ do TCC foram otimizados com R = 17,3 mΩ (valor linha-linha); com R_Y
+  8,69 mΩ o autotune deve ser refeito. `check_conditions` acusa BL = 18 com
+  folga de só 1,13× sobre o limite de chattering.
 - `rom_report`/`ram_report` com pilha Ethernet (antes da Fase 3 do plano de rede).
 - Rede: telemetria vai para unicast fixo `169.254.97.139`. Ver plano em
   `../CLAUDE.md`.
