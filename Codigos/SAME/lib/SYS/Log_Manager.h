@@ -20,6 +20,9 @@
 #define SENSOR_ID_RPM_SAME 10U
 #define SENSOR_ID_TORQUE_ELETRICO 11U
 #define SENSOR_ID_TORQUE_HELICE 12U
+#define SENSOR_ID_T_PROC_US 13U
+#define SENSOR_ID_T_BATCH_US 14U
+#define SENSOR_ID_BATCH_DROPS 15U
 
 /* ===========================================================
  * Structs geradas a partir do SAME.yaml
@@ -75,6 +78,12 @@ typedef struct __attribute__((packed)) {
     log_status status;
 
     uint32_t error_code;
+
+    float t_proc_us;
+
+    float t_batch_us;
+
+    float batch_drops;
 
 } TELEMETRY_LOG;
 

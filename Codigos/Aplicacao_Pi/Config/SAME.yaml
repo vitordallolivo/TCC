@@ -205,3 +205,7 @@ structs:
     - { name: torque_helice, type: float }
     - { name: status, type: log_status }         # Integridade do frame de telemetria
     - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver same_error_bit_t
+    # Tempo do pipeline do ADC (ISR do DMA → fim do batch). Ver SAME/lib/OS/HAL.c.
+    - { name: t_proc_us, type: float }            # pior tempo de processamento de um batch desde a última publicação [µs]
+    - { name: t_batch_us, type: float }           # intervalo entre batches do DMA [µs]
+    - { name: batch_drops, type: float }          # batches descartados por chegarem durante o processamento (acumulado)

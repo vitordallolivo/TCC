@@ -97,6 +97,9 @@ void Log_Manager_Update(uint32_t sensor_id, float value)
         case SENSOR_ID_RPM_SAME:         current_log.rpm_same        = value; break;
         case SENSOR_ID_TORQUE_ELETRICO:  current_log.torque_eletrico = value; break;
         case SENSOR_ID_TORQUE_HELICE:    current_log.torque_helice   = value; break;
+        case SENSOR_ID_T_PROC_US:        current_log.t_proc_us       = value; break;
+        case SENSOR_ID_T_BATCH_US:       current_log.t_batch_us      = value; break;
+        case SENSOR_ID_BATCH_DROPS:      current_log.batch_drops     = value; break;
         default:
             LOG_WRN("Log_Manager: sensor_id desconhecido %u", sensor_id);
             break;

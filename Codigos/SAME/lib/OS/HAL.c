@@ -80,6 +80,16 @@ static atomic_t hal_adc_paused = ATOMIC_INIT(0);
 void HAL_ADC_Pause(void)  { atomic_set(&hal_adc_paused, 1); }
 void HAL_ADC_Resume(void) { atomic_set(&hal_adc_paused, 0); }
 
+/* Tempo do pipeline, em ciclos de k_cycle_get_32(): da ISR do DMA até o fim
+ * do processamento do batch. Publicado na telemetria (t_proc_us, t_batch_us,
+ * batch_drops). Batch que chega com o anterior ainda em processamento é
+ * descartado pela ISR — cada descarte é uma lacuna na sequência do observador.
+ * No native_sim os três ficam em 0 (não há DMA). */
+static volatile uint32_t hal_t_isr_cyc;       /* ISR do batch em processamento */
+static volatile uint32_t hal_t_period_cyc;    /* intervalo entre ISRs do DMA */
+static volatile uint32_t hal_t_proc_max_cyc;  /* pior ISR→fim do batch na janela */
+static volatile uint32_t hal_batch_drops;     /* batches descartados (acumulado) */
+
 void HAL_ADC_Set_Calib(uint8_t sensor_id, float linear, float offset)
 {
     if (sensor_id >= CMD_CORE_SENSOR_COUNT) return;
@@ -323,6 +333,11 @@ static void hal_batch_work_fn(struct k_work *w)
                               Observer_Get_I_Alpha(), Observer_Get_I_Beta());
     }
 
+    uint32_t dt = k_cycle_get_32() - hal_t_isr_cyc;
+    if (dt > hal_t_proc_max_cyc) {
+        hal_t_proc_max_cyc = dt;
+    }
+
     HAL_ADC_Resume();
 }
 
@@ -339,7 +354,18 @@ static void hal_adc_isr_frame(const uint32_t *frame, uint16_t nch,
 {
     ARG_UNUSED(unused);
 
-    if (atomic_get(&hal_adc_paused)) return;
+    static uint32_t t_last;
+    uint32_t now = k_cycle_get_32();
+    if (t_last != 0U) {
+        hal_t_period_cyc = now - t_last;
+    }
+    t_last = now;
+
+    if (atomic_get(&hal_adc_paused)) {
+        hal_batch_drops++;
+        return;
+    }
+    hal_t_isr_cyc = now;
 
     /* Escreve sempre no buffer oposto ao que o work está lendo. */
     int widx = 1 - atomic_get(&hal_batch_widx);
@@ -716,6 +742,18 @@ static void hal_publish_telemetry(float Va, float Vb, float Vc,
     OSSI_Submit_Sensor(SENSOR_ID_RPM_SAME,        Observer_Get_Rpm());
     OSSI_Submit_Sensor(SENSOR_ID_TORQUE_ELETRICO, Observer_Get_Te());
     OSSI_Submit_Sensor(SENSOR_ID_TORQUE_HELICE,   Observer_Get_Torque_Helice());
+
+    /* Tempo do pipeline: pior caso desde a última publicação. */
+    static uint32_t drops_prev;
+    uint32_t drops = hal_batch_drops;
+    Security_Manager_Error_Set(ERROR_SYS_ADC_FRAME_DROP, drops != drops_prev);
+    drops_prev = drops;
+    OSSI_Submit_Sensor(SENSOR_ID_T_PROC_US,
+                       (float)k_cyc_to_us_floor32(hal_t_proc_max_cyc));
+    hal_t_proc_max_cyc = 0U;
+    OSSI_Submit_Sensor(SENSOR_ID_T_BATCH_US,
+                       (float)k_cyc_to_us_floor32(hal_t_period_cyc));
+    OSSI_Submit_Sensor(SENSOR_ID_BATCH_DROPS, (float)drops);
 }
 
 /* A thread só existe no native_sim: no hardware o caminho crítico corre

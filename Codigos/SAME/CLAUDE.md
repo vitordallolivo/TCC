@@ -73,7 +73,11 @@ parâmetro marca `reconfig`; a thread do ADC aplica no topo do laço
 ## Pendências
 
 - Medir `Observer_Step` com GPIO toggle + osciloscópio para fechar `SMPx`.
-- Ligar `dropped_frames` a um bit de `error_bits` no `SAME.yaml`.
+- Validar na placa a medição de tempo do pipeline (campos `t_proc_us`,
+  `t_batch_us` e `batch_drops` no fim do `TELEMETRY_LOG`; bit
+  `ERROR_SYS_ADC_FRAME_DROP` quando `batch_drops` cresce). Se houver descarte,
+  o observador recebe a sequência com lacunas: é o primeiro suspeito dos
+  "fantasmas" na telemetria.
 - Sensor de corrente da fase C (PA0) lendo ~313 mV em vez de ~1,75 V: hardware
   a verificar. Enquanto isso, fase C derivada.
 - Γ do TCC foram otimizados com R = 17,3 mΩ (valor linha-linha); com R_Y
