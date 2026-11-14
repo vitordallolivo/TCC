@@ -419,7 +419,7 @@ static int hal_adc_hw_init(void)
  * calibração do hardware (incluindo o levantamento de offset no boot), em vez
  * de injetar V/A já prontos e pular tudo isso. */
 #define SIM_P        7.0f
-#define SIM_KV_Y     (310.0f / 1.7320508075688772f)
+#define SIM_KV       310.0f                   /* Kv de placa, igual ao observador */
 #define SIM_TS       10.0e-6f                 /* == DEF_TS do observador */
 #define SIM_I_AMP    8.0f                     /* A (pico) */
 #define SIM_LOAD_ANG 0.30f                    /* rad — atraso corrente x BEMF */
@@ -465,7 +465,7 @@ static int hal_read_raw(float *Va, float *Vb, float *Vc,
 
     float wm = HAL_SIM_DEMO_RPM * (2.0f * (float)M_PI / 60.0f);  /* rad/s mec */
     float we = wm * SIM_P;                                        /* rad/s elétrico */
-    float ke_mec = 60.0f / (2.0f * (float)M_PI * SIM_KV_Y);
+    float ke_mec = 60.0f * INV_SQRT3 / (2.0f * (float)M_PI * SIM_KV);
     float E = ke_mec * wm;                                        /* amplitude BEMF */
 
     sim_theta_e += we * SIM_TS;

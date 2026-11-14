@@ -55,7 +55,7 @@ GAIN_REG = 0.0
 
 HUBER_DELTA = 1.0    # em desvios-padrão do sinal real
 OOB_CUT_K   = 2.5    # corte fora-de-banda = OOB_CUT_K * f0
-OPT_T_END   = 4.8
+OPT_T_END   = 10.0   # perfil inteiro: escada de 1000 a 5000 rpm + desaceleração
 SAIDA_JSON  = "smo_gains.json"
 
 # ---- Ganhos otimizados na forma CONTÍNUA (Gamma = K*Ts) ----

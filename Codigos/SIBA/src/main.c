@@ -19,6 +19,7 @@
 #include "Security_Manager.h"
 #include "Log_Manager.h"
 #include "NVM.h"
+#include "Observer_Manager.h"
 /* Test_Shell.c registra comandos no Zephyr Shell estaticamente — basta estar
  * linkado (ver lib/SYS/Test_Shell.c), nenhum include/init aqui é necessário */
 
@@ -46,6 +47,7 @@ int main(void)
     Security_Manager_Init();
     Battery_Manager_Init();
     Propeller_Manager_Init();
+    Observer_Init();   /* SMO+PLL (vindo da SAME): defaults antes do NVM e do HAL */
 
     /* 3. Log_Manager — inicializa struct e arranca timer 10 Hz */
     Log_Manager_Init();

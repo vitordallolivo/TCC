@@ -11,6 +11,7 @@
 #include "Security_Manager.h"
 #include "Log_Manager.h"
 #include "NVM.h"
+#include "Observer_Manager.h"
 #include <zephyr/logging/log.h>
 #include <string.h>
 
@@ -140,6 +141,7 @@ static void apply_sensor_calib(int8_t tid, float linear, float offset)
         case SENSOR_ID_TEMPERATURE_BATTERY:
         case SENSOR_ID_AIR_SPEED:
         case SENSOR_ID_TEMPERATURE_MOTOR:
+        case SENSOR_ID_V_A ... SENSOR_ID_I_C:   /* fases do motor (AQ1) */
             HAL_ADC_Set_Calib((uint8_t)tid, linear, offset);
             break;
 
@@ -168,6 +170,7 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
         case SENSOR_ID_TEMPERATURE_BATTERY:
         case SENSOR_ID_AIR_SPEED:
         case SENSOR_ID_TEMPERATURE_MOTOR:
+        case SENSOR_ID_V_A ... SENSOR_ID_I_C:   /* fases do motor (AQ1) */
             HAL_ADC_Get_Calib((uint8_t)tid, linear, offset);
             break;
 
@@ -186,6 +189,26 @@ static void read_sensor_calib(int8_t tid, float *linear, float *offset)
 static void handle_func_sensor(const CMD *cmd)
 {
     int8_t tid = cmd->target_id;
+
+    /* Parâmetros do motor + ganhos Γ + LPFs + Ts_adc → observador (contíguos
+     * no enum). RESET_DEFAULT volta ao default; qualquer outra ação grava
+     * `value`. Persistido no NVM. */
+    if (tid >= TARGET_POLES_PAIRS && tid <= TARGET_TS_ADC) {
+        bool ok;
+        if ((default_action)cmd->action_or_status == DEFAULT_ACTION_SENSE_RESET_DEFAULT) {
+            ok = Observer_Reset_Param_Default((target_type)tid);
+        } else {
+            ok = Observer_Set_Param((target_type)tid, cmd->value);
+        }
+        if (ok) {
+            float v = 0.0f;
+            Observer_Get_Param((target_type)tid, &v);
+            NVM_Set_Observer_Param((target_type)tid, v);
+            NVM_Save_Observer();
+        }
+        return;
+    }
+
     if (tid < 0 || tid >= CMD_CORE_SENSOR_COUNT) {
         LOG_WRN("CMD SENSOR: target_id %d inválido", tid);
         return;

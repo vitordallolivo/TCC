@@ -1,7 +1,9 @@
-# Motor da bancada (Scorpion A-5025-310Kv), valores do TCC.
-# R e L: ensaio de rotor bloqueado, por fase em Y (R_Y = R_LL/2, L_Y = L_LL/2).
-# Ganhos Γ: autotune do observador (hélice APC 15x6E), com Ts = 10 µs.
-# Kv usado direto, sem conversão por √3.
+# Motor da bancada (Scorpion A-5025-310Kv).
+# Kv: valor de placa (o √3 do barramento para o pico de fase fica no cálculo
+#     do Ke, no firmware e na GUI).
+# R: de fase, ensaio de rotor bloqueado do TCC (R_LL/2).
+# L: de fase, ajustada nos registros de osciloscópio da bancada.
+# Ganhos Γ: autotune do observador com Ts = 10 µs.
 name: Scorpion_A-5025-310Kv
 physical_params:
   poles: 14
@@ -9,7 +11,7 @@ physical_params:
   connection: Y
   kv_rating: 310.0
   resistance_ohm: 0.00869
-  inductance_henry: 6.95e-06
+  inductance_henry: 1.13e-05
   v_bus: 30.0
 smo_config:
   gamma1: 31.62

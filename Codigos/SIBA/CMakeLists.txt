@@ -36,6 +36,7 @@ target_sources(app PRIVATE
     # Ferramenta de bancada — fora do produto final (ver Kconfig).
     $<$<BOOL:${CONFIG_SIBA_TEST_SHELL}>:lib/SYS/Test_Shell.c>
     lib/SYS/NVM.c
+    lib/SYS/Observer_Manager.c
 )
 
 if(NOT CONFIG_ARCH_POSIX)
@@ -49,15 +50,21 @@ if(NOT CONFIG_ARCH_POSIX)
     # HAL_thread_ADC_fn (ver CONFIG_ADC_CH32V00X=n em prj.conf).
     target_sources(app PRIVATE drivers/adc/adc_ch32v307.c)
 
-    # ADC da SIBA mede sinais lentos (v_batt, i_batt, temperatura, Pitot):
-    # usa o maior tempo de amostragem possível (SMP=7 = 239,5 ciclos) e
-    # BATCH_FRAMES=1 para que o callback do HAL receba exatamente 1 frame
-    # (nch = 3×1 = 3 = HAL_ADC_CHANNELS_PER_ADC), mantendo o loop de
-    # acumulação correto sem alterar HAL.c. ISR ~24 kHz vs ~150 kHz antes.
-    target_compile_definitions(app PRIVATE
-        CH32_ADC_SMP=7
-        CH32_ADC_BATCH_FRAMES=1
-    )
+    # Caminho quente (observador a cada quadro de 6,83 µs): -O2 em vez do -Os
+    # global, e -fno-math-errno para o sqrtf virar fsqrt.s (sem chamada).
+    # Medido com -Os: 9,2 µs por quadro, lotes descartados.
+    set_source_files_properties(lib/SYS/Observer_Manager.c lib/OS/HAL.c
+        PROPERTIES COMPILE_OPTIONS "-O2;-fno-math-errno")
+
+    # Amostragem de 41,5 ciclos (código 4): quadro = 3 × (41,5 + 12,5) / 18 MHz
+    # = 9,0 µs, lote de 256 = 2304 µs. Com 28,5 ciclos o lote era 1750 µs e o
+    # observador (~1475 µs por lote) deixava só 16 % de folga. Mudou aqui,
+    # mudar OBS_TS_NS (Observer_Manager.h) e refazer o autotune com o Ts novo.
+    target_compile_definitions(app PRIVATE CH32_ADC_SMP=4)
+
+    # O ADC da SIBA mede as fases do motor (mesma cadeia da SAME): usa os
+    # padrões do driver, SMP = 28,5 ciclos (quadro de ~6,58 µs) e lotes de
+    # 256 quadros (~1,7 ms por interrupção), igual à SAME.
 endif()
 
 target_include_directories(app PRIVATE

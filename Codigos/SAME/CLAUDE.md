@@ -38,9 +38,12 @@ parâmetro marca `reconfig`; a thread do ADC aplica no topo do laço
 - `BL` não pode ser constante cega: estabilidade pede `BL > Γ1/(1+Φi)`.
 - `Te = 1.5·ke_mec·(…)`: `pole_pairs` cancela no torque de propósito; só afeta
   `rpm_same`.
-- `Kv` = 310 direto, **sem /√3**. Defaults (`DEF_*`) = valores do TCC:
-  R_Y 8,69 mΩ, L_Y 6,95 µH, Γ 31,62 / −10,00 / 0,154. Perfil igual em
-  `Aplicacao_Pi/Config/motors/Scorpion_A-5025-310Kv.yaml`.
+- `Kv` = 310 **de placa** (por volt de barramento). O √3 fica na fórmula:
+  `Ke_mec = 60/(2π·Kv·√3)` = 0,017785 V·s/rad (bancada: 0,017773). O motor
+  virtual do `native_sim` (`HAL.c`) usa a mesma conta: mudar os dois juntos.
+- Defaults (`DEF_*`): R 8,69 mΩ (R_LL/2 do TCC), L 11,3 µH (ajustada no
+  osciloscópio; a ressonância deu 6,95 µH e prevê pior a corrente). Perfil
+  igual em `Aplicacao_Pi/Config/motors/Scorpion_A-5025-310Kv.yaml`.
 - `rpm_same` e `torque_eletrico` publicados passam por LPF de 2 Hz
   (`OBS_OUT_LPF_HZ`, o `fc_plot` do script); fora da malha do observador.
 - Calibração das correntes (ganho 0,0784 A/mV, divisor 4k7/10k) vive na

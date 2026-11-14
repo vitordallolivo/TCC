@@ -25,6 +25,15 @@ typedef enum {
     ERROR_SEC_EMERGENCY_ACTIVE = (1U << 19),  /* Segurança: PARADA DE EMERGÊNCIA ativa — motor desarmado */
     ERROR_OS_GPIO_INIT_FAILED = (1U << 24),  /* Sistema: Falha ao inicializar um módulo de hardware (GPIO) */
     ERROR_MCU_POWER_READY = (1U << 25),  /* Sistema: Bancada não inicializada — aguardando sequência de energização (relé) */
+    ERROR_MEAS_OVERCURRENT = (1U << 11),  /* Medição: Corrente de fase acima do limite seguro */
+    ERROR_MEAS_SENSOR_RANGE = (1U << 12),  /* Medição: Leitura de tensão/corrente de fase fora da faixa válida (saturada ou desconectada) */
+    ERROR_OBS_DIVERGED = (1U << 20),  /* Observador: Observador divergiu (valores não finitos) — reduza os ganhos Γ ou o passo Ts */
+    ERROR_OBS_RPM_IMPLAUSIBLE = (1U << 21),  /* Observador: Rotação estimada acima do limite plausível para este motor */
+    ERROR_CFG_MOTOR_PARAM_INVALID = (1U << 22),  /* Configuração: Parâmetro do motor inválido (R, L, pares de polos, Kv ou Ts ≤ 0) — configure antes de estimar */
+    ERROR_CFG_GAMMA_SIGN = (1U << 23),  /* Configuração: Sinais dos ganhos Γ incorretos (regra fixa: Γ1 > 0, Γ2 < 0, Γt > 0) */
+    ERROR_SYS_ADC_FRAME_DROP = (1U << 26),  /* Sistema: Lotes do ADC descartados — o processamento não acompanhou a aquisição; o observador recebeu amostras com lacunas */
+    ERROR_CAL_IN_PROGRESS = (1U << 27),  /* Calibração: Calibração de offset das correntes em andamento (Hall estabilizando, ESC parado) — rotação e torque ainda não são válidos */
+    ERROR_CAL_FAILED = (1U << 28),  /* Calibração: Calibração de offset falhou: ruído alto nas correntes com o ESC parado — ESC energizado, sensor sem alimentação ou terra aberto */
 } siba_error_bit_t;
 
 #endif /* ERROR_CODES_H */

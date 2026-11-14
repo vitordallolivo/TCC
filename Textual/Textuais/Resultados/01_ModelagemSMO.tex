@@ -253,9 +253,10 @@ pela evolução diferencial durante a exploração do espaço de busca.
 \end{figure}
 
 Os ganhos obtidos para as duas hélices estão na
-\autoref{tab:ganhos_helices}. Eles praticamente coincidem: a carga muda
-pouco o ganho ótimo, e só $\Gamma_t$, ligado ao polo do estimador, varia
-entre as duas.
+\autoref{tab:ganhos_helices}. $\Gamma_{s2}$ é o mesmo nas duas, no limite da
+faixa de busca, e $\Gamma_{s1}$ muda pouco. Quem acompanha a carga é
+$\Gamma_t$, ligado ao polo do estimador da \textit{Back-EMF}: com a 17x10E,
+de torque maior, ele é cerca de 25 vezes o da 15x6E.
 
 \begin{table}[H]
     \centering
@@ -265,8 +266,8 @@ entre as duas.
         \toprule
         \textbf{Hélice} & $\Gamma_{s1}$ & $\Gamma_{s2}$ & $\Gamma_t$ & \textbf{Custo final / inicial} \\
         \midrule
-        APC 15x6E  & \num{31,62} & \num{-10,00} & \num{0,154} & \num{1,163} / \num{1,914} \\
-        APC 17x10E & \num{31,56} & \num{-9,78}  & \num{0,190} & \num{1,168} / \num{1,927} \\
+        APC 15x6E  & \num{20,73} & \num{-10,00} & \num{0,0037} & \num{1,013} / \num{1,300} \\
+        APC 17x10E & \num{26,55} & \num{-10,00} & \num{0,095}  & \num{0,992} / \num{1,280} \\
         \bottomrule
     \end{tabular}
 
@@ -275,8 +276,8 @@ entre as duas.
 \end{table}
 
 Ao passo de simulação $T_s=\SI{10}{\micro\second}$, os ganhos da 17x10E
-correspondem a $K_{s1}=\num{3,16e6}$, $K_{s2}=\num{-9,78e5}$ e
-$K_t=\num{1,90e4}$. A otimização é conduzida sobre
+correspondem a $K_{s1}=\num{2,66e6}$, $K_{s2}=\num{-1,00e6}$ e
+$K_t=\num{9,50e3}$. A otimização é conduzida sobre
 $\Gamma = K\,T_s$ para que o resultado não fique preso ao passo de
 integração: o \textit{firmware} recupera seus próprios ganhos dividindo os
 mesmos $\Gamma$ pelo período de amostragem em que roda.
@@ -286,9 +287,10 @@ cada ganho em torno do ótimo, mantendo os demais fixos. Para $\Gamma_{s1}$, o
 ponto encontrado fica no fundo de um vale. Para $\Gamma_{s2}$, fica no trecho
 plano, perto da subida abrupta, de duas ordens de grandeza, que aparece com
 ganhos maiores em módulo, onde a estimação deixa de acompanhar a planta.
-$\Gamma_t$ quase não altera o custo. $\Gamma_{s1}$ e $\Gamma_{s2}$ ficaram no
-limite superior da faixa de busca, mas a varredura sugere que ampliar essa
-faixa traria pouco ganho.
+$\Gamma_t$ quase não altera o custo, menos de \SI{1}{\percent} na faixa
+varrida. $\Gamma_{s2}$ ficou no limite da faixa de busca, $|\Gamma_{s2}| \le 10$,
+mas a varredura mostra que o custo é plano desse lado e só sobe com ganhos
+maiores em módulo, então ampliar a faixa traria pouco ganho.
 
 \begin{figure}[H]
     \centering
@@ -301,7 +303,7 @@ faixa traria pouco ganho.
 
 Em conjunto, a busca automática partiu de um ponto inicial arbitrário e chegou
 a um conjunto de ganhos utilizável sem intervenção manual, com custo cerca de
-\SI{39}{\percent} menor que o do ponto de partida. Como o procedimento depende
+\SI{22}{\percent} menor que o do ponto de partida nas duas hélices. Como o procedimento depende
 apenas da resistência, da indutância e do perfil de velocidade adotado, pode
 ser repetido para outro conjunto motopropulsor caracterizado na bancada.
 % =====================================================================
@@ -309,20 +311,41 @@ ser repetido para outro conjunto motopropulsor caracterizado na bancada.
 % =====================================================================
 
 Com esses ganhos, a \autoref{fig:desempenho_mecanico} compara a rotação e o
-torque estimados com os da planta ao longo do perfil de velocidade simulado. A
-rotação estimada acompanha os patamares, com atraso perceptível nas
-transições. O torque oscila cerca de $\pm\SI{2}{\newton\meter}$, herdado do
-acionamento em seis passos, em torno de uma média de apenas
-\SIrange{0,1}{0,3}{\newton\meter}, que é o torque da hélice. A \autoref{fig:eixos_estaticos} mostra,
+torque estimados com os da planta ao longo do perfil de velocidade simulado,
+para as duas hélices: patamares de \SIrange{1000}{5000}{RPM}, de
+\SI{500}{RPM} em \SI{500}{RPM}, e uma desaceleração para \SI{3000}{RPM} no
+fim. A rotação estimada acompanha os patamares, com atraso perceptível nas
+transições, e na segunda metade de cada patamar fica a menos de
+\SI{0,05}{\percent} da real. O torque instantâneo oscila cerca de
+$\pm\SI{1}{\newton\meter}$, herdado do acionamento em seis passos; sua média,
+obtida com o mesmo filtro passa-baixas de \SI{2}{\hertz} aplicado às saídas
+do \textit{firmware}, sobe em degraus junto com a rotação, que é o torque da
+hélice. Na 15x6E ela vai de \SI{0,030}{\newton\meter} a
+\SI{0,306}{\newton\meter} e a estimada fica a menos de \SI{1,1}{\percent} da
+real. Na 17x10E vai de \SI{0,047}{\newton\meter} a \SI{0,745}{\newton\meter}
+e a estimada fica acima da real, de \SI{12}{\percent} no primeiro patamar a
+\SI{4}{\percent} no último, diferença que diminui com a rotação, o que sugere
+um erro que pesa mais quando o torque é pequeno. A \autoref{fig:eixos_estaticos} mostra,
 em janela ampliada, as correntes e a força contraeletromotriz nos eixos
 $\alpha$ e $\beta$: as grandezas estimadas seguem as reais, com o
 \textit{chattering} característico do modo deslizante em torno delas.
 
 \begin{figure}[H]
     \centering
-    \caption{Comparação entre RPM e torque real vs. estimado (hélice 17x10E).}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Desenvolvimento/Torque_rpm.png}
+    \caption{Rotação e torque reais e estimados ao longo dos patamares, por hélice}
     \label{fig:desempenho_mecanico}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Desenvolvimento/Torque_rpm_15x6E.png}
+        \caption{APC 15x6E}
+    \end{subfigure}
+
+    \vspace{0.3cm}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Textuais/Imgs/Desenvolvimento/Torque_rpm_17x10E.png}
+        \caption{APC 17x10E}
+    \end{subfigure}
 
     Fonte: Autor (2026).
 \end{figure}
@@ -359,40 +382,49 @@ da \autoref{tab:parametros_simulacao}.
 O torque de cada patamar é calculado com as correntes medidas projetadas no
 ângulo estimado (\autoref{eq:torque_corrente_medida}), de modo que o
 observador entra só com o ângulo e a velocidade. O coeficiente estimado
-converge para o nominal nas duas hélices, com erro de \SI{0,17}{\percent} na
-15x6E e de \SI{0,23}{\percent} na 17x10E
-(\autoref{tab:resultado_identificacao_cq} e \autoref{fig:patamar_coeff_CQ}),
-mesmo com o torque médio de cada patamar cerca de vinte vezes menor que a
-ondulação do acionamento em seis passos (\autoref{fig:desempenho_mecanico}).
+fica próximo do nominal nas duas hélices, com erro médio de
+\SI{0,45}{\percent} na 15x6E e de \SI{0,32}{\percent} na 17x10E
+(\autoref{tab:resultado_identificacao_cq} e \autoref{fig:patamar_coeff_CQ}).
+O maior desvio, de cerca de \SI{3}{\percent} nas duas, aparece no último
+patamar, logo após a desaceleração de \SIrange{5000}{3000}{RPM}; nos patamares
+de subida o erro fica abaixo de \SI{1}{\percent},
+mesmo com o torque médio dos patamares mais baixos de vinte a trinta vezes
+menor que a amplitude da ondulação do acionamento em seis passos
+(\autoref{fig:desempenho_mecanico}).
 
 \begin{table}[H]
     \centering
-    \caption{Identificação do coeficiente $k_Q$ por patamar, com as correntes medidas}
+    \caption{Identificação do coeficiente $k_Q$ por patamar}
     \label{tab:resultado_identificacao_cq}
-    \begin{tabular}{cccc}
+    \small
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{ccccc}
         \toprule
-        \textbf{Hélice} & \textbf{Patamar [RPM]} &
-        \textbf{$\bar{T}$ real / estimado [\si{\newton\meter}]} &
-        \textbf{$k_{Q}$ real / estimado [$10^{-6}$]} \\
+        & \multicolumn{2}{c}{\textbf{APC 15x6E}} & \multicolumn{2}{c}{\textbf{APC 17x10E}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+        \textbf{RPM} &
+        \textbf{$\bar{T}$ real / est. [\si{\newton\meter}]} &
+        \textbf{$k_{Q}$ real / est. [$10^{-6}$]} &
+        \textbf{$\bar{T}$ real / est. [\si{\newton\meter}]} &
+        \textbf{$k_{Q}$ real / est. [$10^{-6}$]} \\
         \midrule
-        \multirow{4}{*}{APC 15x6E}
-            & 3000 & \num{0,0983} / \num{0,0980} & \num{0,996} / \num{1,01} \\
-            & 2000 & \num{0,0435} / \num{0,0436} & \num{0,991} / \num{1,00} \\
-            & 3000 & \num{0,0983} / \num{0,0979} & \num{0,996} / \num{0,997} \\
-            & 2000 & \num{0,0435} / \num{0,0434} & \num{0,991} / \num{0,984} \\
+        1500 & \num{0,0452} / \num{0,0451} & \num{0,995} / \num{0,998} & \num{0,0850} / \num{0,0848} & \num{2,60} / \num{2,61} \\
+        2000 & \num{0,0660} / \num{0,0659} & \num{0,995} / \num{0,997} & \num{0,1365} / \num{0,1365} & \num{2,60} / \num{2,61} \\
+        2500 & \num{0,0924} / \num{0,0922} & \num{0,998} / \num{0,998} & \num{0,2022} / \num{0,2019} & \num{2,60} / \num{2,60} \\
+        3000 & \num{0,1242} / \num{0,1243} & \num{0,998} / \num{1,00}  & \num{0,2823} / \num{0,2820} & \num{2,60} / \num{2,60} \\
+        3500 & \num{0,1616} / \num{0,1612} & \num{0,999} / \num{0,999} & \num{0,3767} / \num{0,3756} & \num{2,60} / \num{2,60} \\
+        4000 & \num{0,2042} / \num{0,2041} & \num{0,998} / \num{1,00}  & \num{0,4851} / \num{0,4841} & \num{2,60} / \num{2,60} \\
+        4500 & \num{0,2527} / \num{0,2521} & \num{1,00} / \num{0,999}  & \num{0,6079} / \num{0,6064} & \num{2,60} / \num{2,60} \\
+        5000 & \num{0,3062} / \num{0,3060} & \num{0,999} / \num{1,00}  & \num{0,7450} / \num{0,7380} & \num{2,60} / \num{2,58} \\
+        3000\textsuperscript{a} & \num{0,1243} / \num{0,1241} & \num{0,998} / \num{0,968} & \num{0,2823} / \num{0,2824} & \num{2,60} / \num{2,52} \\
         \midrule
-        \multirow{4}{*}{APC 17x10E}
-            & 3000 & \num{0,2574} / \num{0,2568} & \num{2,61} / \num{2,65} \\
-            & 2000 & \num{0,1142} / \num{0,1141} & \num{2,60} / \num{2,62} \\
-            & 3000 & \num{0,2573} / \num{0,2567} & \num{2,61} / \num{2,62} \\
-            & 2000 & \num{0,1141} / \num{0,1141} & \num{2,60} / \num{2,59} \\
-        \midrule
-        \multicolumn{3}{l}{\textbf{15x6E} --- média estimada / nominal (erro)} &
-            \num{0,999} / \num{1,00} (\SI{0,17}{\percent}) \\
-        \multicolumn{3}{l}{\textbf{17x10E} --- média estimada / nominal (erro)} &
-            \num{2,62} / \num{2,61} (\SI{0,23}{\percent}) \\
+        \textbf{Est./nom.} & \multicolumn{2}{c}{\num{0,996} / \num{1,00} (\SI{0,45}{\percent})} &
+            \multicolumn{2}{c}{\num{2,59} / \num{2,60} (\SI{0,32}{\percent})} \\
         \bottomrule
     \end{tabular}
+
+    \vspace{2pt}
+    {\footnotesize \textsuperscript{a} Patamar após a desaceleração de \SIrange{5000}{3000}{RPM}.}
 
     \vspace{0.2cm}
     {\small Fonte: Autor (2026)}
@@ -400,7 +432,7 @@ ondulação do acionamento em seis passos (\autoref{fig:desempenho_mecanico}).
 
 \begin{figure}[H]
     \centering
-    \caption{Identificação do coeficiente $k_Q$ por patamar, com as correntes medidas}
+    \caption{Identificação do coeficiente $k_Q$ por patamar, por hélice}
     \label{fig:patamar_coeff_CQ}
     \begin{subfigure}[t]{\textwidth}
         \centering

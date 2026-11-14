@@ -18,20 +18,21 @@ import struct
 import yaml
 
 
-def ke_kt_from_kv(kv, pole_pairs, connection="Y"):
-    """Deriva Ke/Kt do Kv COMERCIAL do motor.
+def ke_kt_from_kv(kv, pole_pairs):
+    """Deriva Ke/Kt do Kv DE PLACA do motor (o mesmo cálculo do firmware).
 
-    O modelo/firmware trabalha em ESTRELA (Y). Se o motor é Delta, converte o Kv
-    para o equivalente Y (Y tem Ke maior e Kv menor): `Kv_Y = Kv_delta / √3`.
-    Depois: `Ke_mec = 60/(2π·Kv_Y)` [V·s/rad] — numericamente igual a
-    `Kt` [N·m/A]. `Ke` por par de polos = `Ke_mec / p`.
-    Retorna dict {kv_y, ke_mec, kt, ke}."""
-    conn = (connection or "Y").strip().lower()
+    O Kv de placa é por volt de barramento, e o pico de tensão de fase que o
+    inversor entrega é V_bus/√3. Logo, sempre, independente de o motor ser
+    bobinado em Y ou em Δ:
+        Ke_mec = 60/(2π·Kv·√3)  [V·s/rad, pico de fase]
+        Kt     = 1,5·Ke_mec     [N·m/A]
+        Ke     = Ke_mec / p     (por par de polos)
+    Bate com a bancada: 0,017785 previsto contra 0,017773 medido.
+    Retorna dict {ke_mec, kt, ke}."""
     kv = float(kv or 0.0)
-    kv_y = kv / math.sqrt(3.0) if conn.startswith("d") else kv
-    ke_mec = 60.0 / (2.0 * math.pi * kv_y) if kv_y > 0 else 0.0
+    ke_mec = 60.0 / (2.0 * math.pi * kv * math.sqrt(3.0)) if kv > 0 else 0.0
     ke = ke_mec / pole_pairs if pole_pairs else 0.0
-    return {"kv_y": kv_y, "ke_mec": ke_mec, "kt": ke_mec, "ke": ke}
+    return {"ke_mec": ke_mec, "kt": 1.5 * ke_mec, "ke": ke}
 
 # Ponto de partida do diálogo "Criar Motor" quando não há perfil salvo. São os
 # valores REAIS da bancada — motor Scorpion A-5025-310Kv — e os defaults que o
@@ -39,9 +40,11 @@ def ke_kt_from_kv(kv, pole_pairs, connection="Y"):
 # o formulário abrir coerente com a placa em vez de tudo zerado.
 #
 # Procedência:
-#   físicos   : P = 14 do motor; R e L do ensaio de rotor bloqueado do TCC,
-#               já por fase em Y (R_Y = R_LL/2 = 8,69 mΩ; L_Y = 6,95 µH).
-#               Kv 310 é usado direto, sem √3 (conexão "Y").
+#   físicos   : P = 14 do motor; Kv 310 de placa (o √3 vai no Ke, em
+#               ke_kt_from_kv e no firmware). R de fase do ensaio de rotor
+#               bloqueado do TCC (R_LL/2 = 8,69 mΩ). L de fase ajustada nos
+#               registros de osciloscópio (11,3 µH; a ressonância deu 6,95 µH
+#               e prevê pior a corrente medida).
 #   ganhos Γ  : tabela do autotune no TCC (hélice APC 15x6E). Γ carrega Ts
 #               embutido: mudou Ts, roda o autotune de novo em vez de
 #               reescalar.
@@ -49,10 +52,10 @@ def ke_kt_from_kv(kv, pole_pairs, connection="Y"):
 MOTOR_DEFAULTS = {
     "poles": 14,
     "pole_pairs": 7,
-    "connection": "Y",         # Kv já é o valor a usar: sem conversão por √3
+    "connection": "Y",         # mantido só por compatibilidade de arquivo
     "kv_rating": 310.0,
-    "resistance": 8.69e-3,     # Ω por fase, em Y (TCC)
-    "inductance": 6.95e-6,     # H por fase, em Y (TCC)
+    "resistance": 8.69e-3,     # Ω por fase (TCC)
+    "inductance": 11.3e-6,     # H por fase (osciloscópio)
     "v_bus": 30.0,
     "gamma1": 31.62,
     "gamma2": -10.00,
@@ -246,21 +249,50 @@ def save_motor_file(config_dir, name, params):
     return path
 
 
-def build_motor_cmds(same_protocol_cfg, params):
-    """Lista de CMDs (8 bytes `<BBBfb>`) p/ aplicar os params no hardware SAME."""
-    enums = same_protocol_cfg.get("enums", {})
+def has_observer(protocol_cfg):
+    """True se a placa tem o observador (SMO) — o enum de alvos traz os
+    parâmetros do motor. Hoje: SAME e SIBA (que absorveu a SAME)."""
+    return "TARGET_POLES_PAIRS" in (protocol_cfg.get("enums", {}).get("target_type") or [])
+
+
+def build_motor_cmds(protocol_cfg, params, with_keys=False, skip_keys=()):
+    """Lista de CMDs (8 bytes `<BBBfb>`) p/ aplicar os params no observador de
+    uma placa (SAME ou SIBA), usando os enums do YAML DELA.
+
+    Alvo que a placa não tem (ex.: TARGET_TS_UDP na SIBA) é PULADO — antes
+    caía no índice 0 e virava TARGET_LOAD_CELL_0 na SIBA.
+    A SIBA não tem DEFAULT_ACTION_SET_VALUE: lá qualquer ação que não seja
+    RESET_DEFAULT grava `value`, então vai DEFAULT_ACTION_NONE.
+    with_keys=True devolve [(cmd, gui_key, target_name)]. skip_keys: chaves
+    do perfil que NÃO vão para a placa (ex.: ts_adc_us na SIBA, onde o Ts é
+    fixado pelo hardware do ADC e não pelo perfil do motor).
+    """
+    enums = protocol_cfg.get("enums", {})
 
     def idx(cat, name, default=0):
         lst = enums.get(cat, [])
         return lst.index(name) if name in lst else default
 
+    targets = enums.get("target_type") or []
     func = idx("func_type", "FUNC_SENSOR")
     instr = idx("instruct_type", "INSTR_WRITE")
     action = idx("default_action", "DEFAULT_ACTION_SET_VALUE")
     cmds = []
     for key, target in MOTOR_TARGET_MAP.items():
-        if key not in params:
+        if key not in params or key in skip_keys or target not in targets:
             continue
-        target_id = idx("target_type", target)
-        cmds.append(struct.pack("<BBBfb", func, instr, target_id, float(params[key]), action))
+        cmd = struct.pack("<BBBfb", func, instr, targets.index(target),
+                          float(params[key]), action)
+        cmds.append((cmd, key, target) if with_keys else cmd)
     return cmds
+
+
+def board_skip_keys(board):
+    """Chaves do perfil de motor que NÃO são enviadas a uma placa.
+
+    SIBA: o Ts do observador é o período real do quadro do ADC (9,0 µs com
+    SMP 41,5 — ver SIBA/lib/SYS/Observer_Manager.h). Vem do firmware, não do
+    perfil: mandar o ts_adc_us do perfil (10 µs) deixaria Φi/Γv errados.
+    Para mudar o Ts de propósito, usar o CMD TARGET_TS_ADC direto.
+    """
+    return ("ts_adc_us",) if board == "SIBA" else ()

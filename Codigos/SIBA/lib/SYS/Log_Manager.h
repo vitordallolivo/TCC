@@ -20,6 +20,19 @@
 #define SENSOR_ID_AIR_SPEED 10U
 #define SENSOR_ID_RPM 11U
 #define SENSOR_ID_TEMPERATURE_MOTOR 12U
+#define SENSOR_ID_V_A 13U
+#define SENSOR_ID_V_B 14U
+#define SENSOR_ID_V_C 15U
+#define SENSOR_ID_I_A 16U
+#define SENSOR_ID_I_B 17U
+#define SENSOR_ID_I_C 18U
+#define SENSOR_ID_T_PROC_US 19U
+#define SENSOR_ID_T_BATCH_US 20U
+#define SENSOR_ID_BATCH_DROPS 21U
+#define SENSOR_ID_T_LAT_US 22U
+#define SENSOR_ID_RPM_SAME 23U
+#define SENSOR_ID_TORQUE_ELETRICO 24U
+#define SENSOR_ID_TORQUE_HELICE 25U
 
 /* ===========================================================
  * Structs geradas a partir do SIBA.yaml
@@ -75,6 +88,32 @@ typedef struct __attribute__((packed)) {
     log_status status;
 
     uint32_t error_code;
+
+    float V_a;
+
+    float V_b;
+
+    float V_c;
+
+    float i_a;
+
+    float i_b;
+
+    float i_c;
+
+    float t_proc_us;
+
+    float t_batch_us;
+
+    float batch_drops;
+
+    float t_lat_us;
+
+    float rpm_same;
+
+    float torque_eletrico;
+
+    float torque_helice;
 
 } TELEMETRY_LOG;
 

@@ -1,0 +1,8 @@
+# PFIC da WCH (QingKe V4F): a IRQ fica "ativa" (IACTR) até o mret. Sem isto,
+# quando uma ISR (ex.: SysTick) troca de thread, o Zephyr retoma a nova thread
+# com `ret` e a IRQ segue ativa até a thread interrompida voltar: nenhuma outra
+# IRQ de mesma prioridade entra nesse meio-tempo. Medido: a ISR do DMA do ADC
+# chegava com 6–60 ms de atraso (degraus de ~12 ms), com IACTR=0x1000
+# (SysTick) e a CPU já rodando código de thread. Com a opção, toda troca de
+# contexto passa por ecall → mret.
+CONFIG_RISCV_ALWAYS_SWITCH_THROUGH_ECALL=y

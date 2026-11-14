@@ -80,9 +80,11 @@ void NCI_Transmit(const void *buf, size_t len)
 {
     if (!is_network_connected || tx_sock < 0) return;
 
+    HAL_Trace(HAL_TR_NET_TX_IN);
     ssize_t sent = zsock_sendto(tx_sock, buf, len, 0,
                                 (struct sockaddr *)&peer_addr,
                                 sizeof(peer_addr));
+    HAL_Trace(HAL_TR_NET_TX_OUT);
     if (sent < 0) {
         LOG_WRN("NCI TX: sendto errno=%d", errno);
     }

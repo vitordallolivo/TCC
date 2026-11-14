@@ -15,9 +15,13 @@ class SAMEConfigDialog(QDialog):
     aplica no hardware SAME. Parâmetros físicos + observador (SMO, ganhos Γ) +
     amostragem. Ke/Kt são CALCULADOS do Kv comercial (com conversão Δ→Y)."""
 
-    def __init__(self, prefs, config_dir, ethernet_mgr, parent=None):
+    def __init__(self, prefs, config_dir, ethernet_mgr, parent=None,
+                 target_boards=("SAME",)):
         super().__init__(parent)
-        self.setWindowTitle("Configuração / Criar Motor (SAME)")
+        # Placas que recebem os parâmetros: as do modo atual que têm o
+        # observador (SIBA absorveu a SAME). Cada uma com os enums do SEU yaml.
+        self.target_boards = tuple(target_boards) or ("SAME",)
+        self.setWindowTitle(f"Configuração / Criar Motor ({'+'.join(self.target_boards)})")
         self.resize(440, 720)
 
         self.prefs = prefs
@@ -30,7 +34,7 @@ class SAMEConfigDialog(QDialog):
         self.combos = {}   # key -> QComboBox
         self.init_ui()
         self.load_current_values()
-        self._recompute_derived()
+        self._update_conditions()
 
     def _load_yaml(self, path):
         with open(path, 'r', encoding='utf-8') as f:
@@ -63,24 +67,15 @@ class SAMEConfigDialog(QDialog):
         # --- Grupo 1: Motor (físico) ---
         gm = QGroupBox("Parâmetros Físicos do Motor")
         fm = QFormLayout()
-        self.add_spinbox(fm, "poles", "Número de polos (P)", 2, 200, 0)
-        self.add_combo(fm, "connection", "Conexão", ["Y (Estrela)", "Delta"])
-        self.add_spinbox(fm, "kv_rating", "Kv comercial (RPM/V)", 1, 10000, 1)
-        self.add_spinbox(fm, "resistance", "Resistência R (Ω, em Y)", 0.0, 50.0, 5)
-        self.add_spinbox(fm, "inductance", "Indutância L (H, em Y)", 0.0, 1.0, 8)
+        # Só dados de fabricante/ensaio. As conversões (Ke, Kt, pares de polos)
+        # ficam no firmware e em motor_config.ke_kt_from_kv, fora da tela.
+        self.add_spinbox(fm, "poles", "Número de polos", 2, 200, 0)
+        self.add_spinbox(fm, "kv_rating", "Kv de placa (RPM/V)", 1, 10000, 1)
+        self.add_spinbox(fm, "resistance", "Resistência de fase R (Ω)", 0.0, 50.0, 5)
+        self.add_spinbox(fm, "inductance", "Indutância de fase L (H)", 0.0, 1.0, 8)
         self.add_spinbox(fm, "v_bus", "Tensão de barramento V_bus (V)", 0.0, 200.0, 2)
         gm.setLayout(fm)
         main.addWidget(gm)
-
-        # Derivados (somente leitura) — Ke/Kt calculados do Kv (Δ→Y).
-        gd = QGroupBox("Derivados (calculados do Kv, conexão Δ→Y)")
-        fd = QFormLayout()
-        self.lbl_pp = QLabel("—"); fd.addRow("Pares de polos (p = P/2):", self.lbl_pp)
-        self.lbl_kvy = QLabel("—"); fd.addRow("Kv equivalente em Y:", self.lbl_kvy)
-        self.lbl_ke = QLabel("—"); fd.addRow("Ke (V·s/rad):", self.lbl_ke)
-        self.lbl_kt = QLabel("—"); fd.addRow("Kt (N·m/A):", self.lbl_kt)
-        gd.setLayout(fd)
-        main.addWidget(gd)
 
         # --- Grupo 2: Observador SMO (ganhos Γ) ---
         gs = QGroupBox("Ganhos do Observador (SMO) — forma Γ (invariante ao passo)")
@@ -126,11 +121,6 @@ class SAMEConfigDialog(QDialog):
         gc.setLayout(fc)
         main.addWidget(gc)
 
-        # Recalcula Ke/Kt quando poles/kv/conexão mudam.
-        self.inputs["poles"].valueChanged.connect(self._recompute_derived)
-        self.inputs["kv_rating"].valueChanged.connect(self._recompute_derived)
-        self.combos["connection"].currentTextChanged.connect(self._recompute_derived)
-
         # Revalida as condições a cada mudança — o custo é um punhado de
         # contas, e o valor é ver o problema aparecer enquanto se digita.
         for spin in self.inputs.values():
@@ -153,20 +143,8 @@ class SAMEConfigDialog(QDialog):
         outer.addLayout(btns)
 
     # ------------------------------------------------------------------ #
-    def _connection(self):
-        return "Delta" if "Delta" in self.combos["connection"].currentText() else "Y"
-
     def _pole_pairs(self):
         return int(self.inputs["poles"].value()) // 2
-
-    def _recompute_derived(self):
-        pp = self._pole_pairs()
-        d = mc.ke_kt_from_kv(self.inputs["kv_rating"].value(), pp, self._connection())
-        self.lbl_pp.setText(str(pp))
-        self.lbl_kvy.setText(f"{d['kv_y']:.1f} RPM/V")
-        self.lbl_ke.setText(f"{d['ke']:.6g}  (Ke_mec={d['ke_mec']:.6g})")
-        self.lbl_kt.setText(f"{d['kt']:.6g}")
-        self._update_conditions()
 
     def _update_conditions(self):
         """Roda mc.check_conditions e mostra o resultado. Erro em vermelho,
@@ -192,7 +170,7 @@ class SAMEConfigDialog(QDialog):
         p = {k: spin.value() for k, spin in self.inputs.items()}
         p["poles"] = int(p.get("poles", 0))
         p["pole_pairs"] = self._pole_pairs()
-        p["connection"] = self._connection()
+        p["connection"] = "Y"   # sem efeito no cálculo; mantido no arquivo
         p["switch_func"] = self.combos["switch_func"].currentText().split()[0]
         return p
 
@@ -217,9 +195,7 @@ class SAMEConfigDialog(QDialog):
             v = saved.get(key, mc.MOTOR_DEFAULTS.get(key))
             spin.setValue(float(v) if v is not None else 0.0)
 
-        conn = str(saved.get("connection", mc.MOTOR_DEFAULTS["connection"]))
-        self.combos["connection"].setCurrentIndex(1 if conn.lower().startswith("d") else 0)
-        sf = str(saved.get("switch_func", mc.MOTOR_DEFAULTS["switch_func"])).lower()
+        sf =str(saved.get("switch_func", mc.MOTOR_DEFAULTS["switch_func"])).lower()
         idx = {"tanh": 0, "saturação": 1, "sat": 1, "sigmoide": 2}.get(sf, 0)
         self.combos["switch_func"].setCurrentIndex(idx)
 
@@ -255,21 +231,23 @@ class SAMEConfigDialog(QDialog):
             QMessageBox.warning(self, "Erro ao apagar", str(e))
 
     def apply_and_send(self):
-        """Aplica no hardware SAME via o MESMO gerador de CMDs do 'Carregar'
-        (motor_config.build_motor_cmds). Só os params com TARGET_* são enviados."""
+        """Aplica no hardware (placas de self.target_boards) via o MESMO gerador
+        de CMDs do 'Carregar' (motor_config.build_motor_cmds), com os enums do
+        yaml de cada placa. Alvo que a placa não tem é pulado."""
         params = self._params()
         self.prefs["same_config"] = params
-        same_cfg = self.same_yaml
-        if "same" in same_cfg:
-            same_cfg = same_cfg["same"]
 
-        cmds = mc.build_motor_cmds(same_cfg, params)
-        # build_motor_cmds só gera p/ as chaves do MOTOR_TARGET_MAP presentes em params.
-        sent_keys = [k for k in mc.MOTOR_TARGET_MAP if k in params]
-        for cmd_payload, gui_key in zip(cmds, sent_keys):
-            print(f"[NET] CMD {mc.MOTOR_TARGET_MAP[gui_key]} = {params[gui_key]:.4f} "
-                  f"-> [{cmd_payload.hex(' ').upper()}]")
-            self.ethernet.send_command("SAME", cmd_payload)
-
-        print(f"[PRNT] {len(cmds)} parâmetros aplicados na SAME.")
+        for board in self.target_boards:
+            cfg = self._load_yaml(os.path.join(self.config_dir, f"{board}.yaml"))
+            if board.lower() in cfg:
+                cfg = cfg[board.lower()]
+            if board not in getattr(self.ethernet, "workers", {}):
+                self.ethernet.start_link(board)
+            cmds = mc.build_motor_cmds(cfg, params, with_keys=True,
+                                        skip_keys=mc.board_skip_keys(board))
+            for cmd_payload, gui_key, target in cmds:
+                print(f"[NET] [{board}] CMD {target} = {params[gui_key]:.4f} "
+                      f"-> [{cmd_payload.hex(' ').upper()}]")
+                self.ethernet.send_command(board, cmd_payload)
+            print(f"[PRNT] {len(cmds)} parâmetros aplicados na {board}.")
         self.accept()

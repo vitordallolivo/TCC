@@ -19,10 +19,10 @@
  *
  * CORRENTE — SS49E (N=1) + divisor 4k7/10k:
  *     18,750 mV/A x 0,6803 = 12,755 mV/A, repouso médio medido de 1,7675 V
- * TENSÃO — divisor 130k/7k5: k = 7,5/137,5 = 0,0545455 */
+ * TENSÃO — divisor 100k/5k6: k = 5,6/105,6 = 0,0530303 (fundo de escala 62,2 V) */
 #define HAL_CURR_MV_PER_A    12.755f     /* ganho da cadeia de corrente */
 #define HAL_HALL_ZERO_MV   1767.5f       /* repouso NOMINAL do Hall no pino */
-#define HAL_VOLT_MV_PER_V    54.5455f    /* mV no pino por volt de fase */
+#define HAL_VOLT_MV_PER_V    53.0303f    /* mV no pino por volt de fase */
 
 /* Calibração automática de offset no boot desligada: ganho e offset dos
  * sensores vêm exclusivamente do NVM (salvo pelo usuário via CMD pela rede).

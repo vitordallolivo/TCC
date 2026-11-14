@@ -280,6 +280,14 @@ class AlbatrozGUI(QMainWindow):
             return "SIBA"
         return None
 
+    def _observer_boards(self, mode=None):
+        """Placas do modo que têm o observador (SMO) e recebem os parâmetros
+        do motor. A SIBA absorveu a SAME: no modo SIBA é só ela."""
+        mode = mode or self.op_mode
+        out = [b for b in self._boards_in_mode(mode)
+               if mc.has_observer(codecs.board_protocol_cfg(self.configs.get(b, {}), b))]
+        return out or ["SAME"]
+
     @Slot(str)
     def on_mode_changed(self, mode):
         self.op_mode = mode
@@ -1023,26 +1031,30 @@ class AlbatrozGUI(QMainWindow):
             self.prefs["last_motor_name"] = choice
             self.save_user_prefs()
 
+            boards = self._observer_boards()
             resp = QMessageBox.question(
                 self, "Aplicar no hardware",
-                f"Aplicar os parâmetros de '{choice}' no hardware (SAME) agora?",
+                f"Aplicar os parâmetros de '{choice}' no hardware ({'+'.join(boards)}) agora?",
                 QMessageBox.Yes | QMessageBox.No)
             if resp == QMessageBox.Yes:
-                if "SAME" not in self.eth.workers:
-                    self.eth.start_link("SAME")
-                same_cfg = codecs.board_protocol_cfg(self.configs["SAME"], "SAME")
-                cmds = mc.build_motor_cmds(same_cfg, params)
-                # Loga CADA comando no terminal (hex + decode), igual ao 'Criar'
-                # -> o usuário vê exatamente o que foi mandado para a SAME.
-                print(f"[Motor] Aplicando '{choice}' na SAME ({len(cmds)} parâmetros):")
-                for cmd, (gui_key, target_str) in zip(cmds, mc.MOTOR_TARGET_MAP.items()):
-                    print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
-                    print(f"[DECODE] [SAME] FUNC_SENSOR | INSTR_WRITE | {target_str} | "
-                          f"VAL: {params[gui_key]:.4f} | ACT: DEFAULT_ACTION_SET_VALUE")
-                    self.eth.send_command("SAME", cmd)
-                print(f"[Motor] {len(cmds)} parâmetros de '{choice}' enviados à SAME.")
+                total = 0
+                for board in boards:
+                    if board not in self.eth.workers:
+                        self.eth.start_link(board)
+                    cfg = codecs.board_protocol_cfg(self.configs[board], board)
+                    cmds = mc.build_motor_cmds(cfg, params, with_keys=True,
+                                               skip_keys=mc.board_skip_keys(board))
+                    # Loga CADA comando (hex + decode), igual ao 'Criar'.
+                    print(f"[Motor] Aplicando '{choice}' na {board} ({len(cmds)} parâmetros):")
+                    for cmd, gui_key, target_str in cmds:
+                        print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
+                        print(f"[DECODE] [{board}] FUNC_SENSOR | INSTR_WRITE | {target_str} | "
+                              f"VAL: {params[gui_key]:.4f}")
+                        self.eth.send_command(board, cmd)
+                    total += len(cmds)
+                print(f"[Motor] {total} parâmetros de '{choice}' enviados a {'+'.join(boards)}.")
                 QMessageBox.information(self, "Aplicado",
-                    f"{len(cmds)} parâmetros de '{choice}' aplicados no hardware.")
+                    f"{total} parâmetros de '{choice}' aplicados em {'+'.join(boards)}.")
         except Exception as e:
             QMessageBox.warning(self, "Erro", str(e))
 
@@ -1100,7 +1112,8 @@ class AlbatrozGUI(QMainWindow):
                 self.prefs,           # Argumento 1: prefs
                 self.config_dir,      # Argumento 2: config_dir
                 self.eth,             # Argumento 3: ethernet_mgr
-                self                  # Argumento 4: parent
+                self,                 # Argumento 4: parent
+                target_boards=self._observer_boards(),
             )
             
             if dialog.exec():

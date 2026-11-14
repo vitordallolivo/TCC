@@ -13,7 +13,10 @@ from scipy.signal import butter, lfilter
 
 # ===================== CONFIG =====================
 IMG_DIR    = "."                       # ex.: "Textuais/Imgs/Desenvolvimento"
-GAINS_JSON = "smo_gains.json"
+# SMO_GAINS_JSON escolhe os ganhos e SMO_PLOT_SUFFIX vai no nome da figura
+# (ex.: "_15x6E"); a carga da hélice vem de SMO_K_LOAD (test_coeff_auto).
+GAINS_JSON = os.environ.get("SMO_GAINS_JSON", "smo_gains.json")
+PLOT_SUFFIX = os.environ.get("SMO_PLOT_SUFFIX", "")
 KS1, KS2, KT = 2_872_277.0, -842_983.0, 2_641.5   # fallback
 ATRASO_PI_S = 0.2                      # descarta o transitório do PI (s)
 RPM_MIN     = 1000.0                    # ignora patamares abaixo disso
@@ -278,6 +281,6 @@ ax2.legend(); ax2.grid(True)
 
 plt.tight_layout()
 os.makedirs(IMG_DIR, exist_ok=True)
-saida = os.path.join(IMG_DIR, "Algortimo_Coeficiente_helice.png")
+saida = os.path.join(IMG_DIR, f"Algortimo_Coeficiente_helice{PLOT_SUFFIX}.png")
 fig.savefig(saida, dpi=120, bbox_inches="tight"); plt.close(fig)
 print("salvo:", saida)

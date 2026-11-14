@@ -86,6 +86,19 @@ void Log_Manager_Update(uint32_t sensor_id, float value)
         case SENSOR_ID_AIR_SPEED:            current_log.air_speed            = value; break;
         case SENSOR_ID_RPM:                  current_log.rpm                  = value; break;
         case SENSOR_ID_TEMPERATURE_MOTOR:   current_log.temperature_motor    = value; break;
+        case SENSOR_ID_V_A:                 current_log.V_a                  = value; break;
+        case SENSOR_ID_V_B:                 current_log.V_b                  = value; break;
+        case SENSOR_ID_V_C:                 current_log.V_c                  = value; break;
+        case SENSOR_ID_I_A:                 current_log.i_a                  = value; break;
+        case SENSOR_ID_I_B:                 current_log.i_b                  = value; break;
+        case SENSOR_ID_I_C:                 current_log.i_c                  = value; break;
+        case SENSOR_ID_T_PROC_US:           current_log.t_proc_us            = value; break;
+        case SENSOR_ID_T_BATCH_US:          current_log.t_batch_us           = value; break;
+        case SENSOR_ID_BATCH_DROPS:         current_log.batch_drops          = value; break;
+        case SENSOR_ID_T_LAT_US:            current_log.t_lat_us             = value; break;
+        case SENSOR_ID_RPM_SAME:            current_log.rpm_same             = value; break;
+        case SENSOR_ID_TORQUE_ELETRICO:     current_log.torque_eletrico      = value; break;
+        case SENSOR_ID_TORQUE_HELICE:       current_log.torque_helice        = value; break;
         default:
             LOG_WRN("Log_Manager: sensor_id desconhecido %d", sensor_id);
             break;

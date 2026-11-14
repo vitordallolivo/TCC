@@ -477,12 +477,13 @@ estático mais simples, $T = k_Q \omega^2$.
 
 ### Motor → Carregar / Criar
 
-"Criar" abre um formulário com os parâmetros físicos do motor (polos,
-tipo de ligação Y ou Delta, $K_v$ comercial, resistência, indutância),
-calcula automaticamente $K_e$/$K_t$ a partir do $K_v$ (convertendo de
-Delta para Y quando necessário — motores em Delta têm um $K_v$ comercial
-diferente do que o firmware, que trabalha internamente em Y, precisa),
-mais os ganhos do observador — e permite salvar isso como um arquivo de
+"Criar" abre um formulário só com dados de fabricante e de ensaio (polos,
+$K_v$ de placa, resistência e indutância de fase, tensão de barramento),
+mais os ganhos do observador. As conversões não aparecem na tela: o $K_v$ de
+placa é por volt de barramento e o pico de tensão de fase que o inversor
+entrega é $V_{bus}/\sqrt3$, então $K_{e1} = 60/(2\pi K_v\sqrt3)$ **sempre**
+(independe de o motor ser Y ou Δ) e $K_t = 1{,}5\,K_{e1}$ — mesma conta do
+firmware. O formulário permite salvar isso como um arquivo de
 perfil (`Config/motors/<nome>.yaml`), reutilizável depois. "Carregar" lista
 os perfis salvos e os que já estiverem embutidos no `SAME.yaml`, e permite
 aplicar os parâmetros escolhidos direto no hardware, mandando um `CMD` por

@@ -57,6 +57,24 @@ int HAL_Init(void);
 
 /* ADC — dual simultâneo ADC1+ADC2. */
 int      HAL_ADC_Init(void);
+
+/* Vetor de eventos para medir tempos (TIM2 a 1 MHz, 16 bits). Grava uma vez
+ * HAL_TRACE_N eventos, a partir de 5 s após o boot, e para; lido pelo
+ * debugger (símbolos hal_trace e hal_trace_n). No-op no native_sim. */
+enum hal_trace_id {
+    HAL_TR_ADC_ISR    = 1,   /* ISR do DMA do ADC (lote pronto) */
+    HAL_TR_PH_START   = 2,   /* início do processamento do lote */
+    HAL_TR_PH_END     = 3,   /* fim do processamento do lote */
+    HAL_TR_NET_TX_IN  = 4,   /* início do envio UDP da telemetria */
+    HAL_TR_NET_TX_OUT = 5,   /* fim do envio UDP */
+    HAL_TR_HX_IN      = 6,   /* início da leitura de um HX711 */
+    HAL_TR_HX_OUT     = 7,   /* fim da leitura de um HX711 */
+    HAL_TR_ADC_DROP   = 8,   /* ISR com o lote anterior ainda em processamento */
+};
+void     HAL_Trace(uint8_t id);
+/* Refaz a calibração de offset das correntes de fase (ESC PARADO). Roda
+ * sozinha no boot; o observador só é liberado ao fim dela. */
+void     HAL_Phase_Calibration_Restart(void);
 uint16_t HAL_ADC1_Get(uint8_t idx);  /* ADC1: HAL_ADC1_IDX_* */
 uint16_t HAL_ADC2_Get(uint8_t idx);  /* ADC2: HAL_ADC2_IDX_* */
 

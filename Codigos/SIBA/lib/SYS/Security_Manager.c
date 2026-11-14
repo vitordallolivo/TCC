@@ -7,6 +7,9 @@
 #include "Battery_Manager.h" /* Battery_Manager_Set_Relay — pré-carga + potência */
 #include "HAL.h"
 #include "Log_Manager.h"
+#include "Observer_Manager.h"   /* saúde do SMO/PLL */
+#include "Security_prm.h"       /* SM_* — gerado do SIBA.yaml (security_limits) */
+#include <math.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <errno.h>
@@ -32,10 +35,9 @@ static bool emergency_by_button = false;
 /* Sobrescrita do botão físico, comandada pelo supervisório. Só em RAM. */
 static bool emergency_override = false;
 
-/* Código de erro agregado — Sys roda em uma única thread (ver CLAUDE.md),
- * então não há concorrência real entre os managers; ainda assim o acesso
- * é sempre feito através de Error_Detect/Error_Erase/Get_Error_Code. */
-static uint32_t error_code = 0U;
+/* Código de erro agregado. Atômico: além da siba_wq, a fila do ADC (fases e
+ * observador) também seta/limpa bits. Acesso sempre por Error_Detect/Erase/Set. */
+static atomic_t error_code = ATOMIC_INIT(0);
 
 /** @brief Zera o estado de emergência; pré-seta ERROR_MCU_POWER_READY (relay aberto ao boot). */
 void Security_Manager_Init(void)
@@ -43,9 +45,9 @@ void Security_Manager_Init(void)
     emergency_active    = false;
     emergency_by_button = false;
     emergency_override  = false;
-    error_code          = 0U;
+    atomic_set(&error_code, 0);
     /* Relay não está energizado ao boot — seta bit para a GUI saber. */
-    error_code |= (uint32_t)ERROR_MCU_POWER_READY;
+    atomic_or(&error_code, (atomic_val_t)ERROR_MCU_POWER_READY);
 
     if (gpio_is_ready_dt(&led_red)) {
         gpio_pin_configure_dt(&led_red, GPIO_OUTPUT_INACTIVE);
@@ -61,10 +63,9 @@ void Security_Manager_Init(void)
  */
 bool Security_Manager_Error_Detect(siba_error_bit_t bit)
 {
-    if (error_code & (uint32_t)bit) {
+    if ((uint32_t)atomic_or(&error_code, (atomic_val_t)bit) & (uint32_t)bit) {
         return false; /* já estava setado — sem mudança de borda */
     }
-    error_code |= (uint32_t)bit;
     return true;
 }
 
@@ -75,17 +76,64 @@ bool Security_Manager_Error_Detect(siba_error_bit_t bit)
  */
 bool Security_Manager_Error_Erase(siba_error_bit_t bit)
 {
-    if (!(error_code & (uint32_t)bit)) {
+    if (!((uint32_t)atomic_and(&error_code, ~(atomic_val_t)bit) & (uint32_t)bit)) {
         return false; /* já estava limpo — sem mudança de borda */
     }
-    error_code &= ~(uint32_t)bit;
     return true;
+}
+
+/** @brief Seta (cond=true) ou limpa (cond=false) um bit de erro. */
+void Security_Manager_Error_Set(siba_error_bit_t bit, bool cond)
+{
+    if (cond) {
+        Security_Manager_Error_Detect(bit);
+    } else {
+        Security_Manager_Error_Erase(bit);
+    }
+}
+
+/**
+ * @brief Checa as fases do motor (portado da SAME). Só diagnóstico: não
+ * dispara emergência. Chamada pela fila do ADC a cada publicação (10 Hz).
+ * Desequilíbrio (soma ≈ 0) fica de fora, como na SAME: com i_c derivada a
+ * soma das correntes é zero por construção e as tensões são contra o terra.
+ * @param Va,Vb,Vc tensões de fase [V]; ia,ib,ic correntes de fase [A]
+ */
+void Security_Manager_Check_Electrical(float Va, float Vb, float Vc,
+                                       float ia, float ib, float ic)
+{
+    Security_Manager_Error_Set(ERROR_MEAS_OVERCURRENT,
+        fabsf(ia) > SM_OVERCURRENT_A || fabsf(ib) > SM_OVERCURRENT_A
+                                     || fabsf(ic) > SM_OVERCURRENT_A);
+
+    bool range = !isfinite(Va) || !isfinite(Vb) || !isfinite(Vc)
+              || !isfinite(ia) || !isfinite(ib) || !isfinite(ic)
+              || fabsf(Va) > SM_SENSOR_ABS_MAX || fabsf(Vb) > SM_SENSOR_ABS_MAX
+              || fabsf(Vc) > SM_SENSOR_ABS_MAX || fabsf(ia) > SM_SENSOR_ABS_MAX
+              || fabsf(ib) > SM_SENSOR_ABS_MAX || fabsf(ic) > SM_SENSOR_ABS_MAX;
+    Security_Manager_Error_Set(ERROR_MEAS_SENSOR_RANGE, range);
+}
+
+/**
+ * @brief Saúde do observador e validade da configuração (portado da SAME).
+ * BEMF baixa / PLL sem lock não viram bit na SIBA (estado normal com o motor
+ * parado; apagariam o LED de pronto). Os getters seguem disponíveis.
+ */
+void Security_Manager_Check_Observer(void)
+{
+    Security_Manager_Error_Set(ERROR_OBS_DIVERGED, !Observer_State_Is_Finite());
+    Security_Manager_Error_Set(ERROR_OBS_RPM_IMPLAUSIBLE,
+        fabsf(Observer_Get_Rpm()) > SM_RPM_MAX);
+    Security_Manager_Error_Set(ERROR_CFG_MOTOR_PARAM_INVALID,
+        !Observer_Params_Physical_Valid());
+    Security_Manager_Error_Set(ERROR_CFG_GAMMA_SIGN,
+        !Observer_Gamma_Signs_Valid());
 }
 
 /** @brief Código de erro agregado atual. @return bitmask (siba_error_bit_t). */
 uint32_t Security_Manager_Get_Error_Code(void)
 {
-    return error_code;
+    return (uint32_t)atomic_get(&error_code);
 }
 
 /** @brief Há parada de emergência em vigor? @return true se sim. */
@@ -231,7 +279,7 @@ void Security_Manager_Check(uint32_t sensor_id, float value)
     }
 
     /* LED externo de pronto (PE15): mesma condição do LED vermelho. */
-    HAL_Ready_Led_Set(!emergency_active && error_code == 0U);
+    HAL_Ready_Led_Set(!emergency_active && atomic_get(&error_code) == 0);
 
     /* Sensores de SEGURANÇA: sair da faixa dispara parada de emergência.
      * A faixa [min,max] e o bit de erro vêm da tabela central (CMD_Core_prm.h),
@@ -266,5 +314,5 @@ void Security_Manager_Check(uint32_t sensor_id, float value)
     }
 
     /* LED vermelho: MCU ready = sem emergência e sem erros críticos. */
-    gpio_pin_set_dt(&led_red, (!emergency_active && error_code == 0U) ? 1 : 0);
+    gpio_pin_set_dt(&led_red, (!emergency_active && atomic_get(&error_code) == 0) ? 1 : 0);
 }

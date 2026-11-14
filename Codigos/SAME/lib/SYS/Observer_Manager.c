@@ -76,8 +76,8 @@ enum { SW_SAT = 0, SW_TANH = 1, SW_SIGMOID = 2 };
 /* ---- Defaults de fábrica (referência test_coeff_auto.py) ---------------- */
 #define DEF_POLE_PAIRS   7.0f
 #define DEF_RS           8.69e-3f   /* R_Y = R_LL/2 (TCC, tab. de resistência) */
-#define DEF_LS           6.95e-6f   /* L_Y = L_LL/2 (TCC) */
-#define DEF_KV           310.0f     /* Kv de catálogo já é o valor a usar: sem /√3 */
+#define DEF_LS           11.3e-6f   /* ajustada nos registros de osciloscópio */
+#define DEF_KV           310.0f     /* Kv de placa (o √3 fica na fórmula do Ke) */
 /* Γ do autotuning (autotune_cost.py, differential-evolution, Ts_sim = 10 µs
  * == DEF_TS). Fonte: Aplicacao_Pi/Scripts/smo_gains.json.
  *
@@ -368,7 +368,10 @@ static void Observer_Recompute(const obs_params *p, obs_const *c)
     c->Kp_pll = 2.0f * PLL_ZETA * PLL_WN;
     c->Ki_pll = PLL_WN * PLL_WN;
 
-    float ke_mec = (p->Kv > 0.0f) ? (60.0f / (TWO_PI * p->Kv)) : 0.0f;
+    /* Kv de placa é por volt de BARRAMENTO; o pico de fase que o inversor
+     * entrega é V_bus/√3, logo Ke1 = 60/(2π·Kv·√3) (pico de fase). Bate com
+     * a bancada: 0,017785 previsto contra 0,017773 medido. */
+    float ke_mec = (p->Kv > 0.0f) ? (60.0f * INV_SQRT3 / (TWO_PI * p->Kv)) : 0.0f;
     c->inv_p = (p->pole_pairs > 0.0f) ? (1.0f / p->pole_pairs) : 0.0f;
     c->Ke    = ke_mec * c->inv_p;
 

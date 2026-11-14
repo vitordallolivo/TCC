@@ -52,6 +52,27 @@ enums:
     - TARGET_PITOT_TUBE           # 10 -> SENSOR_ID_AIR_SPEED
     - TARGET_DEFAULT              # 11 -> alvo genérico (START/STOP/RESET)
     - TARGET_TEMPERATURE_MOTOR    # 12 -> SENSOR_ID_TEMPERATURE_MOTOR
+    # Fases do motor pela AQ1 (vindo da SAME). Mesma ordem dos SENSOR_ID_V_A..I_C
+    # (13..18): calibração por FUNC_SENSOR igual aos outros sensores ADC.
+    - TARGET_PHASE_V_A            # 13 -> SENSOR_ID_V_A
+    - TARGET_PHASE_V_B            # 14 -> SENSOR_ID_V_B
+    - TARGET_PHASE_V_C            # 15 -> SENSOR_ID_V_C
+    - TARGET_PHASE_I_A            # 16 -> SENSOR_ID_I_A
+    - TARGET_PHASE_I_B            # 17 -> SENSOR_ID_I_B
+    - TARGET_PHASE_I_C            # 18 -> SENSOR_ID_I_C
+    # Observador SMO+PLL (vindo da SAME): FUNC_SENSOR + INSTR_WRITE, `value` =
+    # novo valor; action SENSE_RESET_DEFAULT volta ao default. Ganhos na forma
+    # Γ = K·Ts (ver SAME/CLAUDE.md). TS_ADC em µs.
+    - TARGET_POLES_PAIRS          # 19
+    - TARGET_RESISTANCE           # 20
+    - TARGET_INDUCTANCE           # 21
+    - TARGET_KV_RATING            # 22
+    - TARGET_GAMMA1               # 23
+    - TARGET_GAMMA2               # 24
+    - TARGET_GAMMAT               # 25
+    - TARGET_BEMF_LPF_FREQUENCY   # 26
+    - TARGET_TORQUE_LPF_FREQUENCY # 27
+    - TARGET_TS_ADC               # 28
 
   # Campo `action_or_status` do CMD quando a função é FUNC_START e o alvo é
   # TARGET_DEFAULT. É por aqui que o supervisório comanda a cadeia de potência
@@ -136,6 +157,27 @@ error_bits:
   # --- Sistema ---
   - { name: ERROR_OS_GPIO_INIT_FAILED,        bit: 24, group: "Sistema",      msg: "Falha ao inicializar um módulo de hardware (GPIO)" }
   - { name: ERROR_MCU_POWER_READY,            bit: 25, group: "Sistema",      msg: "Bancada não inicializada — aguardando sequência de energização (relé)" }
+  # --- Fases do motor e observador (vindos da SAME). Só diagnóstico: não
+  # disparam parada de emergência. BEMF baixa / PLL sem lock NÃO viram bit
+  # (são o estado normal com o motor parado e apagariam o LED de pronto). ---
+  - { name: ERROR_MEAS_OVERCURRENT,           bit: 11, group: "Medição",      msg: "Corrente de fase acima do limite seguro" }
+  - { name: ERROR_MEAS_SENSOR_RANGE,          bit: 12, group: "Medição",      msg: "Leitura de tensão/corrente de fase fora da faixa válida (saturada ou desconectada)" }
+  - { name: ERROR_OBS_DIVERGED,               bit: 20, group: "Observador",   msg: "Observador divergiu (valores não finitos) — reduza os ganhos Γ ou o passo Ts" }
+  - { name: ERROR_OBS_RPM_IMPLAUSIBLE,        bit: 21, group: "Observador",   msg: "Rotação estimada acima do limite plausível para este motor" }
+  - { name: ERROR_CFG_MOTOR_PARAM_INVALID,    bit: 22, group: "Configuração", msg: "Parâmetro do motor inválido (R, L, pares de polos, Kv ou Ts ≤ 0) — configure antes de estimar" }
+  - { name: ERROR_CFG_GAMMA_SIGN,             bit: 23, group: "Configuração", msg: "Sinais dos ganhos Γ incorretos (regra fixa: Γ1 > 0, Γ2 < 0, Γt > 0)" }
+  - { name: ERROR_SYS_ADC_FRAME_DROP,         bit: 26, group: "Sistema",      msg: "Lotes do ADC descartados — o processamento não acompanhou a aquisição; o observador recebeu amostras com lacunas" }
+  - { name: ERROR_CAL_IN_PROGRESS,            bit: 27, group: "Calibração",   msg: "Calibração de offset das correntes em andamento (Hall estabilizando, ESC parado) — rotação e torque ainda não são válidos" }
+  - { name: ERROR_CAL_FAILED,                 bit: 28, group: "Calibração",   msg: "Calibração de offset falhou: ruído alto nas correntes com o ESC parado — ESC energizado, sensor sem alimentação ou terra aberto" }
+
+# Limiares dos checadores das fases/observador — geram lib/SYS/Security_prm.h.
+security_limits:
+  - { name: SM_OVERCURRENT_A,  value: 60.0,    comment: "limite de sobrecorrente de fase [A]" }
+  - { name: SM_SENSOR_ABS_MAX, value: 500.0,   comment: "leitura de V/A acima disso = sensor saturado ou desconectado" }
+  - { name: SM_RPM_MAX,        value: 60000.0, comment: "rpm mecânico plausível máximo" }
+  - { name: SM_CAL_SETTLE_MS,  value: 2000.0,  comment: "espera antes de amostrar o offset [ms]: o SS49E deriva no aquecimento inicial" }
+  - { name: SM_CAL_FRAMES,     value: 4096.0,  comment: "quadros acumulados para a média do offset (com o ESC parado)" }
+  - { name: SM_CAL_STD_MAX_MV, value: 8.0,     comment: "desvio-padrão máximo nas amostras de offset [mV no pino]; acima disso a calibração FALHA" }
 
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida/segurança
 # por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).
@@ -186,6 +228,16 @@ sensor_defaults:
   # do termistor de bateria (0,040 °C/mV). Máximo 150 °C (limite típico de
   # enrolamentos BLDC classe F). Sem bit de erro por ora (só diagnóstico).
   - { target: SENSOR_ID_TEMPERATURE_MOTOR, linear: 0.040, offset: 0.0, min: -40.0, max: 150.0 }
+  # Fases do motor pela AQ1 (mesma cadeia da SAME), x = mV no pino.
+  # Tensão: divisor 100k/5k6 → 0,0188571 V/mV.
+  # Corrente: SS49E + divisor 4k7/10k → 0,0784 A/mV; o offset é o zero de cada
+  # fase, refeito a cada boot com o ESC parado (calibração de offset no HAL).
+  - { target: SENSOR_ID_V_A, linear: 0.0188571, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_V_B, linear: 0.0188571, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_V_C, linear: 0.0188571, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_I_A, linear: 0.0784, offset: -136.315, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_I_B, linear: 0.0784, offset: -137.987, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
+  - { target: SENSOR_ID_I_C, linear: 0.0784, offset: -136.657, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
 
 structs:
 
@@ -222,3 +274,19 @@ structs:
     - { name: temperature_motor, type: float }   # Motor winding temperature (°C), ADC1 CH3/PA3
     - { name: status, type: log_status }         # Integrity of the telemetry frame
     - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver CLAUDE.md "Error_Detect/Error_Erase"
+    # Fases do motor medidas pela placa AQ1 (mesma cadeia da SAME).
+    - { name: V_a, type: float }
+    - { name: V_b, type: float }
+    - { name: V_c, type: float }
+    - { name: i_a, type: float }
+    - { name: i_b, type: float }
+    - { name: i_c, type: float }
+    # Tempo do pipeline do ADC (ISR do DMA → fim do lote). Ver SIBA/lib/OS/HAL.c.
+    - { name: t_proc_us, type: float }            # pior tempo de EXECUÇÃO do processamento de um lote na janela [µs]
+    - { name: t_batch_us, type: float }           # pior intervalo entre ISRs do DMA na janela [µs]
+    - { name: batch_drops, type: float }          # lotes descartados por chegarem durante o processamento (acumulado)
+    - { name: t_lat_us, type: float }             # pior latência ISR → início do processamento na janela [µs]
+    # Observador SMO+PLL (vindo da SAME), com LPF de 2 Hz nas saídas.
+    - { name: rpm_same, type: float }             # rotação mecânica estimada [rpm]
+    - { name: torque_eletrico, type: float }      # torque eletromagnético estimado [N·m]
+    - { name: torque_helice, type: float }        # torque na hélice (hoje = torque_eletrico) [N·m]

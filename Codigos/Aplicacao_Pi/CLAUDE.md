@@ -43,6 +43,8 @@ três modos.
 - GUI usa um buffer de tempo comum às placas: sample-and-hold evita buracos
   de `NaN` no modo SIBA+SAME.
 - Arquivos de `Scripts/` são **CRLF**: preservar (`newline=''`).
-- `Kv` do motor (310 RPM/V) já é de linha: **não** dividir por √3.
+- `Kv` do motor (310 RPM/V) é de placa, por volt de barramento: **não**
+  dividir o Kv por √3. O √3 vai no Ke: `Ke1 = 60/(2π·Kv·√3)`, `Kt = 1,5·Ke1`
+  (`motor_config.ke_kt_from_kv`, igual ao firmware).
 - R/L do motor vêm de ensaio de bancada, não do autotune (que só dá Γ1/Γ2/Γt).
 - Estimativas que gravam no `SAME.yaml` pedem confirmação antes.

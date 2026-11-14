@@ -2506,3 +2506,38 @@ dela, então o comando existe por simetria mas nada responde; e o
 autocompletar não conhece os comandos do firmware --- completa até
 `native shell` e daí em diante é texto livre. **Popular o autocompletar
 lendo o `help` do firmware no boot é possível, mas não foi feito.**
+
+## 14/11/2026 — Resultados do ajuste automático refeitos (R = 8,69 mΩ)
+
+Em `Textuais/Resultados/01_ModelagemSMO.tex` (`sec:autotuning`):
+
+- **Tabela `tab:ganhos_helices`** com os ganhos novos (R de fase 8,69 mΩ,
+  L 11,3 µH, Ts 10 µs): 15x6E Γ = 20,73 / −10,00 / 0,0037, custo 1,300 →
+  1,013; 17x10E Γ = 26,55 / −10,00 / 0,095, custo 1,280 → 0,992. Os custos
+  foram reavaliados com a mesma função do `autotune_cost.py` a partir dos
+  `.json` (`smo_gains_15x6E.json` e `smo_gains.json`).
+- Texto ajustado: Γs2 no limite da busca nas duas hélices; Γt é quem muda com
+  a carga (~25×); redução de custo ~22 % (era 39 %); K da 17x10E.
+- **`fig:desempenho_mecanico` virou duas subfiguras** (15x6E e 17x10E),
+  `Torque_rpm_15x6E.png` e `Torque_rpm_17x10E.png`, com a média do torque
+  pelo LPF de 2 Hz sobreposta ao ripple — é o que mostra o torque subindo em
+  degraus. Números por patamar no texto (2ª metade de cada patamar).
+- `Otim_convergencia.png` e `Otim_sensibilidade.png` trocadas pelas da corrida
+  17x10E de 14/11.
+- Frase da identificação de C_Q ("vinte vezes menor") corrigida para os
+  patamares baixos.
+
+**Para revisar:** na 17x10E o torque estimado fica 4–12 % acima do real
+(maior nos patamares baixos); a 15x6E fica abaixo de 1,1 %. O texto só
+registra e sugere que o erro pesa mais com torque pequeno — vale o orientador
+olhar. `Torque_rpm.png` antigo continua na pasta, sem uso.
+- **`fig:patamar_coeff_CQ` (identificação de k_Q) com as figuras novas**
+  `Algortimo_Coeficiente_helice_15x6E.png` / `_17x10E.png` (ganhos de 14/11,
+  perfil 1000→5000 rpm + desaceleração). Legendas da figura e da tabela sem
+  "com as correntes medidas" (pedido do autor); o método continua descrito no
+  corpo.
+- **`tab:resultado_identificacao_cq` refeita**: era de um perfil antigo
+  (patamares 3000/2000). Agora 9 patamares, as duas hélices lado a lado.
+  Erro médio 0,45 % (15x6E) e 0,32 % (17x10E), eram 0,17 % / 0,23 %. O maior
+  desvio (~3 %) é o patamar logo após a desaceleração 5000→3000 rpm — está
+  no texto e na nota da tabela.

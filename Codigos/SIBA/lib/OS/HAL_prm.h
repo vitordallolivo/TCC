@@ -7,18 +7,30 @@
  * ⚠ ADC/I2C são devices Zephyr: desabilitar aqui só impede o USO pelo
  * HAL.c. Para isolar o driver, marcar `status = "disabled"` no .dts. */
 
-/* ADC da SIBA não montado nesta versão da placa (tempo de montagem):
- * pitot, termistores, v_batt e i_batt não são lidos. Com isso ficam
- * desabilitados a checagem de faixa de tensão/corrente da bateria no
- * Security_Manager e os alarmes do Battery_Manager (despacho em OSSI.c).
- * Vale para HW e native_sim. Comentar a linha para religar. */
-#define HAL_DISABLE_ADC
+/* ADC ligado: na placa ele mede as FASES do motor pela AQ1 (i_a/i_b/i_c em
+ * PA0/PA1/PA3, V_a/V_b/V_c em PC2/PC3/PC4); Pitot, termistores e bateria
+ * deixaram de ser lidos na placa. No native_sim segue o estímulo sintético
+ * antigo. Descomentar para desligar o ADC. */
+// #define HAL_DISABLE_ADC
+
+/* Corrente da fase C: 1 = derivada, i_c = -(i_a + i_b); 0 = medida no PA3. */
+#ifndef HAL_PH_I_C_DERIVED
+#define HAL_PH_I_C_DERIVED    1
+#endif
 // #define HAL_DISABLE_HX711
+
+/* HX711 lido por polling, sem espera bloqueante: a cada volta lê só as
+ * células com DOUT=0. 10 SPS (RATE=0) → 50 ms = 2x a taxa de conversão. */
+#ifndef HAL_HX711_POLL_MS
+#define HAL_HX711_POLL_MS     50
+#endif
 // #define HAL_DISABLE_I2C
 
 #ifndef CONFIG_ARCH_POSIX
 // #define HAL_DISABLE_ESC
-// #define HAL_DISABLE_RPM
+/* RPM por captura no TIM3 desligado enquanto se mede o tempo do ADC: evita
+ * que a entrada solta (PB0, sem pull) gere interrupções de captura. */
+#define HAL_DISABLE_RPM
 #endif
 
 /* Nível de ruído dos estímulos synthetic do native_sim (0=estável/ideal

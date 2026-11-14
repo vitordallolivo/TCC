@@ -12,6 +12,9 @@
 #include "OSSI.h"
 #include "Log_Manager.h"
 #include "CMD_Core_prm.h"   /* defaults de calibração/faixa por sensor (tabela) */
+#include "Observer_Manager.h"
+#include "Security_Manager.h"
+#include "Security_prm.h"    /* SM_CAL_* — calibração de offset das fases */
 #include <math.h>                 /* sqrtf — lei de raiz do Pitot */
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -72,7 +75,8 @@ struct hal_adc_calib {
     uint8_t law;
 };
 
-static struct hal_adc_calib adc_calib[SENSOR_ID_TEMPERATURE_MOTOR + 1];
+/* Até SENSOR_ID_I_C: inclui as 6 fases do motor (13..18). */
+static struct hal_adc_calib adc_calib[SENSOR_ID_I_C + 1];
 
 /** @brief Preenche adc_calib[] com os defaults de SIBA_SENSOR_TABLE. */
 static void hal_adc_calib_init(void)
@@ -295,7 +299,10 @@ K_TIMER_DEFINE(adc_stimulus_timer, adc_stimulus_timer_fn, NULL);
 static const struct device *adc1_dev = DEVICE_DT_GET(ADC1_NODE);
 static const struct device *adc2_dev = DEVICE_DT_GET(ADC2_NODE);
 
-/* ADC1: PA0=CH0(air_speed), PA1=CH1(temp_batt), PA3=CH3(temp_motor). */
+/* Fases do motor, pela placa AQ1 (mesma cadeia da SAME). A ordem de setup é a
+ * ordem de varredura, e no modo dual o slot k do ADC1 converte junto com o
+ * slot k do ADC2: i_a com V_a, i_b com V_b, i_c com V_c. */
+/* ADC1: PA0=CH0(i_a), PA1=CH1(i_b), PA3=CH3(i_c). */
 static const struct adc_channel_cfg adc1_ch_cfg[HAL_ADC_CHANNELS_PER_ADC] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
       .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 0  },
@@ -304,14 +311,14 @@ static const struct adc_channel_cfg adc1_ch_cfg[HAL_ADC_CHANNELS_PER_ADC] = {
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
       .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 3  },
 };
-/* ADC2: PC3=CH13(v_batt), PC4=CH14(i_batt), PC2=CH12(spare). */
+/* ADC2: PC2=CH12(V_a), PC3=CH13(V_b), PC4=CH14(V_c). */
 static const struct adc_channel_cfg adc2_ch_cfg[HAL_ADC_CHANNELS_PER_ADC] = {
+    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
+      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 12 },
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
       .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 13 },
     { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
       .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 14 },
-    { .gain = ADC_GAIN_1, .reference = ADC_REF_INTERNAL,
-      .acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 12 },
 };
 
 static inline uint16_t hal_adc_raw_cal(uint32_t raw12, int32_t off)
@@ -323,48 +330,348 @@ static inline uint16_t hal_adc_raw_cal(uint32_t raw12, int32_t off)
     return (uint16_t)v;
 }
 
-/* ~16 Hz: acumula 1500 frames (~62,6 ms a 23,96 kSps com SMP=7/BATCH=1).
- * 4095 × 1500 = 6 142 500 — cabe em uint32_t sem overflow. */
-#define HAL_ADC_ACCUM_FRAMES  1500U
+/* ── Medição das fases (cadeia da SAME) ─────────────────────────────────────
+ * O driver entrega lotes de CH32_ADC_BATCH_FRAMES quadros (DMA ping-pong).
+ * A ISR copia o lote para um buffer duplo e entrega a uma fila de trabalho
+ * própria, de prioridade maior que a siba_wq (que fica 5 s parada na
+ * pré-carga dos relés). Lote que chega com o anterior ainda em processamento
+ * é DESCARTADO e contado: cada descarte é uma lacuna na sequência.
+ *
+ * Tempo do pipeline, da ISR do DMA até o fim do processamento do lote,
+ * publicado como t_proc_us, t_batch_us e batch_drops. A base de tempo é o
+ * TIM2 livre a 1 MHz (16 bits, estoura a cada 65,5 ms): o k_cycle_get_32()
+ * deste SoC soma o contador do SysTick a um total que só anda na interrupção
+ * do SysTick, então lido entre o estouro e a interrupção ele volta ~10 ms. */
+#define TIM2_BASE        0x40000000UL
+#define TIM2_CTLR1       (*(volatile uint32_t *)(TIM2_BASE + 0x00))
+#define TIM2_SWEVGR      (*(volatile uint32_t *)(TIM2_BASE + 0x14))
+#define TIM2_CNT         (*(volatile uint32_t *)(TIM2_BASE + 0x24))
+#define TIM2_PSC         (*(volatile uint32_t *)(TIM2_BASE + 0x28))
+#define TIM2_ATRLR       (*(volatile uint32_t *)(TIM2_BASE + 0x2C))
+#define RCC_APB1_TIM2EN  (1UL << 0)
 
-static uint32_t hal_adc_frame_cnt;
-static uint32_t adc1_accum[HAL_ADC_CHANNELS_PER_ADC];
-static uint32_t adc2_accum[HAL_ADC_CHANNELS_PER_ADC];
-static struct k_work hal_adc_publish_work;
+static void hal_us16_init(void)
+{
+    RCC_APB1PCENR |= RCC_APB1_TIM2EN;
+    TIM2_CTLR1  = 0;
+    TIM2_PSC    = 143;      /* 144 MHz / 144 = 1 MHz (mesma base do TIM4) */
+    TIM2_ATRLR  = 0xFFFF;
+    TIM2_SWEVGR = 1;        /* UG: carrega o prescaler agora */
+    TIM2_CTLR1  = 1;        /* CEN */
+}
 
-static void hal_adc_publish_work_fn(struct k_work *w)
+static inline uint16_t hal_us16(void)
+{
+    return (uint16_t)TIM2_CNT;
+}
+
+/* Vetor circular: grava sempre (após 5 s) e congela HAL_TRACE_POST eventos
+ * depois do primeiro gap de ISR, para ver o que rodava antes da travada.
+ * hal_trace_n = total gravado (índice = n % N); hal_trace_gap_at = n no gap. */
+#define HAL_TRACE_N         1024U
+#define HAL_TRACE_START_MS  5000U
+#define HAL_TRACE_POST      64U
+struct hal_trace_ev {
+    uint16_t t_us;   /* TIM2, 1 MHz, 16 bits */
+    uint8_t  id;     /* enum hal_trace_id */
+    uint8_t  isr;    /* 1 = chamado de ISR */
+    uint32_t thr;    /* k_current_get() (thread interrompida, se ISR) */
+};
+struct hal_trace_ev hal_trace[HAL_TRACE_N];
+volatile uint32_t   hal_trace_n;
+volatile uint32_t   hal_trace_gap_at;   /* 0 = ainda sem gap */
+
+/* Registro de ISRs atrasadas (intervalo > HAL_GAP_MIN_US), com o instante em
+ * ms desde o boot. Cobre minutos, não só 1 s como o vetor de eventos. */
+#define HAL_GAP_N       256U
+#define HAL_GAP_MIN_US  3000U
+struct hal_gap_ev {
+    uint32_t ms;
+    uint32_t us;
+};
+struct hal_gap_ev hal_gap[HAL_GAP_N];
+volatile uint32_t hal_gap_n;
+
+void HAL_Trace(uint8_t id)
+{
+    if (k_uptime_get_32() < HAL_TRACE_START_MS) {
+        return;
+    }
+    unsigned int key = irq_lock();
+    uint32_t n = hal_trace_n;
+    if (hal_trace_gap_at == 0U || n < hal_trace_gap_at + HAL_TRACE_POST) {
+        struct hal_trace_ev *e = &hal_trace[n % HAL_TRACE_N];
+        e->t_us = hal_us16();
+        e->id   = id;
+        e->isr  = k_is_in_isr() ? 1U : 0U;
+        e->thr  = (uint32_t)(uintptr_t)k_current_get();
+        hal_trace_n = n + 1U;
+    }
+    irq_unlock(key);
+}
+#define HAL_PH_BATCH_FRAMES  256U       /* == CH32_ADC_BATCH_FRAMES do driver */
+#define HAL_PH_WORDS         (HAL_PH_BATCH_FRAMES * HAL_ADC_CHANNELS_PER_ADC)
+#define HAL_PH_PUB_MS        100U       /* publicação na telemetria (10 Hz) */
+/* Acima do HX711 (6) e da siba_wq (5): o bit-bang das 6 células (~600 µs)
+ * preemptava o lote e estourava o prazo do DMA. Abaixo das threads de rede
+ * (cooperativas). A antiga suspeita de que prioridade alta derrubava a rede
+ * era o bug do mret (CONFIG_RISCV_ALWAYS_SWITCH_THROUGH_ECALL). Carga medida:
+ * ~1475 µs de CPU por lote de 2304 µs (64 %). */
+#define HAL_PH_WQ_PRIO       4
+
+/* Calibração das fases: vem de adc_calib[] (SENSOR_ID_I_A..V_C, defaults no
+ * SIBA.yaml, ajustável por FUNC_SENSOR e restaurada do NVM). Ordem interna
+ * do pipeline: i_a, i_b, i_c, V_a, V_b, V_c (slot k do ADC1 = corrente da
+ * fase k, slot k do ADC2 = tensão da fase k). */
+static const uint8_t hal_ph_sensor[6] = {
+    SENSOR_ID_I_A, SENSOR_ID_I_B, SENSOR_ID_I_C,
+    SENSOR_ID_V_A, SENSOR_ID_V_B, SENSOR_ID_V_C,
+};
+
+/* Calibração de offset das correntes no boot (portada da SAME): o SS49E parte
+ * em Vcc/2 e deriva no aquecimento inicial; o repouso a 0 A muda alguns mV
+ * entre corridas (0,3 A fantasma, comum às fases → BEMF espúria no SMO).
+ * Espera SM_CAL_SETTLE_MS, acumula SM_CAL_FRAMES quadros (Welford), troca só
+ * o offset e libera o observador. Exige o ESC PARADO nesse intervalo. */
+enum { HAL_CAL_SETTLING, HAL_CAL_SAMPLING, HAL_CAL_READY, HAL_CAL_FAILED };
+static volatile int hal_cal_phase = HAL_CAL_SETTLING;
+static uint32_t     hal_cal_t0;
+static uint32_t     hal_cal_n;
+static float        hal_cal_mean[3], hal_cal_m2[3];
+
+static uint32_t hal_ph_bufs[2][HAL_PH_WORDS];
+static atomic_t hal_ph_widx = ATOMIC_INIT(0);
+static atomic_t hal_ph_busy = ATOMIC_INIT(0);
+static uint32_t hal_ph_nframes;
+static int32_t  hal_ph_cal_m, hal_ph_cal_s;
+
+/* Piores casos desde a última publicação (zerados a cada 100 ms):
+ *   período  : intervalo entre ISRs do DMA (atraso da própria ISR);
+ *   latência : ISR → a fila começar a processar (espera por prioridade);
+ *   execução : só o processamento do lote. */
+static volatile uint16_t hal_t_isr_us;        /* ISR do lote em processamento */
+static volatile uint16_t hal_t_period_max_us;
+static volatile uint16_t hal_t_lat_max_us;
+static volatile uint16_t hal_t_exec_max_us;
+static volatile uint32_t hal_batch_drops;     /* lotes descartados (acumulado) */
+
+/* 3 kB: Observer_Step + FPU_SHARING + LOG com %f na calibração. */
+K_THREAD_STACK_DEFINE(hal_ph_wq_stack, 3072);
+static struct k_work_q hal_ph_wq;
+static struct k_work   hal_ph_work;
+static uint32_t        hal_ph_last_pub;
+static uint32_t        hal_ph_last_drops;
+
+/** @brief Fecha a calibração de offset: valida o desvio e grava o offset. */
+static void hal_cal_finish(void)
+{
+    bool ok = true;
+    for (int k = 0; k < 3; k++) {
+#if HAL_PH_I_C_DERIVED
+        if (k == 2) continue;      /* fase C derivada: o canal não é usado */
+#endif
+        float var = hal_cal_m2[k] / (float)hal_cal_n;
+        float sd  = (var > 0.0f) ? sqrtf(var) : 0.0f;
+        if (sd > SM_CAL_STD_MAX_MV) {
+            LOG_ERR("Calibracao fase %d REPROVADA: desvio %.2f mV > %.2f mV "
+                    "(ESC energizado? sensor sem alimentacao?)",
+                    k, (double)sd, (double)SM_CAL_STD_MAX_MV);
+            ok = false;
+            continue;
+        }
+        /* Mantém o ganho e troca só o offset: I = 0 no repouso medido. */
+        float lin, old_off;
+        HAL_ADC_Get_Calib(hal_ph_sensor[k], &lin, &old_off);
+        float new_off = -hal_cal_mean[k] * lin;
+        HAL_ADC_Set_Calib(hal_ph_sensor[k], lin, new_off);
+        LOG_INF("Calibracao fase %d: repouso %.2f mV (sd %.2f) -> offset %.3f A "
+                "(era %.3f A)", k, (double)hal_cal_mean[k], (double)sd,
+                (double)new_off, (double)old_off);
+    }
+    hal_cal_phase = ok ? HAL_CAL_READY : HAL_CAL_FAILED;
+    Security_Manager_Error_Set(ERROR_CAL_IN_PROGRESS, false);
+    Security_Manager_Error_Set(ERROR_CAL_FAILED, !ok);
+    if (ok) {
+        Observer_Reset();
+        LOG_INF("Calibracao concluida — observador liberado");
+    }
+}
+
+/** @brief Um quadro da calibração de offset (mV no pino das 3 correntes). */
+static void hal_cal_step(const float mv[3])
+{
+    if (hal_cal_phase == HAL_CAL_SETTLING) {
+        if ((k_uptime_get_32() - hal_cal_t0) < (uint32_t)SM_CAL_SETTLE_MS) {
+            return;
+        }
+        hal_cal_phase = HAL_CAL_SAMPLING;
+        hal_cal_n = 0;
+        for (int k = 0; k < 3; k++) { hal_cal_mean[k] = 0.0f; hal_cal_m2[k] = 0.0f; }
+    }
+    hal_cal_n++;
+    for (int k = 0; k < 3; k++) {      /* Welford */
+        float d = mv[k] - hal_cal_mean[k];
+        hal_cal_mean[k] += d / (float)hal_cal_n;
+        hal_cal_m2[k]   += d * (mv[k] - hal_cal_mean[k]);
+    }
+    if (hal_cal_n >= (uint32_t)SM_CAL_FRAMES) {
+        hal_cal_finish();
+    }
+}
+
+/**
+ * @brief Recomeça a calibração de offset das correntes (ESC tem de estar
+ * parado). Útil se a do boot reprovou.
+ */
+void HAL_Phase_Calibration_Restart(void)
+{
+    hal_cal_t0 = k_uptime_get_32();
+    hal_cal_phase = HAL_CAL_SETTLING;
+    Security_Manager_Error_Set(ERROR_CAL_FAILED, false);
+    Security_Manager_Error_Set(ERROR_CAL_IN_PROGRESS, true);
+}
+
+static void hal_ph_work_fn(struct k_work *w)
 {
     ARG_UNUSED(w);
-    OSSI_Submit_Sensor(SENSOR_ID_V_BATT,              HAL_ADC_Get_VBatt());
-    OSSI_Submit_Sensor(SENSOR_ID_I_BATT,              HAL_ADC_Get_IBatt());
-    OSSI_Submit_Sensor(SENSOR_ID_TEMPERATURE_BATTERY, HAL_ADC_Get_Temperature_Batt());
-    OSSI_Submit_Sensor(SENSOR_ID_AIR_SPEED,           HAL_ADC_Get_Air_Speed());
-    OSSI_Submit_Sensor(SENSOR_ID_TEMPERATURE_MOTOR,   HAL_ADC_Get_Temperature_Motor());
+    HAL_Trace(HAL_TR_PH_START);
+    const uint16_t t0 = hal_us16();
+    const uint16_t lat = (uint16_t)(t0 - hal_t_isr_us);
+    if (lat > hal_t_lat_max_us) {
+        hal_t_lat_max_us = lat;
+    }
+    const uint32_t *buf = hal_ph_bufs[atomic_get(&hal_ph_widx)];
+    const int32_t cm = hal_ph_cal_m, cs = hal_ph_cal_s;
+
+    /* Ganho por canal já com a conversão contagem → mV embutida. */
+    float k_lin[6], k_off[6];
+    for (int c = 0; c < 6; c++) {
+        float lin, off;
+        HAL_ADC_Get_Calib(hal_ph_sensor[c], &lin, &off);
+        k_lin[c] = lin * (3300.0f / 4096.0f);
+        k_off[c] = off;
+    }
+
+    const bool ready = (hal_cal_phase == HAL_CAL_READY);
+    const bool calibrating = (hal_cal_phase == HAL_CAL_SETTLING ||
+                              hal_cal_phase == HAL_CAL_SAMPLING);
+    float v[6] = {0};
+
+    for (uint32_t f = 0; f < hal_ph_nframes; f++) {
+        const uint32_t *fr = &buf[f * HAL_ADC_CHANNELS_PER_ADC];
+        float raw[6];
+        for (int k = 0; k < 3; k++) {
+            raw[k]     = (float)hal_adc_raw_cal(fr[k] & 0xFFFU, cm);
+            raw[k + 3] = (float)hal_adc_raw_cal((fr[k] >> 16) & 0xFFFU, cs);
+        }
+        if (calibrating) {
+            const float mv[3] = {
+                raw[0] * (3300.0f / 4096.0f), raw[1] * (3300.0f / 4096.0f),
+                raw[2] * (3300.0f / 4096.0f),
+            };
+            hal_cal_step(mv);
+        }
+        for (int c = 0; c < 6; c++) {
+            v[c] = raw[c] * k_lin[c] + k_off[c];
+        }
+#if HAL_PH_I_C_DERIVED
+        v[2] = -(v[0] + v[1]);    /* estrela sem neutro: i_a + i_b + i_c = 0 */
+#endif
+        if (ready) {
+            /* Clarke + SMO+PLL, um passo por quadro (Ts = OBS_TS_NS). */
+            Observer_Step_ABC(v[3], v[4], v[5], v[0], v[1], v[2]);
+        }
+    }
+    if (ready) {
+        Observer_Apply_Pending();   /* CMD de parâmetro: aplica e zera estado */
+    }
+
+    const uint16_t exec = (uint16_t)(hal_us16() - t0);
+    if (exec > hal_t_exec_max_us) {
+        hal_t_exec_max_us = exec;
+    }
+
+    uint32_t now = k_uptime_get_32();
+    if ((now - hal_ph_last_pub) >= HAL_PH_PUB_MS) {
+        hal_ph_last_pub = now;
+        Security_Manager_Check_Electrical(v[3], v[4], v[5], v[0], v[1], v[2]);
+        Security_Manager_Check_Observer();
+        Security_Manager_Error_Set(ERROR_SYS_ADC_FRAME_DROP,
+                                   hal_batch_drops != hal_ph_last_drops);
+        hal_ph_last_drops = hal_batch_drops;
+
+        OSSI_Submit_Sensor(SENSOR_ID_I_A, v[0]);
+        OSSI_Submit_Sensor(SENSOR_ID_I_B, v[1]);
+        OSSI_Submit_Sensor(SENSOR_ID_I_C, v[2]);
+        OSSI_Submit_Sensor(SENSOR_ID_V_A, v[3]);
+        OSSI_Submit_Sensor(SENSOR_ID_V_B, v[4]);
+        OSSI_Submit_Sensor(SENSOR_ID_V_C, v[5]);
+        OSSI_Submit_Sensor(SENSOR_ID_RPM_SAME,        Observer_Get_Rpm());
+        OSSI_Submit_Sensor(SENSOR_ID_TORQUE_ELETRICO, Observer_Get_Te());
+        OSSI_Submit_Sensor(SENSOR_ID_TORQUE_HELICE,   Observer_Get_Torque_Helice());
+        OSSI_Submit_Sensor(SENSOR_ID_T_PROC_US,  (float)hal_t_exec_max_us);
+        OSSI_Submit_Sensor(SENSOR_ID_T_LAT_US,   (float)hal_t_lat_max_us);
+        OSSI_Submit_Sensor(SENSOR_ID_T_BATCH_US, (float)hal_t_period_max_us);
+        OSSI_Submit_Sensor(SENSOR_ID_BATCH_DROPS, (float)hal_batch_drops);
+        hal_t_exec_max_us = hal_t_lat_max_us = hal_t_period_max_us = 0U;
+    }
+    HAL_Trace(HAL_TR_PH_END);
+    atomic_set(&hal_ph_busy, 0);
 }
+
+volatile uint16_t hal_isr_last_us;
+/* Lotes recebidos desde o boot: com o uptime, dá o período médio real do
+ * quadro (Ts = intervalo / HAL_PH_BATCH_FRAMES), lido pelo debugger. */
+volatile uint32_t hal_isr_count;
 
 static void hal_adc_isr(const uint32_t *frame, uint16_t nch,
                          int32_t cal_m, int32_t cal_s, void *user)
 {
     ARG_UNUSED(user);
-    uint16_t ch = (nch < (uint16_t)HAL_ADC_CHANNELS_PER_ADC)
-                ? nch : (uint16_t)HAL_ADC_CHANNELS_PER_ADC;
-    for (uint16_t i = 0; i < ch; i++) {
-        adc1_accum[i] += hal_adc_raw_cal(frame[i] & 0xFFFU, cal_m);
-        adc2_accum[i] += hal_adc_raw_cal((frame[i] >> 16) & 0xFFFU, cal_s);
-    }
-    if (++hal_adc_frame_cnt >= HAL_ADC_ACCUM_FRAMES) {
-        for (uint16_t i = 0; i < ch; i++) {
-            atomic_set(&adc1_raw[i],
-                       (atomic_val_t)(adc1_accum[i] / HAL_ADC_ACCUM_FRAMES));
-            atomic_set(&adc2_raw[i],
-                       (atomic_val_t)(adc2_accum[i] / HAL_ADC_ACCUM_FRAMES));
-            adc1_accum[i] = 0U;
-            adc2_accum[i] = 0U;
+    /* Global (não static) para o debugger amostrar o PC durante um gap. */
+    static bool     t_valid;
+    uint16_t now = hal_us16();
+    if (t_valid) {
+        uint16_t per = (uint16_t)(now - hal_isr_last_us);
+        if (per > hal_t_period_max_us) {
+            hal_t_period_max_us = per;
         }
-        hal_adc_frame_cnt = 0;
-        k_work_submit_to_queue(&siba_wq, &hal_adc_publish_work);
+        if (per > HAL_GAP_MIN_US && hal_gap_n < HAL_GAP_N) {
+            hal_gap[hal_gap_n].ms = k_uptime_get_32();
+            hal_gap[hal_gap_n].us = per;
+            hal_gap_n++;
+            if (hal_trace_gap_at == 0U && hal_trace_n > 0U) {
+                hal_trace_gap_at = hal_trace_n;
+            }
+        }
     }
+    hal_isr_last_us = now;
+    hal_isr_count++;
+    t_valid = true;
+
+    if (atomic_get(&hal_ph_busy)) {
+        hal_batch_drops++;
+        HAL_Trace(HAL_TR_ADC_DROP);
+        return;
+    }
+    HAL_Trace(HAL_TR_ADC_ISR);
+
+    uint32_t words = MIN((uint32_t)nch, HAL_PH_WORDS);
+    int widx = 1 - atomic_get(&hal_ph_widx);
+    memcpy(hal_ph_bufs[widx], frame, words * sizeof(uint32_t));
+    hal_ph_nframes = words / HAL_ADC_CHANNELS_PER_ADC;
+    hal_ph_cal_m   = cal_m;
+    hal_ph_cal_s   = cal_s;
+    atomic_set(&hal_ph_widx, widx);
+
+    hal_t_isr_us = now;
+    atomic_set(&hal_ph_busy, 1);
+    k_work_submit_to_queue(&hal_ph_wq, &hal_ph_work);
 }
+#else
+/* Sem ADC de hardware (native_sim ou ADC desligado): sem TIM2, sem vetor. */
+void HAL_Trace(uint8_t id) { ARG_UNUSED(id); }
+void HAL_Phase_Calibration_Restart(void) { }
 #endif /* HAL_ENABLE_ADC && !CONFIG_ARCH_POSIX */
 
 int HAL_ADC_Init(void)
@@ -387,9 +694,16 @@ int HAL_ADC_Init(void)
         r = adc_channel_setup(adc2_dev, &adc2_ch_cfg[i]);
         if (r) { LOG_ERR("ADC2 setup ch%d falhou: %d", i, r); return r; }
     }
-    k_work_init(&hal_adc_publish_work, hal_adc_publish_work_fn);
+    hal_us16_init();
+    HAL_Phase_Calibration_Restart();   /* offset das correntes: ESC parado no boot */
+    k_work_queue_start(&hal_ph_wq, hal_ph_wq_stack,
+                       K_THREAD_STACK_SIZEOF(hal_ph_wq_stack),
+                       HAL_PH_WQ_PRIO, NULL);
+    k_thread_name_set(&hal_ph_wq.thread, "hal_ph_wq");
+    k_work_init(&hal_ph_work, hal_ph_work_fn);
     adc_ch32v307_set_frame_callback(adc1_dev, hal_adc_isr, NULL);
-    LOG_INF("HAL ADC: dual simultâneo, ISR callback, ~100 Hz publish (média 1500 frames)");
+    LOG_INF("HAL ADC: fases do motor (i_a,i_b,i_c / V_a,V_b,V_c), lotes de %u quadros",
+            (unsigned)HAL_PH_BATCH_FRAMES);
 #else
     k_work_init(&adc_stimulus_work, adc_stimulus_work_fn);
     k_timer_start(&adc_stimulus_timer,
@@ -518,14 +832,10 @@ static bool hx711_read_one(uint8_t idx, int32_t *out)
     const struct gpio_dt_spec *sck  = &hx711_sck[idx];
     const struct gpio_dt_spec *dout = &hx711_dout[idx];
 
-    /* Aguarda DOUT=0 (dado pronto), timeout 200ms */
-    int64_t deadline = k_uptime_get() + 200;
-    while (gpio_pin_get_dt(dout) != 0) {
-        if (k_uptime_get() > deadline) {
-            LOG_WRN("HX711[%d]: timeout aguardando DOUT", idx);
-            return false;
-        }
-        k_sleep(K_USEC(100));
+    /* Polling: sem espera. DOUT=1 → conversão ainda não pronta, tenta na
+     * próxima volta (HAL_HX711_POLL_MS). */
+    if (gpio_pin_get_dt(dout) != 0) {
+        return false;
     }
 
     /* Lê 24 bits MSB first */
@@ -761,7 +1071,10 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
     while (1) {
         for (int i = 0; i < HX711_COUNT; i++) {
             int32_t raw;
-            if (!hx711_read_one(i, &raw)) continue;
+            HAL_Trace(HAL_TR_HX_IN);
+            bool ok = hx711_read_one(i, &raw);
+            HAL_Trace(HAL_TR_HX_OUT);
+            if (!ok) continue;
 
             k_mutex_lock(&hx711_mutex, K_FOREVER);
             hx711_state[i].raw   = raw;
@@ -773,8 +1086,7 @@ void HAL_thread_HX711_fn(void *p1, void *p2, void *p3)
 
             OSSI_Submit_Sensor((uint32_t)i, grams); /* load_cell_N */
         }
-        /* Limita a ~100 Hz e garante fatia de CPU para threads de menor prioridade. */
-        k_sleep(K_MSEC(10));
+        k_sleep(K_MSEC(HAL_HX711_POLL_MS));
     }
 }
 #endif /* HAL_ENABLE_HX711 */

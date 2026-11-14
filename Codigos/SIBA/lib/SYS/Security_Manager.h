@@ -22,6 +22,13 @@ void Security_Manager_Clear_Emergency(void);
  * logarem só na transição. */
 bool Security_Manager_Error_Detect(siba_error_bit_t bit);
 bool Security_Manager_Error_Erase(siba_error_bit_t bit);
+void Security_Manager_Error_Set(siba_error_bit_t bit, bool cond);
+
+/* Fases do motor e observador (vindos da SAME): só diagnóstico, sem
+ * emergência. Chamadas pela fila do ADC a 10 Hz. */
+void Security_Manager_Check_Electrical(float Va, float Vb, float Vc,
+                                       float ia, float ib, float ic);
+void Security_Manager_Check_Observer(void);
 
 /* Código agregado atual — exposto em TELEMETRY_LOG.error_code (HEX) */
 uint32_t Security_Manager_Get_Error_Code(void);

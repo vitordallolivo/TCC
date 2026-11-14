@@ -136,14 +136,14 @@ security_limits:
 # A entrada `x` da reta é a tensão NO PINO do ADC, em mV (HAL::raw_to_mv).
 #
 # CORRENTE — SS49E (N=1, condutor passando uma vez pelo furo do toróide) com
-# divisor R1=2k0 / R2=18k na saída: o repouso do sensor é ratiométrico em
-# Vcc/2 = 2,5 V e ±60 A levariam a saída a 3,625 V, acima dos 3,3 V que o
-# conversor aceita.
+# divisor R1=4k7 / R2=10k na saída (10k do pino ao terra): o repouso do sensor
+# é ratiométrico em Vcc/2 = 2,5 V e cai para ~1,7 V no pino.
 #   sensibilidade do sensor : 18,750 mV/A   (regressão do ensaio, N=1)
-#   atenuação do divisor    : k = 18/(18+2) = 0,900
-#   ganho da cadeia         : 18,750 x 0,900 = 16,875 mV/A  (47,7 mA/LSB)
-#   linear                  : 1/16,875 = 0,0592593 A/mV
-#   offset nominal          : -(2,4866 x 0,900) V x linear = -132,64 A
+#   atenuação do divisor    : k = 10/(10+4,7) = 0,6803
+#   ganho da cadeia         : 18,750 x 0,6803 = 12,755 mV/A  (63 mA/LSB)
+#   linear                  : 1/12,755 = 0,0784 A/mV
+#   offset                  : medido por fase com o ESC parado (repouso de
+#                             1736 / 1762 / 1746 mV na placa montada)
 #
 # ⚠️ O OFFSET AQUI É SÓ CHUTE DE PARTIDA — tem de ser levantado a cada boot.
 # Nos três ensaios do Apêndice A o repouso a 0 A caiu em 2,48570 / 2,48640 /
@@ -153,10 +153,10 @@ security_limits:
 # mede o repouso real no boot, com o ESC parado, e sobrescreve estes valores.
 # Ver SAME/CLAUDE.md, "Calibração de offset dos sensores".
 #
-# TENSÃO — divisor R1=130k / R2=7k5; fundo de escala 60,5 V (dobro do
-# barramento, folga para o sobressinal de comutação).
-#   atenuação : k = 7,5/137,5 = 0,0545455
-#   linear    : 1/k/1000 = 0,0183333 V/mV   (14,8 mV/LSB)
+# TENSÃO — divisor R1=100k / R2=5k6; fundo de escala 62,2 V (folga para o
+# sobressinal de comutação sobre o barramento 6S).
+#   atenuação : k = 5,6/105,6 = 0,0530303
+#   linear    : 1/k/1000 = 0,0188571 V/mV   (15,2 mV/LSB)
 #
 # min/max: faixa física da cadeia. Fora dela = sensor saturado, desconectado
 # ou terra aberto.
@@ -164,9 +164,9 @@ sensor_defaults:
   - { target: TARGET_CURRENT_A, linear: 0.0784, offset: -136.315, min: -70.0, max: 70.0 }
   - { target: TARGET_CURRENT_B, linear: 0.0784, offset: -137.987, min: -70.0, max: 70.0 }
   - { target: TARGET_CURRENT_C, linear: 0.0784, offset: -136.657, min: -70.0, max: 70.0 }
-  - { target: TARGET_VOLTAGE_A, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
-  - { target: TARGET_VOLTAGE_B, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
-  - { target: TARGET_VOLTAGE_C, linear: 0.0183333, offset: 0.0, min: -1.0, max: 65.0 }
+  - { target: TARGET_VOLTAGE_A, linear: 0.0188571, offset: 0.0, min: -1.0, max: 65.0 }
+  - { target: TARGET_VOLTAGE_B, linear: 0.0188571, offset: 0.0, min: -1.0, max: 65.0 }
+  - { target: TARGET_VOLTAGE_C, linear: 0.0188571, offset: 0.0, min: -1.0, max: 65.0 }
 
 structs:
 

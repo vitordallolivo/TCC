@@ -48,19 +48,26 @@ GAIN_OPAMP = 3.0
 # ===========================================================================
 # Parâmetros do Motor
 # ===========================================================================
-R_s, L_s = 17.3e-3, 7e-6
+# R de fase do ensaio de rotor bloqueado (R_LL/2); L de fase ajustada nos
+# registros de osciloscópio (a ressonância deu 6,95 uH e prevê pior a corrente).
+R_s, L_s = 8.69e-3, 11.3e-6
 P, p = 14, 7
-Kv, J, k_load = 310.0, 0.0001, 20.0e-6
+# k_load: hélice APC 15x6E (tabela do TCC). O valor antigo, 2e-5, dava uma
+# carga ~75x maior que a medida na bancada.
+Kv, J, k_load = 310.0, 0.0001, 1.0e-6
 # Carga da hélice T = k_load*w^2 [N.m/(rad/s)^2]; SMO_K_LOAD sobrescreve
 # (k_Q = C_Q*rho*D^5/(4*pi^2), ex.: APC 15x6E ~1,0e-6 e 17x10E ~2,6e-6).
 import os as _os_kl
 k_load = float(_os_kl.environ.get("SMO_K_LOAD", k_load))
-# Perdas mecânicas a vazio medidas em bancada (T_perdas = B*w + tau_c),
-# desligadas por padrão. Ex.: SMO_B_LOSS=32.4e-6 SMO_TAU_C=15.5e-3
-B_loss = float(_os_kl.environ.get("SMO_B_LOSS", 0.0))
-TAU_C  = float(_os_kl.environ.get("SMO_TAU_C", 0.0))
-V_bus, t_end = 30.0, 10.0
-Ke_mec = 60.0 / (2 * math.pi * Kv)
+# Perdas mecânicas a vazio medidas em bancada (T_perdas = B*w + tau_c), ligadas
+# por padrão com os valores dos 19 patamares. SMO_B_LOSS/SMO_TAU_C sobrescrevem.
+B_loss = float(_os_kl.environ.get("SMO_B_LOSS", 32.4e-6))
+TAU_C  = float(_os_kl.environ.get("SMO_TAU_C", 15.5e-3))
+# Barramento: bateria 6S medida na bancada (21,5 V), não 30 V.
+V_bus, t_end = 21.5, 10.0
+# Kv de placa é por volt de barramento; o pico de fase é V_bus/sqrt(3), logo
+# Ke1 = 60/(2*pi*Kv*sqrt(3)) = 0,017785 (bancada: 0,017773).
+Ke_mec = 60.0 / (2 * math.pi * Kv * math.sqrt(3.0))
 Ke = Ke_mec / p
 
 # ===========================================================================
@@ -90,9 +97,9 @@ ADC_BITS  = 12
 ADC_VREF  = 3.3
 
 # Condicionamento — mesmos valores do SAME.yaml / HAL_prm.h
-K_VOLT   = 7.5 / 137.5       # V no pino por V de fase (divisor 130k/7k5)
-G_CURR   = 0.016875          # V no pino por A         (18,75 mV/A x 0,900)
-V_HALL0  = 2.4866 * 0.9      # repouso do Hall no pino [V]
+K_VOLT   = 5.6 / 105.6       # V no pino por V de fase (divisor 100k/5k6)
+G_CURR   = 0.012755          # V no pino por A  (18,75 mV/A x 10/14,7, divisor 4k7/10k)
+V_HALL0  = 2.4866 * 10/14.7  # repouso do Hall no pino [V]
 
 # Polos do antialiasing (RC do front-end) e do próprio elemento Hall
 FC_AA_V   = 40.1e3
@@ -108,15 +115,21 @@ CAL_RESID_V = 0.0005         # 0,5 mV -> ~30 mA de erro residual por fase
 # Perfil de RPM (vetorizado). np.select pega a 1ª condição verdadeira.
 # Lista de segmentos (t0, t1, rpm) usada também pela função-custo.
 # ---------------------------------------------------------------------------
+# Escada de 1000 a 5000 rpm (passo de 500, patamares de 1 s) para o
+# perfilamento da hélice, e uma desaceleração no fim. 5000 rpm cabe no
+# barramento de 21,5 V mesmo com a 17x10E.
 PROFILE_PTS = [
     (0.2,     0.0),
     (1.2,  1_000.0),
-    (2.4,  3_000.0),
-    (3.6,  1_000.0),
-    (4.8,  2_000.0),
-    (6.1,  3_000.0),
-    (8.0,  2_000.0),
-    (10.0, 500.0),
+    (2.2,  1_500.0),
+    (3.2,  2_000.0),
+    (4.2,  2_500.0),
+    (5.2,  3_000.0),
+    (6.2,  3_500.0),
+    (7.2,  4_000.0),
+    (8.2,  4_500.0),
+    (9.2,  5_000.0),
+    (10.0, 3_000.0),
 ]
 
 def build_profile(t_arr):
