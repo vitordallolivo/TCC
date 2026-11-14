@@ -3,74 +3,97 @@
 Contexto comum (protocolo, rede, plano de ação): [`../CLAUDE.md`](../CLAUDE.md).
 Descrição completa (sensores, shell, protocolo, pinagem): [`README.md`](README.md).
 
-Firmware Zephyr 4.4.0 da placa aerodinâmica + bateria (CH32V307, RISC-V
-144 MHz). Mede 6 HX711, RPM, Pitot, bateria; **aciona o ESC** e os relés.
-UDP: escuta CMD na 5000, envia telemetria (64 B, 10 Hz) para a 5555.
+Firmware Zephyr 4.4.0 da bancada (CH32V307, RISC-V 144 MHz). Mede 6 HX711 e,
+desde 14/11/2026, **as fases do motor pela AQ1 com o observador SMO+PLL que
+era da SAME** (a SAME queimou). **Aciona o ESC** e os relés.
+UDP: escuta CMD na 5000, envia telemetria (116 B, 10 Hz) em broadcast para a 5555.
 
 ## Fontes de verdade
 
 - Pinagem: `boards/wch/siba_board/siba_board.dts` (manda sobre qualquer doc).
-- Protocolo, defaults de sensor, bits de erro: `../Aplicacao_Pi/Config/SIBA.yaml`
-  → `generate.py`.
-- Habilitar/desligar módulo para bissecção: `lib/OS/HAL_prm.h`
-  (`HAL_DISABLE_*`). **ADC está desligado nesta versão da placa**
-  (`HAL_DISABLE_ADC`): v_batt, i_batt, temperaturas e Pitot saem 0.
+- Protocolo, defaults de sensor, bits de erro, limites `SM_*`:
+  `../Aplicacao_Pi/Config/SIBA.yaml` → `generate.py` (gera também
+  `lib/SYS/Security_prm.h`). Acrescentar só no FIM das listas.
+- Módulos para bissecção: `lib/OS/HAL_prm.h` (`HAL_DISABLE_*`).
+  Hoje: ADC **ligado** (fases), RPM por TIM3 **desligado** (`HAL_DISABLE_RPM`),
+  HX711 ligado em polling. Pitot/termistores/bateria não são lidos.
 
-## Arquitetura
+## Fases do motor (AQ1) e observador
 
-`main.c` → Managers (Battery, Propeller, Security, Log; sem thread) → OS
-(`OSSI` = `siba_wq`, `NCI` = UDP, `HAL`, `CMD_Core`) → drivers.
+- ADC dual: ADC1 PA0/PA1/PA3 = i_a/i_b/i_c, ADC2 PC2/PC3/PC4 = V_a/V_b/V_c
+  (slot k do ADC1 casado com o slot k do ADC2). i_c derivada
+  (`HAL_PH_I_C_DERIVED`). AQ1 J1: 1 GND, 2 +5V, 3 ic, 4 ib, 5 ia, 6 Vc, 7 Vb,
+  8 Va. Divisor de tensão 100k/5k6 (0,0188571 V/mV); corrente SS49E +
+  4k7/**9k1 no PCB** (yaml usa 10k → 0,0784 A/mV; se 9k1 montado, 0,0809).
+- **SMP = 41,5 ciclos** (`CH32_ADC_SMP=4` no CMakeLists) → quadro 9,0 µs, lote de
+  256 quadros = 2304 µs. **Ts = `OBS_TS_NS` = 9000** (Observer_Manager.h). Mudou
+  SMP, muda `OBS_TS_NS` e refaz o autotune com `--Ts`. Γ default do autotune
+  Ts=9 µs, 17x10E: 22,37 / −10 / 0,0591 (`smo_gains_17x10E_Ts9us.json`).
+- Pipeline: ISR do DMA copia o lote → fila própria `hal_ph_wq` (**prio 4**, acima
+  do HX711 6 e da siba_wq 5) → calibração → `Observer_Step_ABC` por quadro →
+  publica a 10 Hz (fases, `rpm_same`, `torque_*`, `t_proc_us`, `t_batch_us`,
+  `t_lat_us`, `batch_drops`). Observador e HAL compilam com `-O2
+  -fno-math-errno`; tanh por Padé (o `tanhf` da libm era lento).
+  Medido pela rede: lote 2304 µs, processamento ~1480–1630 µs, 0 descartes.
+- **O que conta é o lote caber no intervalo do DMA** (o observador só "escuta"
+  o motor); o Ts só entra nas equações.
+- Calibração de offset das correntes no boot (2 s + 4096 quadros, ESC parado).
+  ⚠ Pendente: limite `SM_CAL_STD_MAX_MV` = 8 mV é menor que o ruído real
+  (9–10 mV) → reprova; e falta checar a média na faixa do Hall (1,2–2,2 V) —
+  com cabo solto aceitou fundo de escala como zero. Offsets ajustáveis por
+  CMD (`FUNC_SENSOR`, alvos `TARGET_PHASE_*`, ação OFFSET).
+- Parâmetros do observador por CMD (`FUNC_SENSOR`, alvos 19–28, qualquer ação ≠
+  RESET_DEFAULT grava `value`), salvos no NVM.
 
-Threads: `hal_hx711` (pri 6), `nci_rx` (pri 5, `recvfrom` na 5000), `siba_wq`
-(pri 5). ADC e RPM são ISR + `k_work`; TX de telemetria é `k_timer` de 100 ms.
+## NVM (EEPROM I2C2 0x50) — layout v2
 
-Ordem de init: `OSSI → Security → Battery → Propeller → Log → CMD_Core → NCI →
-HAL → NVM` (NVM restaura calibração da EEPROM I2C2 0x50).
+Header 0x000 · calibração 0x020 (19 sensores, 6 páginas) · observador 0x0E0.
+A v1 (13 sensores) é migrada sem perder as células. O bloco do observador
+guarda o CRC dos defaults do firmware (`def_sig`): firmware com defaults novos
+descarta os da EEPROM, senão o Γ/Ts velho venceria.
 
-## Armadilhas de hardware
+## Armadilhas de hardware / Zephyr
 
-- **Relés**: módulo de 5 V ativo em nível baixo (`GPIO_ACTIVE_LOW`). 0 V liga;
-  para desligar o pino fica em **alta impedância** (`hal_relay_drive`), pois
-  3,3 V em push-pull não desliga o módulo. Ligar: pré-carga →
-  `CONFIG_SIBA_RELAY_PRECHARGE_MS` (5 s) → confere o botão → potência.
-  `HAL_Relay_Energize()` bloqueia a `siba_wq` (e a telemetria) nesse tempo.
-- **Emergência PD1**: corte físico no 12 V das bobinas; o micro só lê por um
-  divisor (0 V = emergência), sem pull interno.
-- **PWM do ESC (PB6)**: `pwms = <&pwm4 0 ...>` (canal começa em 0 = CH1) e
-  `output-low` no pinctrl; sem isso o pinctrl deixa o pino analógico. Medido:
-  50 Hz, 1000–2000 µs. `FUNC_ESC` recebe **0–100 %** com `INSTR_WRITE`.
-- **"Pronto" repetido**: a GUI manda `FUNC_START`/`STATUS_OK` a cada 30 s;
-  `Security_Manager_Arm_Bench` não rearma um ESC já armado (não zera o throttle).
-- **Shell só no `native_sim`**: `CONFIG_SHELL=n` no `prj.conf` (economiza
-  ~48 kB de ROM); `boards/native_sim.conf` religa.
-- Pausar o core pelo WCH-Link congela o Ethernet até o reset.
-- **PC0/PC1** são LEDs do PHY interno: nunca usar como ADC.
-- `CONFIG_ADC_CH32V00X=n` obrigatório: o driver upstream também casa com
-  `wch,adc` e anula o driver custom `drivers/adc/adc_ch32v307.c`.
-- `&dma1` fica `disabled`: o driver ADC é dono da IRQ do DMA1.
-- I2C upstream (`wch_i2c_finish_transfer`) trava se o barramento travar:
-  power cycle.
-- `CONFIG_FPU_SHARING=y` salva 128 B por preempção: stacks em `prj.conf` foram
-  dimensionadas para isso, não reduzir sem medir.
+- **`CONFIG_RISCV_ALWAYS_SWITCH_THROUGH_ECALL=y`** (`siba_board_defconfig`) é
+  obrigatório: o PFIC da WCH só libera a IRQ no `mret`; sem isso, troca de
+  thread dentro de uma ISR deixava o SysTick "ativo" (IACTR) e a ISR do DMA
+  atrasava 6–60 ms.
+- **O WCH-Link conectado reprograma o clock** (120 MHz, ADC /2): medição de
+  tempo/Ts com o openocd conectado é falsa. Medir pela rede, após power cycle.
+  Ler memória sem `halt` funciona, mas já perturba o clock.
+- Halt/reset pelo debugger congela o Ethernet → power cycle. `make flash`
+  falha às vezes ("error writing to flash"): repetir.
+- `k_cycle_get_32()` deste SoC volta ~10 ms (SysTick): o HAL usa TIM2 livre
+  a 1 MHz (`hal_us16`). Ferramentas de depuração no HAL: vetor de eventos
+  circular que congela no 1º gap (`hal_trace`, `hal_trace_gap_at`), log de
+  gaps (`hal_gap`), contador `hal_isr_count`.
+- **Relés**: módulo 5 V ativo em baixo; desligar = alta impedância. Ligar:
+  pré-carga → `CONFIG_SIBA_RELAY_PRECHARGE_MS` (5 s) → potência.
+  `HAL_Relay_Energize()` bloqueia a `siba_wq` → **a telemetria para ~7 s
+  durante a pré-carga** (ADC/observador seguem). Corrigir com timer.
+- **Emergência PD1** (0 V = emergência). Placa avulsa = emergência ativa;
+  `STATUS_EMERGENCY_OVERRIDE` ignora o botão. `FUNC_BATTERY`+`BAT_ACTION_RELAY`
+  liga só os relés; `FUNC_START`/`STATUS_OK` arma tudo (relés + ESC);
+  `STATUS_ERROR` desliga.
+- PWM do ESC (PB6): 50 Hz, 1000–2000 µs, `FUNC_ESC` 0–100 %. O ESC só começou a
+  acionar a partir de ~20 % e precisa de ~10 s após os relés.
+- HX711 por polling a cada `HAL_HX711_POLL_MS` (50 ms, 2× 10 SPS), sem espera
+  bloqueante. Célula solta lê lixo.
+- PC0/PC1 = LEDs do PHY, nunca ADC. `CONFIG_ADC_CH32V00X=n` obrigatório.
+  `&dma1` `disabled` (o driver ADC é dono da IRQ).
 
-## Rede
+## Estado da bancada (14/11/2026)
 
-IP no `prj.conf` alinhado com o YAML (`169.254.97.200`). Telemetria em
-broadcast; no Linux com ufw, liberar a UDP 5555. LED verde PB4 acompanha `NET_EVENT_IF_UP/DOWN`.
+- Ensaios: `../Aplicacao_Pi/Ensaios/ensaio_siba.py` (degraus de throttle +
+  CSV). Relés, ESC, V_b, V_c e correntes ok.
+- **V_a morto**: com o motor girando o PC2 lê ~13 mV que copiam o V_c (resíduo
+  do capacitor de amostragem) → PC2 em alta impedância, sem ligação ao pino 8
+  do J1. Sem V_a, Clarke falha e `rpm_same` fica 0. Conferir solda/pino do PC2
+  (LQFP100 pino 17) ou trocar fios 7↔8 para isolar.
+- `rpm_same` deriva (−11 000) com motor parado: zerar a saída quando |ê| < limiar.
 
 ## native_sim
 
-`make native_sim && make native_sim_run`. Loopback `127.0.0.200`, NSOS para
-UDP, HX711/RPM/ADC sintéticos, I2C emulado. `HAL_SIM_NOISE_SCALE` controla
-ruído. Shell pela stdin com `-uart_stdinout` (`btn on|off` finge a emergência).
-
-## Pendências
-
-- Calibrar sensores ADC quando os circuitos forem montados (`siba sensor <id>
-  linear|offset`).
-- `cell_count_lut[]` com faixas sobrepostas em `Battery_Manager.c`: usar
-  `siba batt cells <n>` fixo.
-- Propeller_Manager: Ct/Cp não implementado.
-- PHY LINK/ACT LEDs (PC0/PC1) sem pinctrl.
-- `BAT_ACTION_CELL_COUNT_OVERWRITE` só pelo shell, não por CMD.
-- Watchdog (IWDG) e máquina de estados global em `App.h`.
+`make native_sim && make native_sim_run`. Loopback `127.0.0.200`, NSOS,
+HX711/RPM/ADC sintéticos (o pipeline de fases é só da placa). Shell pela stdin
+com `-uart_stdinout` (`btn on|off` finge a emergência).

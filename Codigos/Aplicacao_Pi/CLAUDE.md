@@ -48,3 +48,24 @@ três modos.
   (`motor_config.ke_kt_from_kv`, igual ao firmware).
 - R/L do motor vêm de ensaio de bancada, não do autotune (que só dá Γ1/Γ2/Γt).
 - Estimativas que gravam no `SAME.yaml` pedem confirmação antes.
+
+## SIBA com o observador (desde 14/11/2026)
+
+- A SIBA tem o SMO+PLL e publica `V_a..i_c`, `rpm_same`, `torque_*` com os
+  mesmos nomes da SAME: os gráficos e o ensaio de hélice (`HeliceDialog`,
+  `helice_coeff.py --csv`) funcionam no modo SIBA sem mudança.
+- Parâmetros do motor/observador vão para as placas do modo que têm o
+  observador (`mainAlbatrozGUI._observer_boards`, `motor_config.has_observer`).
+  `build_motor_cmds` usa os enums do YAML de cada placa e **pula alvo que a
+  placa não tem** (antes caía no índice 0 = `TARGET_LOAD_CELL_0` na SIBA).
+  `ts_adc_us` **não** vai para a SIBA (`board_skip_keys`): o Ts é o do ADC.
+- A GUI manda `FUNC_START`/`STATUS_OK` ("pronto") no 1º pacote e **a cada
+  30 s**: isso fecha os relés e arma o ESC se a emergência estiver liberada.
+  "Desligar" suspende. Com a GUI aberta, nenhum outro programa recebe a
+  telemetria (ela segura a 5555).
+- `Ensaios/ensaio_siba.py`: ensaio em degraus de throttle pela rede, grava CSV
+  com toda a telemetria (GUI fechada). Respeita o botão de emergência; em erro
+  ou Ctrl-C manda throttle 0 + desligar.
+- `Scripts/plot_pi.py` e `helice_coeff.py` aceitam `SMO_GAINS_JSON`,
+  `SMO_PLOT_SUFFIX` (e `SMO_PLOT_ONLY` no plot_pi) junto com `SMO_K_LOAD`
+  para gerar as figuras por hélice (15x6E: 1,0e-6; 17x10E: 2,6e-6).

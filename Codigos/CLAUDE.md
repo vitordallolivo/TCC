@@ -5,9 +5,13 @@ Cada pasta tem seu `CLAUDE.md` curto; detalhe completo fica nos `README.md`.
 
 | Pasta | Papel |
 |---|---|
-| `SIBA/` | Firmware Zephyr (CH32V307): células de carga, RPM, Pitot, bateria, **aciona o ESC** |
-| `SAME/` | Firmware Zephyr (CH32V307): V/I de fase, **estima ω e torque** (SMO+PLL), só observa |
+| `SIBA/` | Firmware Zephyr (CH32V307): células de carga, relés, **aciona o ESC** e, desde 14/11/2026, **V/I de fase + SMO+PLL** (absorveu a SAME) |
+| `SAME/` | Firmware Zephyr (CH32V307): V/I de fase, estima ω e torque (SMO+PLL). **Placa queimada**: código mantido como referência |
 | `Aplicacao_Pi/` | GUI PySide6 no PC, cliente único das duas placas |
+
+A SAME queimou (suspeita: terra/ligação ao energizar o ESC com a placa
+conectada). O `Observer_Manager` foi copiado para a SIBA; mudanças no
+observador agora valem na SIBA. Ver `SIBA/CLAUDE.md`.
 
 ## Regras que valem para tudo
 
