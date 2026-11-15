@@ -283,20 +283,43 @@ integração: o \textit{firmware} recupera seus próprios ganhos dividindo os
 mesmos $\Gamma$ pelo período de amostragem em que roda.
 
 A \autoref{fig:otim_sensibilidade} apresenta a varredura unidimensional de
-cada ganho em torno do ótimo, mantendo os demais fixos. Para $\Gamma_{s1}$, o
-ponto encontrado fica no fundo de um vale. Para $\Gamma_{s2}$, fica no trecho
+cada ganho em torno do ótimo, em termos do desvio $\Delta\Gamma = \Gamma -
+\Gamma^*$, mantendo os demais fixos. Para $\Gamma_{s1}$, o ponto encontrado
+fica no fundo de um vale (\autoref{fig:otim_sensibilidade_s1}). Para
+$\Gamma_{s2}$ (\autoref{fig:otim_sensibilidade_s2}), fica no trecho
 plano, perto da subida abrupta, de duas ordens de grandeza, que aparece com
 ganhos maiores em módulo, onde a estimação deixa de acompanhar a planta.
-$\Gamma_t$ quase não altera o custo, menos de \SI{1}{\percent} na faixa
-varrida. $\Gamma_{s2}$ ficou no limite da faixa de busca, $|\Gamma_{s2}| \le 10$,
+$\Gamma_t$ quase não altera o custo, cerca de \SI{1}{\percent} na faixa
+varrida (\autoref{fig:otim_sensibilidade_t}). $\Gamma_{s2}$ ficou no limite da faixa de busca, $|\Gamma_{s2}| \le 10$,
 mas a varredura mostra que o custo é plano desse lado e só sobe com ganhos
 maiores em módulo, então ampliar a faixa traria pouco ganho.
 
 \begin{figure}[H]
     \centering
-    \caption{Sensibilidade da função-custo aos ganhos do observador (hélice 17x10E).}
-    \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade.png}
+    \caption{Sensibilidade da função-custo a cada ganho do observador, variando
+    um ganho de $\Delta\Gamma$ em torno do ótimo $\Gamma^*$ com os demais fixos
+    (hélice 17x10E).}
     \label{fig:otim_sensibilidade}
+    \begin{subfigure}{0.49\linewidth}
+        \centering
+        \caption{$\Gamma_{s1}$}
+        \label{fig:otim_sensibilidade_s1}
+        \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade_s1.png}
+    \end{subfigure}\hfill
+    \begin{subfigure}{0.49\linewidth}
+        \centering
+        \caption{$\Gamma_{s2}$}
+        \label{fig:otim_sensibilidade_s2}
+        \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade_s2.png}
+    \end{subfigure}
+
+    \vspace{4pt}
+    \begin{subfigure}{0.49\linewidth}
+        \centering
+        \caption{$\Gamma_{t}$}
+        \label{fig:otim_sensibilidade_t}
+        \includegraphics[width=\linewidth]{Textuais/Imgs/Desenvolvimento/Otim_sensibilidade_t.png}
+    \end{subfigure}
 
     Fonte: Autor (2026)
 \end{figure}

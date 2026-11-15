@@ -5,7 +5,7 @@
 % resumo em português
 \setlength{\absparsep}{18pt} % ajusta o espaçamento dos parágrafos do resumo
 \begin{resumo}
-Este trabalho desenvolve um sistema integrado de aquisição para a bancada de ensaios de conjuntos motopropulsores com motores BLDC do projeto Albatroz Aerodesign. Uma placa de medição, baseada no microcontrolador CH32V307, adquire as tensões e correntes de fase do motor, aciona o controlador do motor e os relés de potência e concentra a segurança, comunicando-se por Ethernet e UDP com um \textit{software} de supervisão. Para estimar a velocidade angular e o torque no eixo sem sensores mecânicos, implementa-se, embarcado na placa, um observador por modos deslizantes (SMO) associado a um PLL e à reconstrução analítica da força contraeletromotriz. O sistema permite comparar as grandezas medidas com as estimadas pelo observador, servindo como ferramenta de caracterização de conjuntos motopropulsores.
+Este trabalho desenvolve um sistema de aquisição para ensaios de motores BLDC, que adquire as tensões e correntes de fase, aciona e controla o motor e se comunica por Ethernet com um \textit{software} de supervisão. A velocidade e o torque no eixo são estimados sem sensores mecânicos, por um observador por modos deslizantes embarcado no sistema. O sistema serve como ferramenta para a caracterização de conjuntos motopropulsores.
 
  \textbf{Palavras-chave}: Bancada de Ensaios; Motor BLDC; Observador por Modos Deslizantes; Aquisição de Dados; Sistema \textit{Sensorless}; Propulsão Elétrica.
 \end{resumo}

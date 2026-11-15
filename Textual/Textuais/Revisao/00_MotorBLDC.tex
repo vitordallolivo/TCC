@@ -168,7 +168,90 @@ O torque eletromagnético total ($T_e$) advém do princípio da conservação de
     \label{eq:bldc_torque_mec}
 \end{equation}
 
-\subsection{Transformada de Clarke e Observador}
+\subsection{Análise Harmônica do Circuito de Fase}
+\label{sec:analise_harmonica}
+
+Com o motor em regime, as grandezas de fase não são senoidais puras, mas são
+periódicas, e a equação de fase (\autoref{eq:bldc_eletrica}) pode ser
+resolvida harmônico a harmônico. Escrevendo-a para a fase $k$ com $L_s$ no
+lugar de $L$:
+
+\begin{equation}
+    v_k(t) = R_s\,i_k(t) + L_s\,\frac{di_k(t)}{dt} + e_k(t)
+    \label{eq:Lajuste_passo1}
+\end{equation}
+
+\noindent admitem-se três hipóteses: (i) $R_s$ e $L_s$ são constantes, isto
+é, o circuito é linear e não há saturação do ferro; (ii) o motor está em
+regime, com rotação constante; e (iii) os parâmetros não variam com a
+frequência na faixa analisada.
+
+Pela hipótese (ii), $v_k$, $i_k$ e $e_k$ são periódicas com o período elétrico
+$2\pi/\omega_e$ e podem ser escritas como séries de Fourier
+\cite{alexander2013circuitos}:
+
+\begin{equation}
+    v_k(t) = \sum_{h} \mathrm{Re}\!\left\{\dot{V}_h\,e^{jh\omega_e t}\right\},\quad
+    i_k(t) = \sum_{h} \mathrm{Re}\!\left\{\dot{I}_h\,e^{jh\omega_e t}\right\},\quad
+    e_k(t) = \sum_{h} \mathrm{Re}\!\left\{\dot{E}_h\,e^{jh\omega_e t}\right\}
+    \label{eq:Lajuste_passo2}
+\end{equation}
+
+\noindent em que $\dot{V}_h$, $\dot{I}_h$ e $\dot{E}_h$ são os fasores do
+harmônico $h$. Como a derivada de $e^{jh\omega_e t}$ é
+$jh\omega_e\,e^{jh\omega_e t}$, a derivada da corrente fica
+
+\begin{equation}
+    \frac{di_k}{dt} = \sum_{h} \mathrm{Re}\!\left\{jh\omega_e\,\dot{I}_h\,e^{jh\omega_e t}\right\}
+    \label{eq:Lajuste_passo3}
+\end{equation}
+
+Substituindo \eqref{eq:Lajuste_passo2} e \eqref{eq:Lajuste_passo3} em
+\eqref{eq:Lajuste_passo1} e agrupando os termos de mesma frequência:
+
+\begin{equation}
+    \sum_{h} \mathrm{Re}\!\left\{\left[\dot{V}_h - \left(R_s + jh\omega_e L_s\right)\dot{I}_h
+    - \dot{E}_h\right] e^{jh\omega_e t}\right\} = 0
+    \label{eq:Lajuste_passo4}
+\end{equation}
+
+As funções $e^{jh\omega_e t}$ de frequências diferentes são ortogonais no
+período, de modo que a soma só se anula para todo $t$ se cada termo entre
+colchetes for nulo. Assim, cada harmônico obedece separadamente a uma equação
+fasorial, que é o princípio da superposição aplicado ao circuito linear
+\cite{alexander2013circuitos}:
+
+\begin{equation}
+    \dot{V}_h = \dot{E}_h + \left(R_s + jX_{L,h}\right)\dot{I}_h,
+    \qquad X_{L,h} = h\,\omega_e\,L_s
+    \label{eq:Lajuste_passo5}
+\end{equation}
+
+\noindent A \autoref{eq:Lajuste_passo5} é o circuito da
+\autoref{fig:circuito_ajuste_L}. Para a fundamental ($h = 1$), ela é a
+equação por fase da máquina síncrona em regime, $\dot{V} = \dot{E}_{af} +
+(R_s + jX_s)\,\dot{I}$, usada na determinação da reatância síncrona
+\cite{Fitzgerald2014}.
+
+\begin{figure}[H]
+    \centering
+    \caption{Circuito equivalente fasorial de uma fase para o harmônico $h$.}
+    \label{fig:circuito_ajuste_L}
+    \begin{circuitikz}[american, scale=1.0, transform shape]
+        \draw (0,0) to[sV, l=$\dot{V}_h$] (0,3)
+              to[R, l=$R_s$, i>_=$\dot{I}_h$] (3,3)
+              to[L, l=$jX_{L,h}$] (6,3)
+              to[sV, l=$\dot{E}_h$] (6,0)
+              -- (0,0);
+        \node[ground] at (3,0) {};
+        \node[anchor=north] at (3,-0.45) {$n$};
+    \end{circuitikz}
+
+    \fonte{Autor (2026).}
+\end{figure}
+
+\subsection{Transformadas de Clarke e Park}
+\label{sec:clarke_park}
 
 Para viabilizar a estimação de estados em tempo real, o sistema trifásico natural ($abc$) é frequentemente mapeado para um referencial estacionário bidimensional ortogonal ($\alpha\beta$) utilizando a Transformada de Clarke \cite{Clarke1943}:
 \begin{equation}
@@ -182,25 +265,94 @@ Para viabilizar a estimação de estados em tempo real, o sistema trifásico nat
 
 O eixo $\alpha$ coincide com o eixo da fase $a$; o eixo $\beta$ é ortogonal a ele no mesmo plano. A transformada não altera o sistema físico: as três ondas defasadas de 120° continuam existindo no motor, mas passam a ser representadas por duas ondas defasadas de 90° — uma componente em cada eixo. Como a soma das correntes de fase é nula ($i_a + i_b + i_c = 0$), apenas duas são linearmente independentes, e a projeção em $\alpha\beta$ não perde informação. O referencial permanece estacionário, portanto as grandezas continuam oscilando em corrente alternada.
 
-Aplicando a transformação matricial definida em \eqref{eq:clarke} diretamente às grandezas elétricas do motor, obtêm-se as componentes de tensão ($v_\alpha$, $v_\beta$) no referencial estacionário a partir das tensões de fase medidas ou inferidas pelos ciclos de trabalho do inversor, conforme \eqref{eq:tensao_alphabeta}:
+Neste trabalho a transformada é aplicada às três tensões de fase medidas e às
+três correntes, já que a corrente da fase $c$ é obtida das outras duas por
+$i_c = -(i_a + i_b)$:
 \begin{equation}
     \begin{cases}
-        v_\alpha = \frac{2}{3} v_a - \frac{1}{3} v_b - \frac{1}{3} v_c \\
-        v_\beta = \frac{\sqrt{3}}{3} v_b - \frac{\sqrt{3}}{3} v_c
+        v_\alpha = \frac{2}{3}\left(v_a - \frac{1}{2} v_b - \frac{1}{2} v_c\right) \\[2pt]
+        v_\beta = \frac{1}{\sqrt{3}} \left(v_b - v_c\right)
+    \end{cases}
+    \qquad
+    \begin{cases}
+        i_\alpha = \frac{2}{3}\left(i_a - \frac{1}{2} i_b - \frac{1}{2} i_c\right) = i_a \\[2pt]
+        i_\beta = \frac{1}{\sqrt{3}} \left(i_b - i_c\right) = \frac{1}{\sqrt{3}} (i_a + 2i_b)
     \end{cases}
     \label{eq:tensao_alphabeta}
 \end{equation}
 
-De forma análoga, a transformação é aplicada às correntes. Contudo, como o motor BLDC em configuração estrela isolada caracteriza um sistema onde a soma das correntes de fase é nula ($i_a + i_b + i_c = 0$), as componentes ortogonais de corrente ($i_\alpha$, $i_\beta$) podem ser computacionalmente simplificadas — exigindo a medição de apenas duas fases (frequentemente $i_a$ e $i_b$) —, conforme \eqref{eq:corrente_alphabeta}, reduzindo o esforço de processamento do algoritmo de estimação:
+\noindent As formas simplificadas à direita valem porque $i_a + i_b + i_c = 0$,
+o que permite medir só duas correntes.
+
+O referencial $\alpha\beta$ ainda é estacionário: as grandezas continuam
+senoidais, na frequência elétrica. A Transformada de Park \cite{Park1929} gira
+esse referencial de um ângulo $\theta_e$ igual ao ângulo elétrico do rotor,
+dando o referencial síncrono $dq$:
 \begin{equation}
-    \begin{cases}
-        i_\alpha = i_a \\
-        i_\beta = \frac{1}{\sqrt{3}} (i_a + 2i_b)
-    \end{cases}
-    \label{eq:corrente_alphabeta}
+    \begin{bmatrix} x_d \\ x_q \end{bmatrix}
+    =
+    \begin{bmatrix} \cos\theta_e & \sin\theta_e \\
+    -\sin\theta_e & \cos\theta_e \end{bmatrix}
+    \begin{bmatrix} x_\alpha \\ x_\beta \end{bmatrix},
+    \qquad
+    \theta_e = \omega_e t + \varphi_0
+    \label{eq:park}
 \end{equation}
 
-Considerando o modelo da máquina neste referencial estacionário $\alpha\beta$, e adotando a aproximação pela componente fundamental (desprezando as harmônicas superiores da FEM trapezoidal para fins de estimação linear), as tensões terminais são expressas por \eqref{eq:modelo_alphabeta} \cite{ST_AN1078}:
+\noindent em que $\omega_e = p\,\omega_m$ é a velocidade elétrica e $\varphi_0$
+a fase do rotor no instante inicial. O eixo $d$ (\textit{direto}) alinha-se ao
+fluxo do ímã do rotor e o eixo $q$ (\textit{em quadratura}) fica adiantado de
+\SI{90}{\degree}. A \autoref{fig:clarke_park} mostra os três referenciais.
+Como o referencial $dq$ gira junto com o rotor, o vetor de corrente, que gira
+em $\alpha\beta$, aparece parado: as três senoides de fase tornam-se dois
+valores praticamente constantes em regime. A componente $i_d$ magnetiza ou
+desmagnetiza a máquina, e $i_q$ é proporcional ao torque eletromagnético,
+$T_e = \tfrac{3}{2}\,p\,\lambda_m\,i_q$. Neste trabalho, a Transformada de Park
+é usada para calcular o torque a partir das correntes medidas, projetadas no
+ângulo elétrico (\autoref{sec:atrito_viscoso}).
+
+\begin{figure}[H]
+    \centering
+    \caption{Referenciais trifásico ($abc$), estacionário ($\alpha\beta$, Clarke)
+    e síncrono ($dq$, Park), com o vetor de corrente $\vec{i}$.}
+    \label{fig:clarke_park}
+    \begin{tikzpicture}[scale=1.25, >=Stealth]
+        \def\th{40}
+        % eixos abc
+        \foreach \ang/\nome in {0/a, 120/b, 240/c}
+            \draw[->, gray, dashed] (0,0) -- (\ang:2.9) node[pos=1.08, gray] {$\nome$};
+        % eixos alfa-beta (Clarke)
+        \draw[->, thick, black] (-0.6,0) -- (3.4,0) node[right] {$\alpha$};
+        \draw[->, thick, black] (0,-0.6) -- (0,3.0) node[above] {$\beta$};
+        % eixos dq (Park)
+        \draw[->, very thick, blue!70!black] (0,0) -- (\th:3.2) node[pos=1.06] {$d$};
+        \draw[->, very thick, blue!70!black] (0,0) -- (\th+90:2.7) node[pos=1.08] {$q$};
+        % angulo theta_e
+        \draw[->, blue!70!black] (0:0.9) arc (0:\th:0.9);
+        \node[blue!70!black, font=\small, anchor=west] at (14:1.0) {$\theta_e = \omega_e t + \varphi_0$};
+        % rotacao do referencial dq
+        \draw[->, blue!70!black] (\th-25:3.0) arc (\th-25:\th-5:3.0)
+            node[midway, right, font=\small] {$\omega_e$};
+        % vetor corrente
+        \coordinate (I) at (\th+25:2.3);
+        \draw[->, ultra thick, red!70!black] (0,0) -- (I) node[above right=-2pt] {$\vec{i}$};
+        % projecoes em d e q
+        \draw[densely dotted, red!70!black] (I) -- ($(0,0)!(I)!(\th:3)$) coordinate (Id);
+        \draw[densely dotted, red!70!black] (I) -- ($(0,0)!(I)!(\th+90:3)$) coordinate (Iq);
+        \fill[red!70!black] (Id) circle (1.3pt) node[below right=-1pt, font=\small] {$i_d$};
+        \fill[red!70!black] (Iq) circle (1.3pt) node[below left=-1pt, font=\small] {$i_q$};
+        % projecoes em alfa e beta
+        \draw[densely dotted, gray] (I) -- (I |- 0,0);
+        \draw[densely dotted, gray] (I) -- (0,0 |- I);
+        \node[below, font=\small, gray] at (I |- 0,0) {$i_\alpha$};
+        \node[left, font=\small, gray] at (0,0 |- I) {$i_\beta$};
+    \end{tikzpicture}
+
+    \fonte{Autor (2026).}
+\end{figure}
+
+No referencial $\alpha\beta$, as tensões terminais são dadas por
+\eqref{eq:modelo_alphabeta} \cite{ST_AN1078}:
 \begin{equation}
     \begin{bmatrix} v_\alpha \\ v_\beta \end{bmatrix}
     = R \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
@@ -209,77 +361,26 @@ Considerando o modelo da máquina neste referencial estacionário $\alpha\beta$,
     \label{eq:modelo_alphabeta}
 \end{equation}
 
-Como dito anteriormente a FEM produzido é trapezoidal, por conta disso: 
-
+\noindent com a força contraeletromotriz $e_{\alpha\beta} = k_e\,\omega_m\,
+f_{\alpha\beta}(\theta_e)$, conforme \eqref{eq:bldc_fem}. Para a estimação,
+adota-se a componente fundamental da FEM, desprezando os harmônicos
+superiores do trapézio. Aplicando Clarke às três funções de forma senoidais
+defasadas de \SI{120}{\degree}, obtém-se
 \begin{equation}
-    \begin{cases}
-    e_{\alpha} = K_e \omega_e f_{\alpha}(\theta_e) \\
-    e_{\beta} = K_e \omega_e f_{\beta}(\theta_e)
-    \end{cases}
+    f_\alpha(\theta_e) = \sin\theta_e, \qquad
+    f_\beta(\theta_e) = \frac{1}{\sqrt{3}}\left[\sin\!\left(\theta_e - \tfrac{2\pi}{3}\right)
+    - \sin\!\left(\theta_e - \tfrac{4\pi}{3}\right)\right] = -\cos\theta_e
+    \label{eq:f_alphabeta}
 \end{equation}
 
-Supondo um sistema equilibrado $f_a + f_b + f_c = 0$, então via transformada de Clarke:
-
+\noindent Isolando a derivada da corrente, o modelo completo fica
 \begin{equation}
-    \begin{cases}
-        f_{\alpha} (\theta_e) = f_{a} (\theta_e) \\
-        f_{\beta} (\theta_e)  = \frac{1}{\sqrt{3}} (f_b (\theta_e) - f_c (\theta_e))
-    \end{cases}
-\end{equation}
-
-As funções de forma e suas derivadas são detalhadas na Equações \eqref{eq:f_alpha}, \eqref{eq:df_alpha}, \eqref{eq:f_beta} e \eqref{eq:df_beta}:
-
-\begin{equation}
-    f_\alpha(\theta_e) = f_a(\theta_e) = 
-    \begin{cases} 
-        \frac{6}{\pi} \theta_e, & 0 \leq \theta_e < \frac{\pi}{6} \\ 
-        1, & \frac{\pi}{6} \leq \theta_e < \frac{5\pi}{6} \\ 
-        -\frac{6}{\pi}(\theta_e - \pi), & \frac{5\pi}{6} \leq \theta_e < \frac{7\pi}{6} \\ 
-        -1, & \frac{7\pi}{6} \leq \theta_e < \frac{11\pi}{6} \\ 
-        \frac{6}{\pi}(\theta_e - 2\pi), & \frac{11\pi}{6} \leq \theta_e < 2\pi 
-    \end{cases}
-    \label{eq:f_alpha}
-\end{equation}
-
-\begin{equation}
-    \frac{d f_\alpha}{d \theta_e} = \frac{d f_a}{d \theta_e} = 
-    \begin{cases} 
-        \frac{6}{\pi}, & 0 \leq \theta_e < \frac{\pi}{6} \\ 
-        0, & \frac{\pi}{6} \leq \theta_e < \frac{5\pi}{6} \\ 
-        -\frac{6}{\pi}, & \frac{5\pi}{6} \leq \theta_e < \frac{7\pi}{6} \\ 
-        0, & \frac{7\pi}{6} \leq \theta_e < \frac{11\pi}{6} \\ 
-        \frac{6}{\pi}, & \frac{11\pi}{6} \leq \theta_e < 2\pi 
-    \end{cases}
-    \label{eq:df_alpha}
-\end{equation}
-
-\begin{equation}
-    f_\beta(\theta_e) = \frac{1}{\sqrt{3}} \left[ f_a\left(\theta_e - \frac{2\pi}{3}\right) - f_a\left(\theta_e - \frac{4\pi}{3}\right) \right]
-    \label{eq:f_beta}
-\end{equation}
-
-\begin{equation}
-    \frac{d f_\beta}{d \theta_e} = \frac{1}{\sqrt{3}} \left[ \frac{d f_a}{d \theta_e}\left(\theta_e - \frac{2\pi}{3}\right) - \frac{d f_a}{d \theta_e}\left(\theta_e - \frac{4\pi}{3}\right) \right]
-    \label{eq:df_beta}
-\end{equation}
-
-Podemos então descrever o sistema completo como \eqref{eq:Eq_nao_linear}:
-
-\begin{equation}
-    \begin{bmatrix}
-        \dot{i_{\alpha}} \\ \dot{i_{\beta}}
-    \end{bmatrix} = -\frac{R}{L_s}
-    \begin{bmatrix}
-            {i_{\alpha}} \\ {i_{\beta}}
-    \end{bmatrix} - \frac{60 \cdot p }{2\pi K_v L_s} \cdot \omega_m \begin{bmatrix}
-        f_{\alpha}(\theta_e) \\ f_{\beta}(\theta_e)
-    \end{bmatrix} + \frac{1}{L_s} \begin{bmatrix}
-        {v_{\alpha}} \\ {v_{\beta}}
-    \end{bmatrix}
+    \frac{d}{dt}\begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
+    = -\frac{R}{L_s} \begin{bmatrix} i_\alpha \\ i_\beta \end{bmatrix}
+    - \frac{k_e\,\omega_m}{L_s} \begin{bmatrix} \sin\theta_e \\ -\cos\theta_e \end{bmatrix}
+    + \frac{1}{L_s} \begin{bmatrix} v_\alpha \\ v_\beta \end{bmatrix}
     \label{eq:Eq_nao_linear}
 \end{equation}
-
-Para análise e controle, aplica-se ainda a Transformada de Park, que gira o referencial $\alpha\beta$ de um ângulo $\theta_e$ igual ao ângulo elétrico do rotor. O resultado é o referencial $dq$: o eixo $d$ (\textit{direto}) alinha-se com o fluxo do ímã permanente do rotor, e o eixo $q$ (\textit{em quadratura}) fica perpendicular a ele, adiantado de 90°. Como o referencial gira junto com o rotor, o vetor de corrente — que girava em $\alpha\beta$ — aparece parado em $dq$: as três senoides de fase tornam-se dois valores praticamente constantes. A componente $i_d$ magnetiza ou desmagnetiza a máquina; a componente $i_q$ é proporcional ao torque eletromagnético ($T_e = \tfrac{3}{2} p \lambda_m i_q$). Separar torque e fluxo em variáveis independentes é o principal benefício do referencial $dq$.
 
 Conforme apresentado na \autoref{eq:Eq_nao_linear}, o sistema é descrito por equações dinâmicas não lineares, o que impõe desafios significativos à estimação de estados. Estruturas de observadores lineares clássicos, como o Observador de Luenberger ou o Regulador Linear Quadrático Gaussiano (LQG), podem não apresentar convergência satisfatória ou estabilidade em regimes transitórios e amplas faixas de operação, visto que negligenciam as não linearidades intrínsecas do modelo. Diante desse cenário, a literatura especializada destaca com frequência duas abordagens robustas: o Observador por Modos Deslizantes (SMO - Sliding Mode Observer) e o Filtro de Kalman Estendido, porém o EKF não será abordado neste trabalho, devido ao maior custo computacional e maior complexidade a solução adotada neste trabalho.
 

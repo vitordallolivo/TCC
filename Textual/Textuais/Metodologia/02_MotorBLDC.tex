@@ -125,8 +125,47 @@ individual é dada por:
     \label{eq:indutancia_fase}
 \end{equation}
 
-Este valor de $L_{fase}$ é diretamente empregado como o parâmetro $L_s$ nas
-equações de espaço de estados no referencial estacionário $\alpha\beta$.
+Como os laboratórios disponíveis não contam com medidor LCR, essa medição
+isolada pode carregar erros consideráveis. Por isso a indutância também é
+estimada por um segundo método, a partir dos registros de tensão e corrente de
+fase feitos com o motor girando (\autoref{sec:resultado_setup_scope}).
+
+O método usa o circuito fasorial de uma fase para cada harmônico
+(\autoref{sec:analise_harmonica}, \autoref{fig:circuito_ajuste_L}), válido
+com o motor em regime, sem saturação e com parâmetros constantes na faixa de
+frequências analisada. Isolando a impedância do enrolamento na
+\autoref{eq:Lajuste_passo5}:
+
+\begin{equation}
+    R_s + jX_{L,h} = \frac{\dot{V}_h - \dot{E}_h}{\dot{I}_h}
+    \quad\Longrightarrow\quad
+    L_s = \frac{1}{h\,\omega_e}\,
+    \mathrm{Im}\!\left\{\frac{\dot{V}_h - \dot{E}_h}{\dot{I}_h}\right\}
+    \label{eq:Lajuste_passo6}
+\end{equation}
+
+\noindent Os fasores $\dot{V}_h$ e $\dot{I}_h$ são obtidos pela transformada
+de Fourier dos registros de tensão e corrente de fase. O fasor $\dot{E}_h$
+vem da constante $K_e$, medida a vazio, e da rotação, com a fase ajustada ao
+registro. A \autoref{eq:Lajuste_passo6} usa só a parte imaginária, de modo que
+$L_s$ não depende de $R_s$; a parte real fornece uma verificação de $R_s$.
+
+Na prática, cada harmônico e cada registro fornecem uma estimativa de $L_s$
+afetada por ruído. As estimativas são combinadas por mínimos quadrados: escolhe-se
+o $L_s$ que minimiza a diferença entre a corrente medida e a prevista pela
+\autoref{eq:Lajuste_passo5},
+
+\begin{equation}
+    L_s = \arg\min_{L} \sum_{h \geq 1} \left|\dot{I}_h -
+    \frac{\dot{V}_h - \dot{E}_h}{R_s + jh\omega_e L}\right|^2
+    \label{eq:ajuste_L_harm}
+\end{equation}
+
+\noindent o que dá naturalmente mais peso aos harmônicos de maior amplitude, em especial à
+fundamental, onde o ruído pesa menos e a hipótese (iii) é mais confiável. O
+procedimento é repetido para registros em várias rotações e com os dois
+controladores, e o resultado é comparado ao da ressonância pelo erro com que
+cada valor prevê a corrente.
 
 \subsection{Parâmetros Mecânicos}
 \label{sec:params_mecanicos}
@@ -340,79 +379,53 @@ como um valor único.
 \subsection{Parametrização do SMO}
 \label{sec:param_smo}
 
-Com os parâmetros intrínsecos do motor obtidos, resta o problema de selecionar os ganhos deslizantes ($K_{s1}$, $K_{s2}$) e o polo do estimador ($K_t$). Esses parâmetros condicionam características antagônicas: ganhos elevados aceleram a convergência do erro de predição de corrente, porém amplificam o conteúdo harmônico injetado na BEMF; o polo $K_t$ atenua esse ruído ao custo de atraso de fase dependente da frequência elétrica. Como a frequência elétrica varia ao longo do envelope de operação, não há um conjunto de ganhos trivialmente ótimo, e o ajuste manual revela-se laborioso e pouco reprodutível. Esses fatores motivaram a adoção de um procedimento de ajuste automático \textit{(autotuning)} \textit{offline}, capaz de ser
-reaplicado sistematicamente a diferentes conjuntos motopropulsores --- requisito
-central para uma bancada de caracterização que se pretende geral.
+Com os parâmetros do motor obtidos, restam os ganhos do observador
+($\Gamma_{s1}$, $\Gamma_{s2}$ e $\Gamma_t$). Ganhos elevados aceleram a
+convergência, mas aumentam o ruído na força contraeletromotriz estimada, e o
+polo do estimador atenua esse ruído ao custo de atraso. Como a frequência
+elétrica varia ao longo da operação, o ajuste manual é laborioso e pouco
+reprodutível, e por isso os ganhos são obtidos por otimização sobre a
+simulação do conjunto motopropulsor (\autoref{sec:otimizacao_revbib}). Nesta
+seção, as grandezas da planta simulada são chamadas de ``reais'', em
+contraposição às estimadas pelo observador.
 
-O procedimento é conduzido sobre a planta computacional do conjunto
-motopropulsor, que fornece as referências de torque e velocidade. Ao longo desta seção, essas grandezas geradas pela planta simulada são designadas ``reais'', em contraposição às estimativas produzidas pelo observador; não se trata, portanto, de medições experimentais, mas da referência sintética contra a qual o estimador é ajustado.
+A função-custo mede o seguimento das grandezas que a bancada entrega, o torque
+e a velocidade, e não grandezas internas do observador. A simulação percorre
+um perfil de patamares de velocidade, e em cada patamar $q$ usa-se a segunda
+metade, já em regime. Os resíduos de torque e de velocidade são avaliados pelo
+RMSE (\autoref{eq:metricas_erro}), normalizado pelo desvio-padrão do sinal
+real no patamar ($\sigma_q$):
 
-O objetivo físico do observador, neste contexto, é estimar com fidelidade as
-grandezas de saída do conjunto: o torque de eixo e a velocidade angular. São
-essas as variáveis posteriormente empregadas na identificação dos coeficientes
-aerodinâmicos. Por essa razão, ao invés de penalizar grandezas internas do
-estimador --- como o erro angular, que o PLL já torna pouco discriminante ---, a
-função-custo foi formulada como o \textit{seguimento} direto do torque e da
-velocidade \cite{hermuche2023funcoes, datacamp2025cost}, mantendo o procedimento
-agnóstico aos detalhes internos do observador e, portanto, transferível a outros
-motores.
-
-A avaliação ocorre sobre os trechos em regime permanente de cada patamar de
-velocidade. Para um patamar $q$, a \autoref{eq:termos_seguimento} define o erro
-de seguimento de torque ($g_{T,q}$), a partir das amostras de torque real
-($\Tau_{q,n}$) e estimado ($\hat{\Tau}_{q,n}$), e o erro relativo de velocidade
-($g_{\omega,q}$), das velocidades médias real ($\varpi_q$) e estimada
-($\hat{\varpi}_q$). O termo de torque emprega a função de perda de Huber
-($\ell_\delta$), que combina sensibilidade quadrática próxima ao acerto com
-robustez linear aos desvios grandes, atenuando o impacto das quedas periódicas
-de observabilidade do SMO durante as comutações do inversor sem descartá-las por
-completo:
-%
 \begin{equation}
-    g_{T,q} = \frac{1}{N_q}\sum_{n=1}^{N_q}
-        \ell_\delta\!\big( \hat{\Tau}_{q,n} - \Tau_{q,n} \big),
+    g_{T,q} = \frac{\mathrm{RMSE}\big(\hat{T}_{q} - T_{q}\big)}{\sigma_{T,q}},
     \qquad
-    g_{\omega,q} = \frac{\big|\, \hat{\varpi}_q - \varpi_q \,\big|}{|\varpi_q|},
+    g_{\omega,q} = \frac{\mathrm{RMSE}\big(\hat{\omega}_{q} - \omega_{q}\big)}{\sigma_{\omega,q}}
     \label{eq:termos_seguimento}
 \end{equation}
-%
-onde $N_q$ é o número de amostras do patamar e $\ell_\delta(r) = \tfrac{1}{2}r^2$
-para $|r|\le\delta$ e $\ell_\delta(r) = \delta\,(|r|-\tfrac{1}{2}\delta)$ caso
-contrário. A função-custo agregada, apresentada na
-\autoref{eq:custo_autotuning}, é a média ponderada desses erros sobre os $M$
-patamares avaliados:
-%
+
+\noindent e o custo é a média ponderada sobre os $M$ patamares:
+
 \begin{equation}
     J(\mathbf{x}) = \frac{1}{M}\sum_{q=1}^{M}
         \Big( w_T\,g_{T,q} + w_\omega\,g_{\omega,q}\Big),
+    \qquad w_T = \num{1,0}, \quad w_\omega = \num{0,5}
     \label{eq:custo_autotuning}
 \end{equation}
-%
-com pesos $w_T = \num{1,0}$ e $w_\omega = \num{0,5}$, priorizando deliberadamente
-a fidelidade do torque, grandeza de maior interesse para a caracterização
-propulsiva. Cabe ressaltar que o valor numérico de $J$ não constitui uma medida
-de exatidão global do estimador: a topologia é fortemente não linear e o erro
-varia entre patamares, de modo que $J$ deve ser entendido apenas como o índice
-relativo que orienta a busca, e não como um erro percentual absoluto.
 
-Na discretização por Euler progressivo, os ganhos atuam sobre a dinâmica do
-observador na forma dos produtos definidos na
-\autoref{eq:discretizacao_coeff_smo}, de modo que um mesmo comportamento
-dinâmico corresponde a valores de $K$ inversamente proporcionais a $T_s$.
-Otimizar $K$ diretamente atrelaria o resultado ao passo específico da simulação,
-comprometendo sua transferência ao \textit{firmware}, cujo período de execução é
-ditado pelo hardware de aquisição. Por essa razão, a otimização é conduzida
-sobre os ganhos discretizados $\Gamma$, invariantes ao passo, recuperando-se o
-ganho efetivamente embarcado por $K = \Gamma / T_s$ com o $T_s$ real da malha de
-controle.
+\noindent O peso maior no torque reflete o interesse da caracterização
+propulsiva. O RMSE foi preferido à perda de Huber porque, com os resíduos
+desta planta, o Huber comprimia o termo de torque e invertia na prática os
+pesos (\autoref{sec:funcao_custo_revbib}). O valor de $J$ é um índice relativo
+para orientar a busca, e não um erro percentual.
 
-Para condicionar a busca, os parâmetros são otimizados em espaço logarítmico com
-sinais fixos, escrevendo $\Gamma=(+1,-1,+1)\odot 10^{\mathbf{x}}$, o que
-normaliza as três ordens de grandeza distintas e impõe por construção as
-restrições de sinal $\Gamma_{s1}>0$, $\Gamma_{s2}<0$ e $\Gamma_{t}>0$. A
-minimização emprega o algoritmo de Evolução Diferencial
-(\autoref{fig:fluxo_autotuning}), executando a simulação em um horizonte reduzido que
-cobre os patamares mais exigentes.
+A otimização é feita sobre os ganhos $\Gamma = K\,T_s$
+(\autoref{eq:discretizacao_coeff_smo}), que não dependem do passo de
+amostragem; o \textit{firmware} recupera seus ganhos por $K = \Gamma/T_s$ com o
+próprio $T_s$. A busca usa a Evolução Diferencial
+(\autoref{sec:evolucao_diferencial}) em escala logarítmica
+(\autoref{sec:busca_log}), com $\Gamma = (+1,-1,+1)\odot 10^{\mathbf{x}}$, o
+que impõe $\Gamma_{s1}>0$, $\Gamma_{s2}<0$ e $\Gamma_t>0$. O fluxo está na
+\autoref{fig:fluxo_autotuning}.
 
 \begin{figure}[H]
     \centering
@@ -444,7 +457,5 @@ cobre os patamares mais exigentes.
     Fonte: Autor (2026)
 \end{figure}
 
-A natureza não-convexa de $J$, decorrente do \textit{chattering} e das saturações
-da planta, justifica a adoção de um método de otimização livre de gradiente. Os
-ganhos resultantes e a verificação de invariância ao passo são reportados na
-\autoref{sec:autotuning}.
+Os ganhos resultantes e a sensibilidade do custo em torno do ótimo são
+apresentados na \autoref{sec:autotuning}.

@@ -1,4 +1,5 @@
 \section{Medição de Parâmetros}
+\label{sec:resultado_medicao_parametros}
 
 
 \subsection{Resistência}
@@ -43,6 +44,7 @@ $R_{Y} = R_{LL}/2 = 8{,}69\ \text{m}\Omega$ no modelo em estrela equivalente.
 \end{table}
 
 \subsection{Indutância}
+\label{sec:resultado_indutancia}
 A indutância foi determinada pelo método da ressonância, associando capacitores
 de capacitância conhecida em paralelo aos terminais do motor e excitando o
 circuito $LC$ com um gerador em modo de varredura (\textit{AC sweep}).
@@ -80,3 +82,8 @@ $L_{Y} = L_{LL}/2 = 6{,}95 \pm 0{,}07\ \mu\text{H}$.
 \end{table}
 
 
+
+Pelo segundo método (\autoref{eq:ajuste_L_harm}), aplicado a \num{16}
+registros de osciloscópio entre \num{2500} e \num{6700}~RPM, obteve-se
+$L_Y \approx \SI{11,3}{\micro\henry}$, valor adotado no observador e na
+simulação.

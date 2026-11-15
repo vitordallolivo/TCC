@@ -29,55 +29,62 @@
 % ---
 \begin{siglas}
 	\item[ADC] \textit{Analog-to-Digital Converter} (Conversor Analógico-Digital)
-	\item[ARP] \textit{Address Resolution Protocol}
+	\item[APC] \textit{Advanced Precision Composites} (fabricante de hélices)
+	\item[API] \textit{Application Programming Interface} (Interface de Programação de Aplicações)
 	\item[BEMF] \textit{Back Electromotive Force} (Força Contraeletromotriz)
 	\item[BLDC] \textit{Brushless Direct Current}
-	\item[BOM] \textit{Bill of Materials} (Lista de Materiais)
 	\item[CA] Corrente Alternada
 	\item[CAD] \textit{Computer-Aided Design} (Projeto Assistido por Computador)
 	\item[CC] Corrente Contínua
 	\item[CLI] \textit{Command Line Interface} (Interface de Linha de Comando)
 	\item[CMD] \textit{Command} (Comandos)
 	\item[CSV] \textit{Comma-Separated Values}
+	\item[DE] \textit{Differential Evolution} (Evolução Diferencial)
+	\item[DHCP] \textit{Dynamic Host Configuration Protocol}
 	\item[DMA] \textit{Direct Memory Access}
 	\item[DTC] \textit{Devicetree Compiler}
+	\item[EEPROM] \textit{Electrically Erasable Programmable Read-Only Memory}
 	\item[EKF] \textit{Extended Kalman Filter} (Filtro de Kalman Estendido)
+	\item[EMF] \textit{Electromotive Force} (Força Eletromotriz), em \textit{back-EMF}
 	\item[ESC] \textit{Electronic Speed Controller} (Controlador Eletrônico de Velocidade)
 	\item[FEM] Força Contraeletromotriz
-	\item[FEMM] \textit{Finite Element Method Magnetics}
 	\item[FPU] \textit{Floating-Point Unit} (Unidade de Ponto Flutuante)
-	\item[FW] \textit{Field Weakening} (Enfraquecimento de Campo)
 	\item[GND] \textit{Ground} (Referência de Terra)
-	\item[GPIO] \textit{General Purpose Input/Output} (Entrada/Saída de Propósito Geral)
 	\item[GUI] \textit{Graphical User Interface} (Interface Gráfica de Usuário)
 	\item[HAL] \textit{Hardware Abstraction Layer} (Camada de Abstração de Hardware)
 	\item[I2C] \textit{Inter-Integrated Circuit}
 	\item[IP] \textit{Internet Protocol}
 	\item[IPC] \textit{Inter-Process Communication} (Comunicação Interprocessos)
+	\item[LC] Circuito indutor--capacitor
 	\item[LCR] Indutância, Capacitância e Resistência
+	\item[LED] \textit{Light-Emitting Diode} (Diodo Emissor de Luz)
 	\item[LiPo] Polímero de Lítio
 	\item[LQG] Regulador Linear Quadrático Gaussiano
 	\item[LSB] \textit{Least Significant Bit} (Bit Menos Significativo)
 	\item[MAC] \textit{Media Access Control} (Controle de Acesso ao Meio)
+	\item[MAE] \textit{Mean Absolute Error} (Erro Absoluto Médio)
 	\item[MTU] \textit{Maximum Transmission Unit} (Unidade Máxima de Transmissão)
 	\item[NCI] \textit{Network Core Interface}
+	\item[NVM] \textit{Non-Volatile Memory} (Memória Não Volátil)
 	\item[OCV] \textit{Open Circuit Voltage} (Tensão de Circuito Aberto)
 	\item[OSSI] \textit{Operating System Standard Interface}
 	\item[PC] \textit{Personal Computer} (Computador Pessoal)
 	\item[PCB] \textit{Printed Circuit Board} (Placa de Circuito Impresso)
-	\item[PCBA] \textit{Printed Circuit Board Assembly} (Placa de Circuito Impresso Montada)
+	\item[PET] Programa de Educação Tutorial
+	\item[PHY] \textit{Physical Layer} (Camada Física)
 	\item[PI] Proporcional-Integral
 	\item[PLL] \textit{Phase-Locked Loop} (Malha de Captura de Fase)
 	\item[PMP] \textit{Physical Memory Protection} (Proteção de Memória Física)
 	\item[POSIX] \textit{Portable Operating System Interface}
-	\item[PPM] \textit{Pulse Position Modulation} (Modulação por Posição de Pulso)
 	\item[PWM] \textit{Pulse Width Modulation} (Modulação por Largura de Pulso)
-	\item[RFC] \textit{Request for Comments}
-	\item[RMS] \textit{Root Mean Square} (Valor Eficaz)
+	\item[RAM] \textit{Random Access Memory} (Memória de Acesso Aleatório)
+	\item[RC] Circuito resistor--capacitor
+	\item[RISC-V] Arquitetura aberta de conjunto de instruções \textit{Reduced Instruction Set Computer}
+	\item[RL] Circuito resistor--indutor
+	\item[RMSE] \textit{Root Mean Square Error} (Raiz do Erro Quadrático Médio)
 	\item[RPM] Rotações Por Minuto
 	\item[RTOS] \textit{Real-Time Operating System} (Sistema Operacional de Tempo Real)
 	\item[SAE] \textit{Society of Automotive Engineers} (SAE BRASIL)
-	\item[SMD] \textit{Surface Mount Device} (Dispositivo de Montagem em Superfície)
 	\item[SMO] \textit{Sliding Mode Observer} (Observador por Modos Deslizantes)
 	\item[SOC] \textit{State of Charge} (Estado de Carga)
 	\item[SPM] \textit{Surface Permanent Magnet} (Ímãs Montados na Superfície)
@@ -87,8 +94,8 @@
 	\item[UART] \textit{Universal Asynchronous Receiver/Transmitter}
 	\item[UDESC] Universidade do Estado de Santa Catarina
 	\item[UDP] \textit{User Datagram Protocol}
+	\item[USART] \textit{Universal Synchronous/Asynchronous Receiver/Transmitter}
 	\item[YAML] \textit{YAML Ain't Markup Language}
-	\item[ZCP] \textit{Zero Crossing Point} (Ponto de Passagem por Zero)
 \end{siglas}
 % ---
 
@@ -96,42 +103,74 @@
 % inserir lista de símbolos
 % ---
 \begin{simbolos}
-	\item[$\alpha, \beta$] Referencial estacionário bidimensional ortogonal (Transformada de Clarke)
+	\item[$\alpha, \beta$] Referencial estacionário ortogonal (Transformada de Clarke)
 	\item[$B$] Coeficiente de atrito viscoso
+	\item[$BL$] Largura da camada limite da função de comutação
+	\item[$C$] Capacitância do ensaio de ressonância
 	\item[$C_P$] Coeficiente de potência da hélice
 	\item[$C_Q$] Coeficiente de torque da hélice
+	\item[$C_r$] Probabilidade de cruzamento da Evolução Diferencial
 	\item[$C_T$] Coeficiente de tração da hélice
+	\item[$d, q$] Referencial síncrono girante (Transformada de Park)
 	\item[$D_{prop}$] Diâmetro da hélice
-	\item[$d, q$] Referencial síncrono girante ortogonal (Transformada de Park)
-	\item[$e_k, e_a, e_b, e_c$] Força contraeletromotriz induzida de fase
-	\item[$\epsilon$] Deformação mecânica unitária (extensometria)
-	\item[$\Gamma_{s1}, \Gamma_{s2}, \Gamma_t$] Ganhos discretizados do observador, invariantes ao passo de amostragem ($\Gamma = K \cdot T_s$)
-	\item[$i_k, i_a, i_b, i_c$] Correntes elétricas de fase
+	\item[$\delta$] Limiar da perda de Huber
+	\item[$\Delta\Gamma$] Desvio de um ganho do observador em relação ao valor ótimo
+	\item[$e_k, e_\alpha, e_\beta$] Força contraeletromotriz de fase e no referencial $\alpha\beta$
+	\item[$\epsilon$] Erro de fase do PLL; espessura da camada limite
+	\item[$F$] Fator de escala da mutação da Evolução Diferencial
+	\item[$f_k, f_\alpha, f_\beta$] Funções de forma normalizadas da força contraeletromotriz
+	\item[$f_r$] Frequência de ressonância
+	\item[$g_{T,q}, g_{\omega,q}$] Erros normalizados de torque e de velocidade no patamar $q$
+	\item[$\Gamma_{s1}, \Gamma_{s2}, \Gamma_t$] Ganhos do observador invariantes ao passo de amostragem ($\Gamma = K\,T_s$)
+	\item[$h$] Ordem do harmônico
+	\item[$i_\alpha, i_\beta$] Correntes no referencial estacionário
+	\item[$i_d, i_q$] Correntes de eixo direto e em quadratura
+	\item[$i_k, i_a, i_b, i_c$] Correntes de fase
 	\item[$J$] Momento de inércia do rotor
+	\item[$J(\mathbf{x})$] Função-custo da otimização
 	\item[$J_{prop}$] Razão de avanço da hélice
-	\item[$K$] \textit{Gauge Factor} (Fator de sensibilidade à deformação)
-	\item[$K_e$] Constante de força contraeletromotriz
-	\item[$K_{s1}, K_{s2}$] Ganhos deslizantes do observador (corrente e força contraeletromotriz)
-	\item[$K_t$] Constante de torque eletromagnético
+	\item[$K_e, k_e$] Constante de força contraeletromotriz
+	\item[$k_Q$] Coeficiente de carga da hélice ($T = k_Q\,\omega^2$)
+	\item[$K_{s1}, K_{s2}, K_t$] Ganhos discretos do observador
 	\item[$K_v$] Constante de velocidade do motor
-	\item[$L, L_s$] Indutância própria / indutância síncrona da fase
+	\item[$L_{LL}$] Indutância medida entre dois terminais
+	\item[$L_s, L_Y$] Indutância síncrona de fase (modelo em estrela)
+	\item[$\lambda_m$] Fluxo concatenado do ímã permanente
+	\item[$\ell_\delta$] Perda de Huber
+	\item[$N$] Número de espiras no núcleo do sensor de corrente
+	\item[$N_p$] Tamanho da população da Evolução Diferencial
+	\item[$n_{prop}$] Rotação da hélice
+	\item[$\Omega$] Região de busca da otimização
 	\item[$P$] Passo da hélice (\textit{pitch})
-	\item[$p$] Número de pares de polos da máquina
-	\item[$P_s$] Pressão estática local do escoamento
-	\item[$P_t$] Pressão de estagnação (\textit{impacto})
-	\item[$R, R_s$] Resistência elétrica do enrolamento de fase
-	\item[$R_{ar}$] Constante específica do ar ideal
-	\item[$\rho$] Densidade volumétrica do ar
-	\item[$T_e, \tau_e$] Torque eletromagnético gerado
-	\item[$T_L, \tau_L$] Torque de carga mecânica
-	\item[$T_{prop}$] Força de tração gerada pela hélice
-	\item[$T_s$] Período de amostragem de tempo discreto
-	\item[$\tau_c$] Torque de atrito de Coulomb
-	\item[$\theta_e$] Posição angular elétrica do rotor
-	\item[$v_k, v_a, v_b, v_c$] Tensões elétricas aplicadas aos terminais de fase
-	\item[$V_\infty$] Velocidade de escoamento livre do fluido
+	\item[$p$] Número de pares de polos
+	\item[$P_{atm}$] Pressão atmosférica
+	\item[$\Phi_i, \Phi_e$] Coeficientes de transição do observador discreto
+	\item[$\varphi_0$] Fase inicial do ângulo elétrico
+	\item[$R_{ar}$] Constante específica do ar
+	\item[$R_{LL}$] Resistência medida entre dois terminais
+	\item[$r_n$] Resíduo entre estimativa e referência
+	\item[$R_s, R_Y$] Resistência de fase (modelo em estrela)
+	\item[$\mathrm{Re}\{\cdot\}, \mathrm{Im}\{\cdot\}$] Partes real e imaginária
+	\item[$\rho$] Densidade do ar
+	\item[$S, S_H$] Sensibilidade do conjunto núcleo--sensor e do elemento Hall
+	\item[$\mathrm{Sat}(\cdot)$] Função de saturação (comutação do observador)
+	\item[$\sigma$] Desvio-padrão
+	\item[$T$] Temperatura do ar
+	\item[$T_e$] Torque eletromagnético
+	\item[$T_L$] Torque de carga
+	\item[$T_{prop}$] Tração da hélice
+	\item[$T_s$] Período de amostragem do observador
+	\item[$\tau_c$] Torque de atrito seco (Coulomb)
+	\item[$\theta_e$] Ângulo elétrico do rotor
+	\item[$v_\alpha, v_\beta$] Tensões no referencial estacionário
+	\item[$\dot{V}_h, \dot{I}_h, \dot{E}_h$] Fasores de tensão, corrente e força contraeletromotriz do harmônico $h$
+	\item[$V_\infty$] Velocidade do escoamento livre
+	\item[$v_k, v_a, v_b, v_c$] Tensões de fase
+	\item[$w_T, w_\omega$] Pesos dos termos de torque e de velocidade na função-custo
 	\item[$\omega_e$] Velocidade angular elétrica
 	\item[$\omega_m$] Velocidade angular mecânica do rotor
+	\item[$\mathbf{x}$] Vetor de variáveis de decisão da otimização
+	\item[$X_{L,h}$] Reatância indutiva no harmônico $h$
 \end{simbolos}
 % ---
 % ---
