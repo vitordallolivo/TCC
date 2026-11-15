@@ -5,7 +5,7 @@ As tensões e correntes de fase do motor, de onde o observador por modos
 deslizantes (SMO) estima rotação e torque, passam por uma placa de
 condicionamento própria, a AQ1, por onde passam as três fases do motor; o
 roteamento dela está na \autoref{fig:pcb_same}. A cadeia de medição foi
-dividida em dois caminhos independentes --- corrente e tensão de fase ---,
+dividida em dois caminhos independentes, corrente e tensão de fase,
 cada um projetado para entregar ao conversor analógico-digital (ADC) do
 CH32V307 um sinal na faixa de entrada do periférico, preservando a coerência
 de fase entre os dois caminhos exigida pelo observador
@@ -173,9 +173,9 @@ f_c = \frac{1}{2\pi \left(R_1 \parallel R_2\right) C}
 
 \noindent
 Com $R_1 = \SI{100}{\kilo\ohm}$ e $R_2 = \SI{5,6}{\kilo\ohm}$ resulta
-$k = 0{,}0530$, o que coloca o fundo de escala da medição em \SI{62,2}{\volt} ---
+$k = 0{,}0530$, o que coloca o fundo de escala da medição em \SI{62,2}{\volt}
 pouco mais do dobro da tensão de barramento, folga adotada para o sobressinal de
-comutação --- e a resolução em \SI{15,2}{\milli\volt} por LSB. Com
+comutação, e a resolução em \SI{15,2}{\milli\volt} por LSB. Com
 $C = \SI{1,5}{\nano\farad}$, a frequência de corte fica em \SI{20}{\kilo\hertz}.
 
 A resistência equivalente do divisor é de \SI{5,30}{\kilo\ohm}, abaixo do limite
@@ -218,9 +218,9 @@ V_{out} = S_H\,B + V_O
 onde $S_H$ é a sensibilidade do elemento e $V_O$ a tensão de saída na
 ausência de campo.
 
-Dentre as técnicas de medição de corrente disponíveis --- \textit{shunt}
+Dentre as técnicas de medição de corrente disponíveis (\textit{shunt}
 resistivo, transformador de corrente, bobina de Rogowski e sensores por
-efeito Hall --- a escolha por um núcleo concentrador com elemento Hall em
+efeito Hall), a escolha por um núcleo concentrador com elemento Hall em
 malha aberta é a que melhor concilia isolação galvânica, resposta em
 corrente contínua e custo para esta aplicação \cite{ziegler2009}. O
 elemento fica no entreferro do núcleo toroidal NT-27/16/12-100-IP6
@@ -293,8 +293,8 @@ grandeza de interesse é a corrente no condutor primário, o que exige também
 a relação entre a corrente e a densidade de fluxo efetivamente vista pelo
 elemento Hall dentro do entreferro. Essa relação é obtida a partir do fator
 de indutância $A_l$ informado pelo fabricante do núcleo, que já contabiliza
-a dispersão de fluxo nas bordas do entreferro --- efeito conhecido como
-\textit{fringing field} \cite{dewi2016} --- e é por isso adotado como
+a dispersão de fluxo nas bordas do entreferro, efeito conhecido como
+\textit{fringing field} \cite{dewi2016}, e é por isso adotado como
 parâmetro de projeto em detrimento do cálculo puramente geométrico da
 relutância. Para o NT-27/16/12-100-IP6, $A_l = \SI{100}{\nano\henry}$ com
 tolerância de $\pm\SI{15}{\percent}$, área efetiva
@@ -422,7 +422,7 @@ $N = 4$ e $N = 8$, com espiras enroladas externamente ao toróide.
 \end{figure}
 
 A faixa varrida foi de 0 a \SI{5,33}{\ampere}, limite da instrumentação, o
-que alcança \SI{516}{\gauss} na configuração de oito espiras --- pouco mais
+que alcança \SI{516}{\gauss} na configuração de oito espiras, pouco mais
 da metade da faixa magnética típica do elemento.
 
 Durante a coleta observou-se deriva na tensão de alimentação do sensor, que
@@ -502,7 +502,7 @@ A aquisição é feita em lotes: o controlador de acesso direto à memória (DMA
 enche metade de um \textit{buffer} enquanto o processador trata a outra
 metade. A cada lote completo, a interrupção do DMA apenas copia o lote e
 acorda uma fila de trabalho dedicada à aquisição, de prioridade maior que a
-leitura das células de carga e que a fila do OSSI, mas menor que a da rede. Essa
+fila do OSSI, mas menor que a da rede. Essa
 fila converte cada quadro em grandezas físicas, aplica a transformada de
 Clarke e executa um passo do SMO e do PLL por quadro, como resume a
 \autoref{fig:sequencia_same}. Só o resultado, de tempos em tempos, é entregue
@@ -553,7 +553,7 @@ seguinte, que verifica esse sinalizador e, havendo alteração pendente,
 recalcula as constantes de discretização e \textbf{zera todo o estado interno}
 do observador (correntes e BEMF estimadas, integrador do PLL). Zerar o estado
 evita que o observador continue acumulando, junto de constantes novas, um
-regime transitório calculado com as constantes antigas --- o que produziria um
+regime transitório calculado com as constantes antigas, o que produziria um
 transitório artificial na estimativa, passível de ser confundido com um evento
 real do motor. Antes de liberar o observador, a placa levanta o zero dos
 sensores de corrente com o motor parado, logo após ligar, e recusa o resultado
@@ -566,5 +566,5 @@ elétricas, parâmetros físicos do motor (pares de polos, resistência,
 indutância, $K_v$) e os três ganhos do observador na forma invariante ao
 passo $\Gamma_{s1}$, $\Gamma_{s2}$, $\Gamma_t$ (\autoref{sec:param_smo}). O
 pacote de telemetria devolve as seis grandezas elétricas medidas e as três
-saídas do observador --- rotação, torque eletromagnético e torque na hélice
---- a 10~Hz, junto com os tempos de processamento de cada lote.
+saídas do observador (rotação, torque eletromagnético e torque na hélice)
+a 10~Hz, junto com os tempos de processamento de cada lote.

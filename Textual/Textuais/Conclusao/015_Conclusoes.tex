@@ -1,11 +1,11 @@
 \label{sec:conclusoes}
 
-Neste trabalho foi desenvolvida uma bancada de ensaios de conjuntos
-motopropulsores com motores BLDC, composta por uma placa de medição e por uma
-aplicação de supervisão no computador. O objetivo geral, adaptar a bancada para
-ensaios instrumentados, foi atingido: a bancada mede as grandezas elétricas do
-motor, estima a rotação e o torque no eixo sem sensores mecânicos, aciona o
-motor com segurança e registra os ensaios. Os objetivos específicos foram
+Neste trabalho foi desenvolvido um sistema de aquisição para ensaios de
+conjuntos motopropulsores com motores BLDC, composto por uma placa de medição e
+por uma aplicação de supervisão no computador. O objetivo geral foi atingido:
+o sistema concentra a medição das grandezas elétricas do motor, estima a
+rotação e o torque no eixo sem sensores mecânicos, aciona o motor com
+segurança e registra os ensaios. Os objetivos específicos foram
 cumpridos conforme descrito a seguir.
 
 \begin{enumerate}
@@ -40,8 +40,8 @@ cumpridos conforme descrito a seguir.
     protocolo descrito em um único arquivo de configuração, do qual derivam o
     \textit{firmware} e a aplicação (\autoref{sec:interface}).
 
-    \item \textbf{Software de supervisão:} a aplicação monitora e comanda a
-    bancada, calibra os sensores, ajusta o observador, executa os
+    \item \textbf{Software de supervisão:} a aplicação monitora e comanda o
+    ensaio, calibra os sensores, ajusta o observador, executa os
     procedimentos de estimação e registra os ensaios em CSV, com os ajustes
     gravados na memória não volátil da placa (\autoref{sec:interface}).
 \end{enumerate}
@@ -82,6 +82,12 @@ cumpridos conforme descrito a seguir.
     \item \textbf{Memória e rede:} a RAM ocupada impede um servidor DHCP na
     placa, e a conexão exige configuração manual do computador
     (\autoref{sec:discussao_memoria}).
+    \item \textbf{Sem medição de tração e de velocidade do vento:} as células
+    de carga e o tubo de Pitot não foram montados no sistema. Com as células
+    de carga seria possível obter também o coeficiente de tração $C_T$ das
+    hélices, e com o tubo de Pitot os mesmos ensaios poderiam ser feitos com
+    escoamento, variando a razão de avanço $J$, e não apenas na condição
+    estática.
     \item \textbf{Montagem:} a fiação refeita a cada sessão e as falhas de
     contato consumiram boa parte do tempo de ensaio
     (\autoref{sec:discussao_montagem}).

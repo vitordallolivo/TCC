@@ -8,8 +8,8 @@
 Cada canal de medida da placa converte a leitura do conversor
 analógico-digital em grandeza física por uma reta: o valor medido é o produto
 da tensão presente no pino do conversor por um coeficiente de escala, somado a
-um deslocamento de zero. Os dois números saem do projeto da cadeia --- a
-sensibilidade do sensor e a atenuação do divisor --- e ficam no arquivo de
+um deslocamento de zero. Os dois números saem do projeto da cadeia, a
+sensibilidade do sensor e a atenuação do divisor, e ficam no arquivo de
 configuração compartilhado entre o \textit{firmware} e a aplicação de
 supervisão, de modo que as duas pontas do sistema interpretam a mesma leitura
 da mesma forma.
@@ -66,27 +66,9 @@ A faixa útil da tabela não é folga de projeto: é critério de diagnóstico.
 Leitura fora dela indica sensor saturado, cabo desconectado ou referência
 aberta, e a placa a trata como falha em vez de dado.
 
-O deslocamento de zero recebe tratamento diferente do coeficiente de escala.
-O valor de projeto serve apenas como ponto de partida, porque o repouso do
-sensor de corrente varia de peça para peça e com a temperatura. Nas três
-configurações do ensaio de caracterização (\autoref{apendice:ensaio_hall}), a
-leitura a corrente nula ficou em \SI{2,48570}{\volt}, \SI{2,48640}{\volt} e
-\SI{2,49150}{\volt} --- \SI{5,8}{\milli\volt} de espalhamento, que nesta
-cadeia equivalem a \SI{0,31}{\ampere} de corrente inexistente. O efeito é
-mais grave do que o valor sugere: por ser comum às três fases, esse erro
-atravessa a transformada de Clarke como componente de sequência zero e
-aparece na estimativa de força contraeletromotriz do observador como sinal
-espúrio. Por isso o \textit{firmware} mede o repouso real a cada
-energização, com o ESC parado, e sobrescreve o valor de projeto antes de
-iniciar a aquisição.
-
-Nos ensaios com registro de osciloscópio
-(\autoref{sec:resultado_setup_scope}), as tensões de fase foram medidas pelas
-pontas do osciloscópio, sem passar pelo divisor da placa, e as correntes vieram
-dos sensores da placa; as formas de onda estão na
-\autoref{fig:bancada_smo_alfabeta}. Nos ensaios das hélices
-(\autoref{sec:resultado_coef_aero_bancada}), as duas cadeias foram exercitadas
-com o motor em operação: as tensões lidas pela placa chegaram à tensão do
-barramento da bateria de seis células, cerca de \SI{24}{\volt}, nas três fases,
-e as correntes em repouso ficaram a menos de \SI{0,1}{\ampere} do zero após o
-levantamento automático do deslocamento.
+O deslocamento de zero dos sensores de corrente varia de peça para peça e com
+a temperatura, e um erro comum às três fases aparece na força contraeletromotriz
+estimada como sinal espúrio. Por isso o \textit{firmware} mede o repouso real
+a cada energização, com o controlador parado, e substitui o valor de projeto
+antes de iniciar a aquisição. As duas cadeias foram verificadas com o motor em
+operação nos ensaios das hélices (\autoref{sec:resultado_coef_aero_bancada}).

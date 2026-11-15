@@ -95,15 +95,15 @@ detalhadas a seguir.
 A camada de \textbf{Transporte} define um contrato único de \textit{thread} de
 entrada/saída, implementado de forma distinta para cada protocolo (UDP
 estruturado na placa de medição, Telnet + UDP na bancada simplificada usada para os
-ensaios mecânicos --- \autoref{sec:atrito_viscoso}); a de \textbf{Domínio}
-concentra funções puras --- sem rede, sem \textit{thread}, sem estado global ---
+ensaios mecânicos, \autoref{sec:atrito_viscoso}); a de \textbf{Domínio}
+concentra funções puras, sem rede, sem \textit{thread} e sem estado global,
 que traduzem \textit{bytes} e arquivos YAML em valores com significado físico
 (codificação de pacotes, perfis de motor, transformadas de Clarke/Park); a de
 \textbf{Serviço} orquestra o ciclo de vida das conexões e a execução dos
 \textit{scripts} de estimação em segundo plano; e a de \textbf{Apresentação}
 contém a janela principal, o terminal embutido e os diálogos de calibração.
 Com essa divisão, quem gerencia uma conexão não precisa saber se está falando
-com uma placa por UDP ou por Telnet --- a implementação concreta de cada
+com uma placa por UDP ou por Telnet; a implementação concreta de cada
 protocolo cuida disso isoladamente, e um pacote recebido dispara eventos
 (\textit{callbacks}) que atualizam os \textit{buffers} visuais e os registros
 de \textit{log} sem bloquear a interface gráfica.
@@ -169,8 +169,8 @@ na tela principal.
     Fonte: Autor (2026)
 \end{figure}
 
-Além da barra de menus, a aplicação embute um \textbf{\textit{TinyTerminal}}
---- um terminal de texto que fala com as placas pela mesma rede que o
+Além da barra de menus, a aplicação embute um \textbf{\textit{TinyTerminal}},
+um terminal de texto que fala com as placas pela mesma rede que o
 restante da interface usa, servindo tanto para ações rápidas de diagnóstico
 quanto para inspecionar, em hexadecimal, o pacote exato de cada comando antes
 de enviá-lo. Ao digitar um comando, a \autoref{fig:tinyterminal_fluxo}
@@ -215,7 +215,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- tela principal}
+    \caption{Interface de supervisão: tela principal}
     \label{fig:telas_gui}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui tela principal.png}
     \fonte{Autor (2026)}
@@ -223,7 +223,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- \textit{TinyTerminal}}
+    \caption{Interface de supervisão: \textit{TinyTerminal}}
     \label{fig:gui_tinyterminal}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui tiny terminal.png}
     \fonte{Autor (2026)}
@@ -231,7 +231,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- gerenciador de placas}
+    \caption{Interface de supervisão: gerenciador de placas}
     \label{fig:gui_gerenciador_placas}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui gerenciador de placas.png}
     \fonte{Autor (2026)}
@@ -239,7 +239,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- painel de erros e alarmes}
+    \caption{Interface de supervisão: painel de erros e alarmes}
     \label{fig:gui_erros_alarmes}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui painel erro e alarmes.png}
     \fonte{Autor (2026)}
@@ -247,7 +247,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- configuração de ganho e \textit{offset} dos sensores}
+    \caption{Interface de supervisão: configuração de ganho e \textit{offset} dos sensores}
     \label{fig:gui_sensores}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui ganho e offset.png}
     \fonte{Autor (2026)}
@@ -255,7 +255,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- calibração de célula de carga}
+    \caption{Interface de supervisão: calibração de célula de carga}
     \label{fig:gui_calibrar_celula}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui calibrar celula de carga.png}
     \fonte{Autor (2026)}
@@ -263,7 +263,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- estimação dos ganhos do SMO}
+    \caption{Interface de supervisão: estimação dos ganhos do SMO}
     \label{fig:gui_ganho_smo}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui ganho_smo.png}
     \fonte{Autor (2026)}
@@ -271,7 +271,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- cálculo do coeficiente de tração da hélice}
+    \caption{Interface de supervisão: cálculo do coeficiente de tração da hélice}
     \label{fig:gui_helice}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui calculo coeficiente helice.png}
     \fonte{Autor (2026)}
@@ -279,7 +279,7 @@ diálogos da aplicação.
 
 \begin{figure}[H]
     \centering
-    \caption{Interface de supervisão --- criação de perfil de motor}
+    \caption{Interface de supervisão: criação de perfil de motor}
     \label{fig:gui_criar_motor}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/gui criar motor.png}
     \fonte{Autor (2026)}

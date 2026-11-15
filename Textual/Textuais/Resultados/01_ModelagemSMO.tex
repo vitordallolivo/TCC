@@ -26,9 +26,9 @@ desacelerações.
         Pares de polos          & $p$      & \num{7} \\
         Constante de velocidade & $K_v$    & \num{310} \si{RPM/V} \\
         Momento de inércia      & $J$      & \num{0,0001} \si{kg.m^2} \\
-        Coef. de carga --- APC 15x6E\footnotemark
+        Coef. de carga (APC 15x6E)\footnotemark
                                 & $k_{Q}$  & \num{1,00e-6} \si{N.m/(rad/s)^2} \\
-        Coef. de carga --- APC 17x10E
+        Coef. de carga (APC 17x10E)
                                 & $k_{Q}$  & \num{2,61e-6} \si{N.m/(rad/s)^2} \\
         Tensão do barramento    & $V_{bus}$& \num{30} \si{V} \\
         Período de amostragem   & $T_s$    & \num{10e-6} \si{s} \\
@@ -404,16 +404,8 @@ da \autoref{tab:parametros_simulacao}.
 
 O torque de cada patamar é calculado com as correntes medidas projetadas no
 ângulo estimado (\autoref{eq:torque_corrente_medida}), de modo que o
-observador entra só com o ângulo e a velocidade. O coeficiente estimado
-fica próximo do nominal nas duas hélices, com erro médio de
-\SI{0,45}{\percent} na 15x6E e de \SI{0,32}{\percent} na 17x10E
-(\autoref{tab:resultado_identificacao_cq} e \autoref{fig:patamar_coeff_CQ}).
-O maior desvio, de cerca de \SI{3}{\percent} nas duas, aparece no último
-patamar, logo após a desaceleração de \SIrange{5000}{3000}{RPM}; nos patamares
-de subida o erro fica abaixo de \SI{1}{\percent},
-mesmo com o torque médio dos patamares mais baixos de vinte a trinta vezes
-menor que a amplitude da ondulação do acionamento em seis passos
-(\autoref{fig:desempenho_mecanico}).
+observador entra só com o ângulo e a velocidade
+(\autoref{tab:resultado_identificacao_cq}).
 
 \begin{table}[H]
     \centering
@@ -472,4 +464,12 @@ menor que a amplitude da ondulação do acionamento em seis passos
 
     Fonte: Autor (2026)
 \end{figure}
+
+A \autoref{fig:patamar_coeff_CQ} mostra o coeficiente estimado em cada
+patamar. Ele fica próximo do nominal nas duas hélices, com erro médio de
+\SI{0,45}{\percent} na 15x6E e de \SI{0,32}{\percent} na 17x10E. O maior
+desvio, de cerca de \SI{3}{\percent}, aparece no patamar após a
+desaceleração; nos demais o erro fica abaixo de \SI{1}{\percent}, mesmo
+quando o torque médio é muito menor que a ondulação do acionamento em seis
+passos (\autoref{fig:desempenho_mecanico}).
 

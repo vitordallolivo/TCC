@@ -17,12 +17,12 @@ Para o \textit{firmware}, o \textit{Zephyr RTOS} oferece um alvo de compilação
 alternativo chamado \textit{native\_sim} (\textit{simulação nativa}): em vez de
 gerar um binário para o núcleo RISC-V da placa, o mesmo código de aplicação é
 compilado diretamente para a arquitetura do computador de desenvolvimento e
-roda como um processo comum do Linux --- sem emulação de processador. A rede
+roda como um processo comum do Linux, sem emulação de processador. A rede
 permanece real (o processo abre \textit{sockets} UDP de verdade, em
 \textit{loopback}), e os periféricos físicos ausentes (ADC, PWM do ESC,
 contadores de RPM) são substituídos por geradores de valor sintético dentro do
 mesmo arquivo de \textit{hardware} usado na placa real, sob diretiva de
-compilação condicional --- nunca em uma cópia paralela. Essa prática permitiu
+compilação condicional, nunca em uma cópia paralela. Essa prática permitiu
 encontrar, ainda em desenvolvimento, defeitos de protocolo que só apareceriam
 na integração física: um exemplo concreto foi a divergência do tamanho da
 estrutura de comando (\texttt{CMD}) entre o compilador do microcontrolador
@@ -43,17 +43,23 @@ alterar o restante do código da interface, conforme a
     \caption{Transições entre os modos de conexão da aplicação de supervisão}
     \label{fig:modos_conexao}
     \begin{tikzpicture}[
-        font=\small,
-        box/.style={draw, rounded corners, align=center, minimum height=0.9cm, minimum width=2.6cm},
+        font=\small, >={Latex},
+        estado/.style={draw, thick, rounded corners=6pt, align=center,
+            minimum height=1.25cm, text width=4.8cm, drop shadow={opacity=0.15}},
+        rot/.style={font=\scriptsize, fill=white, inner sep=1.5pt}
     ]
-        \node[box] (sem) {Nenhum \textit{link}\\ativo};
-        \node[box, above right=0.4cm and 2.6cm of sem] (hw) {\textit{Hardware} real};
-        \node[box, right=2.6cm of sem] (mock) {Simulador\\(\textit{mock})};
-        \node[box, below right=0.4cm and 2.6cm of sem] (nat) {\textit{native\_sim}};
+        \node[estado, fill=gray!12, text width=2.8cm, minimum height=2.6cm] (sem)
+            {\textbf{Desconectado}\\{\footnotesize nenhum \textit{link} ativo}};
+        \node[estado, fill=green!15, draw=green!45!black] (hw) at (7.6,1.9)
+            {\textbf{\textit{Hardware} real}\\{\footnotesize placa física, via Ethernet}};
+        \node[estado, fill=blue!12, draw=blue!50!black] (mock) at (7.6,0)
+            {\textbf{Simulador (\textit{mock})}\\{\footnotesize processo no próprio PC}};
+        \node[estado, fill=orange!18, draw=orange!70!black] (nat) at (7.6,-1.9)
+            {\textbf{\textit{native\_sim}}\\{\footnotesize \textit{firmware} compilado para o PC}};
 
-        \draw[<->, thick] (sem) -- (hw) node[midway, above, sloped, font=\tiny]{conectar / desconectar};
-        \draw[<->, thick] (sem) -- (mock) node[midway, above, font=\tiny]{\textit{mock start}/\textit{stop}};
-        \draw[<->, thick] (sem) -- (nat) node[midway, below, sloped, font=\tiny]{\textit{native start}/\textit{stop}};
+        \draw[<->, thick, green!45!black]  ([yshift=0.8cm]sem.east)  -- node[rot, sloped] {conectar / desconectar} (hw.west);
+        \draw[<->, thick, blue!50!black]   (sem.east)                 -- node[rot] {conectar / desconectar} (mock.west);
+        \draw[<->, thick, orange!70!black] ([yshift=-0.8cm]sem.east) -- node[rot, sloped] {conectar / desconectar} (nat.west);
     \end{tikzpicture}
 
     Fonte: Autor (2026)
@@ -74,8 +80,8 @@ Simulador Python (\textit{mock}) & \textit{Thread} que finge o protocolo por cor
 \end{tabular}
 \end{table}
 
-Por fim, todo o código do trabalho --- projetos de \textit{hardware} (KiCad),
-\textit{firmware} (C/Zephyr) e aplicação de supervisão (Python) --- é mantido
+Por fim, todo o código do trabalho (projetos de \textit{hardware} (KiCad),
+\textit{firmware} (C/Zephyr) e aplicação de supervisão em Python) é mantido
 em um único repositório Git, o que simplifica a rastreabilidade de mudanças
 que afetam simultaneamente os dois lados do protocolo de rede
 (\autoref{fig:yaml_example_config}).

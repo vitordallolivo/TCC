@@ -90,20 +90,20 @@ magnética do elemento.
                     (0.00,-0.945)(2.47,3.105)(16.12,18.655)(23.86,29.255)
                     (31.19,38.855)(39.21,48.555)(45.57,55.355)
                     (48.26,58.255)(63.29,76.055)(78.16,93.855)};
-            \addlegendentry{$N=1$ --- \SI[per-mode=symbol]{1,209}{\milli\volt\per\gauss}}
+            \addlegendentry{$N=1$: \SI[per-mode=symbol]{1,209}{\milli\volt\per\gauss}}
             \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
                 coordinates {
                     (0.00,-1.232)(6.26,10.168)(22.02,32.868)(38.45,56.568)
                     (65.49,95.568)(103.07,150.368)(129.86,190.368)
                     (156.40,229.468)(171.53,251.368)(188.16,275.768)
                     (250.42,366.868)(314.85,461.168)(330.48,484.368)};
-            \addlegendentry{$N=4$ --- \SI[per-mode=symbol]{1,465}{\milli\volt\per\gauss}}
+            \addlegendentry{$N=4$: \SI[per-mode=symbol]{1,465}{\milli\volt\per\gauss}}
             \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
                 coordinates {
                     (0.00,0.801)(71.94,95.601)(126.76,168.901)(187.78,250.201)
                     (249.80,333.401)(370.73,493.701)(411.66,548.231)
                     (516.47,690.001)};
-            \addlegendentry{$N=8$ --- \SI[per-mode=symbol]{1,334}{\milli\volt\per\gauss}}
+            \addlegendentry{$N=8$: \SI[per-mode=symbol]{1,334}{\milli\volt\per\gauss}}
         \end{axis}
     \end{tikzpicture}
 
@@ -113,9 +113,9 @@ magnética do elemento.
 Os resíduos do ajuste linear (\autoref{fig:hall_res}) permanecem abaixo de
 \SI{1,24}{\milli\volt} nas três configurações, sem estrutura de curvatura que
 denuncie saturação do ferrite ou compressão do elemento Hall no extremo da
-faixa varrida. Referido ao \textit{span} completo do elemento --- os
+faixa varrida. Referido ao \textit{span} completo do elemento (os
 \SI{2,8}{\volt} correspondentes a $\pm\SI{1000}{\gauss}$ com a sensibilidade
-medida ---, esse desvio equivale a \SI{0,04}{\percent}, muito abaixo da
+medida), esse desvio equivale a \SI{0,04}{\percent}, muito abaixo da
 linearidade de $-\SI{0,7}{\percent}$ do \textit{span} especificada em
 catálogo.
 
@@ -191,7 +191,7 @@ Hall obtida dividindo $S$ pelo gradiente $N\,\mathrm{d}B/\mathrm{d}I$ da
 
 As três configurações resultam em sensibilidade dentro da faixa especificada
 pelo fabricante (\SIrange{1,00}{1,75}{\milli\volt\per\gauss}), com média de
-\SI{1,336}{\milli\volt\per\gauss} --- desvio de $-\SI{4,6}{\percent}$ frente
+\SI{1,336}{\milli\volt\per\gauss}, desvio de $-\SI{4,6}{\percent}$ frente
 ao típico. A tensão de repouso medida, entre \SI{2,487}{\volt} e
 \SI{2,491}{\volt} nas três coletas, também se enquadra na faixa de catálogo
 (\SIrange{2,25}{2,75}{\volt}).
@@ -212,10 +212,10 @@ de dispersão distinto. A qualidade do ajuste dentro de cada configuração
 não ruído de medição.
 
 A consequência prática é que o artifício de $N$ espiras é válido para verificar
-a linearidade e situar o sensor na faixa de catálogo --- o que foi feito ---
+a linearidade e situar o sensor na faixa de catálogo, o que foi feito,
 mas não substitui a calibração na topologia de uso. O ganho do sensor adotado
 para o projeto é o da configuração $N = 1$,
-\SI{18,75}{\milli\volt\per\ampere} --- valor sobre o qual o estágio de
+\SI{18,75}{\milli\volt\per\ampere}, valor sobre o qual o estágio de
 condicionamento do caminho de corrente foi dimensionado
 (\autoref{sec:same_sensor_corrente}), já que a saída do sensor, centrada em
 \SI{2,5}{\volt}, não pode ser levada direto ao ADC de \SI{3,3}{\volt}.

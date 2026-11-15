@@ -1,8 +1,8 @@
-\section{Motor BLDC e Estratégias de Estimação}
+\section{Modelagem do Motor BLDC}
 
-Os motores de corrente contínua sem escovas (\textit{Brushless Direct Current} --- BLDC) são amplamente utilizados em aplicações que exigem alta eficiência e elevada densidade de potência, características essenciais para sistemas de propulsão elétrica embarcados \cite{Krishnan2017}. Diferentemente dos motores CC convencionais com escovas, a comutação nos motores BLDC é realizada eletronicamente por meio de um inversor de potência, o que elimina o desgaste mecânico das escovas e reduz significativamente a interferência eletromagnética gerada durante a operação \cite{Fitzgerald2014}.
+Os motores de corrente contínua sem escovas (\textit{Brushless Direct Current}, BLDC) são amplamente utilizados em aplicações que exigem alta eficiência e elevada densidade de potência, características essenciais para sistemas de propulsão elétrica embarcados \cite{Krishnan2017}. Diferentemente dos motores CC convencionais com escovas, a comutação nos motores BLDC é realizada eletronicamente por meio de um inversor de potência, o que elimina o desgaste mecânico das escovas e reduz significativamente a interferência eletromagnética gerada durante a operação \cite{Fitzgerald2014}.
 
-O modelo elétrico por fase de um motor BLDC com enrolamentos em estrela é descrito por um circuito RL associado a uma força contraeletromotriz (FEM) de perfil idealmente trapezoidal \cite{Krishnan2017}, conforme ilustrado na \autoref{fig:bldc_equivalente}. Para uma fase genérica $k \in \{a, b, c\}$, a tensão de fase --- medida entre o terminal e o neutro $n$, e portanto denotada $v_{an}$, $v_{bn}$ e $v_{cn}$ --- é expressa por \eqref{eq:bldc_eletrica}:
+O modelo elétrico por fase de um motor BLDC é descrito por um circuito RL associado a uma força contraeletromotriz (FEM) de perfil idealmente trapezoidal \cite{Krishnan2017}, conforme ilustrado na \autoref{fig:bldc_equivalente}. Para uma fase genérica $k \in \{a, b, c\}$, a tensão de fase, medida entre o terminal e o neutro $n$ e denotada $v_{an}$, $v_{bn}$ e $v_{cn}$, é expressa por \eqref{eq:bldc_eletrica}:
 \begin{equation}
     \begin{cases}
     v_{kn}(t) = R i_k + L \frac{di_k}{dt} + e_k \\ 
@@ -400,7 +400,7 @@ O Observador por Modos Deslizantes (SMO — \textit{Sliding Mode Observer}) fund
         % ── Área sombreada (desenhada antes dos nós) ────────────────────
         \fill[cyan!15, rounded corners=5pt] (0.3,-2.8) rectangle (12.8,2.2);
         \draw[cyan!40, rounded corners=5pt] (0.3,-2.8) rectangle (12.8,2.2);
-        \node[font=\scriptsize, text=gray!70, anchor=north east] at (12.7,2.2)
+        \node[font=\scriptsize, text=gray!70, anchor=north] at (5.5,2.15)
             {Observador Não Linear};
 
         % ── Planta (topo, fora da área sombreada) ───────────────────────
@@ -509,7 +509,7 @@ A função sinal é o caso limite, adotado na formulação original da teoria
 \cite{Utkin1992}: comuta com ganho infinito na origem e leva o erro à
 superfície em tempo finito, mas, sendo descontínua, excita o
 \textit{chattering} quando implementada em tempo discreto \cite{Young1999}. As
-demais trocam a descontinuidade por uma rampa de largura finita --- dentro da
+demais trocam a descontinuidade por uma rampa de largura finita: dentro da
 camada limite o observador passa a se comportar como um estimador de alto
 ganho, e fora dela o chaveamento é recuperado \cite{SlotineLi1991}. Em
 observadores aplicados a máquinas de ímã permanente, a tangente hiperbólica e a

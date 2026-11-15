@@ -1,7 +1,7 @@
 \section{Placa de Medição}
 \label{sec:siba}
 \label{sec:placa_medicao}
-A placa de medição é o nó central da bancada: lê as células de carga, mede as
+A placa de medição é o nó central do sistema de aquisição: mede as
 tensões e correntes de fase do motor e, a partir delas, estima rotação e torque
 com o observador; aciona o controlador eletrônico de velocidade (ESC) e os
 relés de potência; concentra as verificações de segurança; e coordena a rede de
@@ -34,7 +34,7 @@ demanda: dispensa conversores de sinal intermediários, como adaptadores
 UART-TTL (\textit{Universal Asynchronous Receiver/Transmitter} e \textit{Transistor-Transistor Logic}, e equipamentos dedicados de maior porte, uma vez que a maior parte dos
 computadores e \textit{notebooks} dispõe nativamente de conexão de rede cabeada, além de facilidade adicionar futuras demandas não esperadas neste trabalho.
 
-\subsection{Sistema Operacional --- Vcore}
+\subsection{Sistema Operacional Vcore}
 \label{sec:vcore}
 
 O \textit{firmware} da placa de medição é estruturado em camadas lógicas,
@@ -43,8 +43,8 @@ aplicação, que nos sistemas embarcados costuma ficar no próprio
 microcontrolador, foi deslocada para o computador: as rotinas de ensaio, os
 procedimentos de calibração e de estimação, os gráficos e o registro em CSV
 são executados pela aplicação de supervisão (\autoref{sec:interface}). A
-placa guarda apenas o que precisa responder em tempo real --- aquisição,
-observador, acionamento e segurança --- e recebe da aplicação comandos
+placa guarda apenas o que precisa responder em tempo real (aquisição,
+observador, acionamento e segurança) e recebe da aplicação comandos
 simples pela rede. Com isso a memória RAM do microcontrolador, já ocupada em
 grande parte pelo Zephyr e pela pilha de rede, fica livre para os
 \textit{buffers} de aquisição e para o observador, e mudar um ensaio não exige
@@ -65,7 +65,7 @@ regravar o \textit{firmware}.
     ]
         % ---------------- computador ----------------
         \node[layer, fill=blue!6, dashed, minimum height=1.9cm] (app) at (0,5.0) {};
-        \node[title] at (app.north) [yshift=-0.3cm] {Application --- aplicação de supervisão (computador)};
+        \node[title] at (app.north) [yshift=-0.3cm] {Application: aplicação de supervisão (computador)};
         \node[mod] at (-4.45,4.75) {Rotinas de\\ensaio};
         \node[mod] at (-2.22,4.75) {Calibração e\\estimação};
         \node[mod] at (0,4.75) {Ajuste do\\observador};
@@ -81,7 +81,7 @@ regravar o \textit{firmware}.
         \node[font=\footnotesize\itshape, anchor=north west] at (mcu.north west) {microcontrolador CH32V307};
 
         \node[layer, fill=black!10] (sys) at (0,1.85) {};
-        \node[title] at (sys.north) [yshift=-0.3cm] {System --- gerenciadores de domínio};
+        \node[title] at (sys.north) [yshift=-0.3cm] {System: gerenciadores de domínio};
         \node[mod] at (-4.45,1.6) {\textit{Battery}\\\textit{Manager}};
         \node[mod] at (-2.22,1.6) {\textit{Propeller}\\\textit{Manager}};
         \node[mod] at (0,1.6) {\textit{Observer}\\\textit{Manager}};
@@ -110,7 +110,7 @@ reaproveitamento de código entre elas. Ela é composta por cinco módulos, deta
 \autoref{fig:Metodologia_Vcore}:
 
 \begin{itemize}
-    \item \textbf{OSSI (\textit{Operating System Standard Interface}):} fila de trabalho única do sistema, que recebe os dados publicados pelo HAL e pelo CMD\_Core e despacha o processamento de lógica para a camada \textit{System} sempre na mesma \textit{thread} (\autoref{fig:arquitetura_fila_unica}).
+    \item \textbf{OSSI (\textit{Operating System Standard Interface}):} fila de trabalho única do sistema, que recebe os dados publicados pelo HAL e pelo CMD\_Core e despacha o processamento para a camada \textit{System} sempre na mesma tarefa (\autoref{fig:arquitetura_fila_unica}).
     \item \textbf{NCI (\textit{Network Core Interface}):} gerenciador do \textit{socket} UDP, responsável pela recepção e pela transmissão de pacotes com latência minimizada.
     \item \textbf{HAL (\textit{Hardware Abstraction Layer}):} interface direta com os periféricos do microcontrolador (como o ADC operando via DMA para leituras analógicas em \textit{background}), isolando os registradores físicos das camadas superiores.
     \item \textbf{CMD\_Core:} interpretador central que recebe os pacotes binários brutos entregues pelo NCI, valida as instruções e as encaminha ao OSSI para despacho.
@@ -143,29 +143,20 @@ reaproveitamento de código entre elas. Ela é composta por cinco módulos, deta
 
 Já a camada \textit{System} concentra os gerenciadores de domínio (bateria,
 hélice, segurança, telemetria e o observador SMO), sem
-nenhuma \textit{thread} própria --- eles são chamados diretamente pela função
+nenhuma \textit{thread} própria: eles são chamados diretamente pela função
 de despacho do OSSI, conforme detalhado adiante para a placa de medição
-(\autoref{sec:siba}). Por fim, a camada
-\textit{Application} opera isolada no \textit{User Space}, restrita ao
-barramento OSSI para qualquer interação com as camadas inferiores.
+(\autoref{sec:siba}). A camada
+\textit{Application} fica no computador, na aplicação de supervisão.
 
-A alternativa mais direta ao problema de várias fontes de evento concorrentes
---- uma \textit{thread} própria por sensor, cada uma alterando diretamente as
-variáveis compartilhadas --- foi descartada por expor o sistema a condições de
-corrida e à necessidade de um \textit{mutex} por variável compartilhada, com o
-consequente risco de \textit{deadlock} entre travas tomadas em ordens
-diferentes por \textit{threads} diferentes. Adotou-se, em seu lugar, o padrão
-de \textit{thread} única de processamento ilustrado na
-\autoref{fig:arquitetura_fila_unica}: as únicas \textit{threads} que
-permanecem bloqueando à espera de um evento externo são as que dependem
-diretamente de periférico ou de rede (leitura de ADC, \textit{bit-banging} de
-sensor, recepção UDP); ao terminarem, elas apenas empacotam o valor lido em
-uma fila de dados (\texttt{k\_msgq}) e delegam todo o processamento de lógica
---- atualização de telemetria, verificação de segurança, despacho de comando
---- à fila de trabalho única (\texttt{k\_work\_q}), que executa sempre na
-mesma \textit{thread}. Por construção, dois gerenciadores de domínio nunca
-executam simultaneamente disputando o mesmo estado, o que dispensa \textit{mutex} entre
-eles.
+Para evitar que vários eventos alterem as mesmas variáveis ao mesmo tempo, o
+processamento da placa é concentrado em uma única fila de trabalho, a do OSSI
+(\autoref{fig:arquitetura_fila_unica}). Os eventos externos, como uma amostra
+processada, um comando recebido ou o instante de enviar a telemetria, apenas
+colocam um item nessa fila, e os gerenciadores de domínio são executados um de
+cada vez, na mesma tarefa. Assim, dois gerenciadores nunca disputam o mesmo
+estado, e não são necessárias travas entre eles. A única exceção é a
+aquisição das fases, que tem fila própria de maior prioridade
+(\autoref{sec:same_firmware}).
 
 \begin{figure}[H]
     \centering
@@ -173,29 +164,35 @@ eles.
     \label{fig:arquitetura_fila_unica}
     \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[
-        node distance=0.9cm and 1cm,
-        font=\small,
-        box/.style={draw, rounded corners, align=center, minimum height=0.9cm, minimum width=2.2cm},
-        arrow/.style={-{Latex}, thick}
+        font=\small, >={Latex},
+        box/.style={draw, rounded corners, align=center, minimum height=1.1cm, text width=2.8cm, fill=white},
+        src/.style={box, fill=black!6},
+        ossi/.style={box, fill=yellow!20, thick, text width=2.6cm, minimum height=4.4cm},
+        arrow/.style={->, thick},
+        rot/.style={font=\scriptsize, fill=white, inner sep=1pt}
     ]
-        \node[box] (hw) {Periférico\\(ADC, HX711, \dots)};
-        \node[box, right=of hw] (thr) {\textit{Thread}\\bloqueante};
-        \node[box, right=of thr] (msgq) {Fila de dados\\(\texttt{k\_msgq})};
-        \node[box, right=of msgq] (wq) {Fila de trabalho\\única (\texttt{k\_work\_q})};
-        \node[box, above right=0.5cm and 1cm of wq] (mgrs) {Gerenciadores\\de domínio};
-        \node[box, below right=0.5cm and 1cm of wq] (nci) {NCI\\(rede UDP)};
-        \node[box, right=of nci] (pc) {Aplicação\\de PC};
-        \node[box, below=of msgq] (cmdq) {Fila de\\comandos};
+        % fontes de evento e primeiro tratamento
+        \node[src] (adc) at (0,1.8)   {Conversor\\(ADC + DMA)};
+        \node[box] (acq) at (4.4,1.8) {Fila de aquisição\\{\footnotesize Clarke, SMO e PLL}};
+        \node[src] (tmr) at (0,0)     {Temporizador\\(\SI{10}{\hertz})};
+        \node[box] (rx)  at (4.4,-1.8) {Recepção (NCI)\\{\footnotesize interpretação (CMD\_Core)}};
+        % OSSI
+        \node[ossi] (wq) at (8.6,0) {\textbf{OSSI}\\[2pt]fila de\\trabalho única};
+        \node[src] (net) at (8.6,-3.9) {Rede\\(UDP)};
+        % gerenciadores e envio
+        \node[box] (mgr) at (12.8,1.2) {Gerenciadores\\de domínio};
+        \node[box] (tx)  at (12.8,-1.2) {\textit{Log Manager}\\{\footnotesize envio UDP (NCI)}};
+        \node[src] (pc)  at (17.0,-1.2) {Aplicação\\de supervisão};
 
-        \draw[arrow] (hw) -- (thr);
-        \draw[arrow] (thr) -- (msgq);
-        \draw[arrow] (msgq) -- (wq);
-        \draw[arrow] (wq) -- (mgrs);
-        \draw[arrow] (wq) -- (nci);
-        \draw[arrow] (nci) -- (pc);
-        \draw[arrow] (pc) -- (nci);
-        \draw[arrow] (nci) |- (cmdq);
-        \draw[arrow] (cmdq) -- (wq);
+        \draw[arrow] (adc) -- (acq);
+        \draw[arrow] (acq.east) -- node[rot, above] {resultados} (acq.east -| wq.west);
+        \draw[arrow] (tmr.east) -- node[rot, above, pos=0.25] {telemetria} (tmr.east -| wq.west);
+        \draw[arrow] (rx.east) -- node[rot, above] {comando} (rx.east -| wq.west);
+        \draw[arrow] (net.west) -| (rx.south);
+        \draw[arrow] (mgr.west -| wq.east) -- (mgr.west);
+        \draw[arrow] (tx.west -| wq.east) -- (tx.west);
+        \draw[arrow] (tx) -- (pc);
+        \draw[arrow, dashed] (pc.south) |- node[rot, pos=0.75, above] {comandos} (net.east);
     \end{tikzpicture}%
     }
 
@@ -209,18 +206,14 @@ A placa usa o microcontrolador CH32V307VCT6
 comercial, soldada sobre uma placa perfurada que recebe os conectores dos
 sensores, dos relés e da alimentação. A \autoref{fig:pinagem_siba} mostra a
 pinagem adotada, desenhada na posição real dos dois conectores da placa de
-desenvolvimento, que é a referência usada na montagem. As doze linhas das
-seis células de carga ocupam a Porta E, que não tem função analógica; os
+desenvolvimento, que é a referência usada na montagem. A Porta E,
+que não tem função analógica, foi reservada para seis células de carga: os
+pinos ficam disponíveis na placa e o \textit{firmware} já tem suporte à
+leitura, mas a montagem das células e a medição da tração da hélice não fazem
+parte do escopo deste trabalho. Os
 pinos analógicos das Portas A e C ficam para os dois conversores, em modo
 dual simultâneo, e recebem as três correntes e as três tensões de fase vindas
 da placa de condicionamento (\autoref{sec:same}).
-
-Os circuitos analógicos previstos para esses pinos --- termistores e
-medição de tensão e corrente da bateria --- não foram montados
-nesta versão, por limitação de tempo de montagem. Seus pinos foram
-reaproveitados pela medição das fases, e o \textit{firmware} desliga as
-verificações de segurança que dependiam dessas grandezas, de modo que nenhum
-alarme é disparado sobre algo que não está sendo medido.
 
 \begin{figure}[H]
     \centering
@@ -279,17 +272,17 @@ serializar e desserializar um comando que nunca sai da placa.
     Fonte: Autor (2026)
 \end{figure}
 
-A camada \textit{System} concentra a lógica de negócios do sistema --- os
+A camada \textit{System} concentra a lógica de negócios do sistema: os
 gerenciadores de domínio listados a seguir, sem nenhuma \textit{thread}
 própria: eles são chamados diretamente pela função de despacho da fila de
 trabalho única do OSSI (\autoref{sec:vcore}), nunca ao mesmo
 tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição desses gerenciadores:
 
 \begin{itemize}
-    \item \textbf{\textit{Propeller Manager}:} Gerencia os parâmetros da hélice: o acelerador solicitado ao ESC, limitado conforme a corrente, e o cálculo de tração via célula de carga.
+    \item \textbf{\textit{Propeller Manager}:} Gerencia os parâmetros da hélice: o acelerador solicitado ao ESC, limitado conforme a corrente.
     \item \textbf{\textit{Observer Manager}:} Executa o observador por modos deslizantes com o PLL (\autoref{sec:same_firmware}), estimando rotação e torque a partir das tensões e correntes de fase.
-    \item \textbf{\textit{Battery Manager}:} Realiza o monitoramento da interface de alimentação, processando dados de tensão e corrente para estimativa de potência de entrada.
-    \item \textbf{\textit{Security Manager}:} Monitora continuamente os limites de operação (como sobrecorrente ou temperaturas críticas), garantindo o desligamento ou limitação de potência em situações de risco.
+    \item \textbf{\textit{Battery Manager}:} Comanda a energização do conjunto, fechando o relé de pré-carga e depois o de potência, e o desligamento, abrindo os dois.
+    \item \textbf{\textit{Security Manager}:} Verifica as tensões e correntes de fase (sobrecorrente e leitura fora da faixa), o estado do observador (divergência e rotação implausível) e a parada de emergência, desligando o motor em situação de risco.
     \item \textbf{\textit{Log Manager}:} Responsável pela telemetria do sistema. Emprega a técnica de agregação de dados (\textit{batching}) para empacotar respostas de comandos e leituras de sensores em um único vetor, otimizando o uso da banda de rede ao enviar os dados de volta para a estação de controle.
 \end{itemize}
 
@@ -318,16 +311,9 @@ tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição 
     Fonte: Autor (2026)
 \end{figure}
 
-Aplicando o padrão de fila de trabalho única descrito na
-\autoref{sec:vcore} (\autoref{fig:arquitetura_fila_unica}), a
-placa implementa apenas duas \textit{threads} que de fato bloqueiam esperando
-\textit{hardware} ou rede --- a leitura das células de carga e a recepção
-UDP ---, ambas com prioridade Zephyr numérica mais baixa (menos precedência)
-que a fila de trabalho única do OSSI. A aquisição das fases tem fila
-própria, tratada na \autoref{sec:same_firmware}. A
-\autoref{fig:sequencia_siba} resume os dois caminhos que convergem nessa fila
---- um sensor lido virando telemetria, e um comando recebido virando ação ---
-deixando explícito que os dois nunca rodam ao mesmo tempo.
+A \autoref{fig:sequencia_siba} resume os dois caminhos que convergem na
+fila do OSSI, um valor medido virando telemetria e um comando recebido
+virando ação, que nunca são executados ao mesmo tempo.
 
 \begin{figure}[H]
     \centering
@@ -370,20 +356,35 @@ deixando explícito que os dois nunca rodam ao mesmo tempo.
     Fonte: Autor (2026)
 \end{figure}
 
-No caminho do sensor, o \textit{Log Manager} e o \textit{Security Manager}
-são chamados \textbf{sempre}, enquanto o \textit{Battery Manager} e o
-\textit{Propeller Manager} só são chamados quando o valor lido pertence a
-eles (tensão/corrente/temperatura da bateria, ou corrente do motor/célula de
-carga, respectivamente).
+Os comandos seguem o formato genérico da \autoref{fig:yaml_example_config};
+os disponíveis na placa estão na \autoref{tab:comandos_placa}. No sentido
+inverso, a telemetria reúne todas as condições de alarme em um único campo de
+32 bits, com um bit por condição.
 
-O comando (\texttt{CMD}) segue o formato genérico apresentado na
-\autoref{fig:yaml_example_config}, com o campo \texttt{function} selecionando
-entre parada de emergência, ajuste de calibração de sensor, solicitação de
-\textit{throttle} (limitada pelo \textit{Propeller Manager}) e ajuste de
-parâmetros de bateria. Em sentido inverso, o pacote de telemetria concentra
-todas as condições de alarme --- SOC baixo, sobrecorrente, temperatura
-excessiva --- em um único campo de 32 bits com um bit por condição, evitando a
-necessidade de um campo booleano dedicado a cada novo alarme criado ao longo
-do desenvolvimento.
+\begin{table}[H]
+    \centering
+    \caption{Comandos aceitos pela placa de medição}
+    \label{tab:comandos_placa}
+    \small
+    \begin{tabular}{lp{10.5cm}}
+        \toprule
+        \textbf{Comando} & \textbf{Função} \\
+        \midrule
+        Partida     & Arma o conjunto (pré-carga, potência e controlador) ou o desliga \\
+        Parada      & Parada de emergência: desarma o controlador do motor \\
+        Reinício    & Reinicia a placa \\
+        Sensor      & Calibração dos canais e parâmetros do motor e do observador \\
+        Acelerador  & Define o acelerador (0 a \SI{100}{\percent}), limitado pela corrente \\
+        Alimentação & Aciona os relés de alimentação \\
+        \bottomrule
+    \end{tabular}
 
-Por fim, a camada de \textbf{\textit{Application}} opera isolada no \textit{User Space} (espaço de usuário). No ambiente do RTOS \textit{Zephyr} executado na arquitetura RISC-V, este isolamento é garantido por \textit{hardware} através da unidade de Proteção de Memória Física (PMP - \textit{Physical Memory Protection}). Essa restrição de níveis de privilégio assegura que a Aplicação não possua acesso direto aos registradores físicos ou aos endereços de memória restritos das camadas \textit{System} e \textit{Vcore - OS}. Qualquer interação ou requisição para as camadas inferiores ocorre estritamente de forma segura e controlada através do barramento central de comunicação (OSSI), o que garante que eventuais falhas na camada de aplicação não comprometam a estabilidade do núcleo do sistema.
+    \vspace{2pt}
+    {\small Fonte: Autor (2026)}
+\end{table}
+
+Por fim, a camada de \textbf{\textit{Application}} não fica no microcontrolador:
+ela é a aplicação de supervisão no computador (\autoref{sec:interface}), que
+envia comandos e recebe a telemetria pela rede. Essa separação reduz o
+consumo de memória do \textit{firmware}, que mantém apenas o que precisa
+responder em tempo real, e permite mudar os ensaios sem regravar a placa.

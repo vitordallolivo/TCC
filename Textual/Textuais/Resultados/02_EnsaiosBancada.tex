@@ -28,25 +28,11 @@ registradas, já que as três somam zero a cada instante.
     Fonte: Autor (2026)
 \end{figure}
 
-A alimentação do conjunto foi feita por bateria, e não pela fonte de
-rede. Com isso o barramento fica flutuante em relação ao terra da
-instalação, o que evita laço de terra entre a alimentação do motor e a
-referência das pontas de prova do osciloscópio, e elimina a ondulação
-residual da retificação, que apareceria somada às tensões de fase
-medidas. O acionamento coube a dois controladores eletrônicos de
-velocidade distintos, empregados em sessões diferentes de ensaio: um Castle
-Talon de \SI{90}{\ampere} e um Flycolor de \SI{150}{\ampere}.
-
-O motor tem os enrolamentos ligados em estrela e não traz o ponto neutro
-acessível externamente: só os três terminais de fase saem da carcaça.
-Como as tensões de fase precisam ser medidas em relação ao neutro, ele foi
-reconstruído por fora com três resistores de mesmo valor, um por fase,
-unidos em um nó comum. Sendo iguais as resistências e equilibrado o
-sistema, esse nó reproduz o potencial do neutro do enrolamento e serve de
-referência para as pontas de prova, técnica corrente na medição de
-máquinas em estrela com neutro inacessível \cite{nidec_neutral_point}. O
-valor dos resistores é alto frente à impedância de fase, de modo que a
-corrente desviada pelo divisor é desprezível diante da corrente do motor.
+O motor foi acionado por dois controladores distintos, em ensaios
+diferentes: um Castle Talon de \SI{90}{\ampere} e um Flycolor de
+\SI{150}{\ampere}. Como o neutro do motor não é acessível, ele foi
+reconstruído com três resistores iguais unidos em um nó comum, que serve de
+referência para as pontas de prova \cite{nidec_neutral_point}.
 A \autoref{fig:setup_picoscope_fisico} mostra a montagem física do ensaio.
 
 
@@ -62,19 +48,9 @@ A \autoref{fig:setup_picoscope_fisico} mostra a montagem física do ensaio.
 \subsection{Coeficientes Mecânicos}
 \label{sec:resultado_coef_mec}
 
-O levantamento das perdas mecânicas foi feito com o motor girando em vazio,
-na montagem improvisada descrita na \autoref{sec:resultado_setup_scope}.
-Foram registrados \num{19} patamares de rotação, de
-\SI{130}{\radian\per\second} a \SI{705}{\radian\per\second}. Sem carga no
-eixo, todo o torque desenvolvido é gasto nas perdas, de modo que o torque
-medido em regime permanente é o próprio torque de perdas. Como a montagem
-não dispõe de transdutor de torque, ele foi obtido pelo balanço de potência
-por fase: a potência elétrica que entra no enrolamento, descontada a
-dissipação resistiva, dividida pela velocidade mecânica. Esse caminho de
-cálculo não exige conhecer a forma de onda da força contraeletromotriz, a
-constante de FEM nem o ângulo do rotor, e é portanto independente do
-observador avaliado na \autoref{sec:resultado_smo_bancada}. Os pontos
-experimentais estão tabelados no \autoref{apendice:bancada}
+As perdas foram obtidas em \num{19} patamares de rotação a vazio, com o
+torque calculado pelo balanço de potência por fase, independente do
+observador. Os pontos estão no \autoref{apendice:bancada}
 (\autoref{tab:bancada_patamares}).
 
 A \autoref{fig:bancada_te_omega} apresenta os pares
@@ -114,26 +90,15 @@ remanescente é da ordem da dispersão entre patamares.
     Fonte: Autor (2026)
 \end{figure}
 
-Chama a atenção o valor de $\tau_c$, alto para um motor deste porte se
-interpretado apenas como atrito de Coulomb dos rolamentos. Uma explicação
-plausível é a perda por histerese no ferro do estator: ela cresce
-proporcionalmente à rotação e, portanto, aparece na regressão como um torque
-constante, somando-se ao atrito seco. Sob essa leitura, os dois coeficientes
-não seriam grandezas puramente mecânicas --- $\tau_c$ reuniria o atrito seco
-dos rolamentos e a histerese, e $B$ reuniria o atrito viscoso, a ventilação e
-a perda por corrente parasita. Para o uso pretendido, que é prever o torque de
-perdas a ser descontado na estimação, o modelo agregado atende, pois o que
-interessa é a soma das perdas independentes de carga.
+O valor de $\tau_c$ é alto para atrito de rolamentos, o que sugere que ele
+inclui também a perda por histerese no ferro, que aparece na regressão como
+um torque constante. Para descontar as perdas na estimação, o modelo agregado
+é suficiente.
 
-A medida de rotação, da qual todo o levantamento depende, foi conferida
-contra a frequência elétrica extraída das tensões de fase. Sobre \num{267}
-registros, o desvio médio entre as duas leituras é
-$-7{,}9\times10^{-4}\,\%$, com desvio padrão de $3{,}7\times10^{-2}\,\%$
-(\autoref{fig:bancada_tacometro}). O resultado é compatível com um pulso por
-volta no disco do tacômetro e sete pares de polos no rotor, pressupostos
-usados na conversão entre velocidade elétrica e mecânica ao longo do
-trabalho. Esse e os demais valores consolidados do ensaio estão
-reunidos na \autoref{tab:bancada_parametros}, no \autoref{apendice:bancada}.
+A rotação medida pelo tacômetro foi conferida contra a frequência elétrica das
+tensões de fase em \num{267} registros, com desvio médio desprezível
+(\autoref{fig:bancada_tacometro}), compatível com os sete pares de polos usados
+na conversão entre velocidade elétrica e mecânica.
 
 \begin{figure}[H]
     \centering
@@ -144,37 +109,15 @@ reunidos na \autoref{tab:bancada_parametros}, no \autoref{apendice:bancada}.
     Fonte: Autor (2026)
 \end{figure}
 
-A constante de força contraeletromotriz foi extraída dos mesmos registros,
-pela razão entre a amplitude da FEM e a velocidade elétrica, patamar a
-patamar (\autoref{fig:bancada_ke}). O valor obtido é estável ao longo da
-faixa e equivale a \num{310}~RPM/V, valor próximo da especificação de placa
-do motor.
-
-\begin{figure}[H]
-    \centering
-    \caption{Constante de força contraeletromotriz em função da rotação}
-    \label{fig:bancada_ke}
-    \includegraphics[width=0.9\linewidth]{Textuais/Imgs/Resultados/bancada_ke.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
 \subsection{Projeto das Frequências de Corte do Condicionamento}
 \label{sec:resultado_fc}
 
-Os registros de bancada permitiram fixar por medida, e não por estimativa, a
-frequência de corte dos filtros que antecedem o conversor analógico-digital.
-Sem filtragem, o ruído medido na saída do sensor de corrente é de
-\SI{719}{\milli\ampere} rms (\autoref{tab:bancada_parametros}), cerca de quinze vezes o degrau de quantização do
-conversor: o ruído sozinho ocupa quatro bits da palavra convertida, de modo
-que a filtragem não é um refinamento, e sim condição para que a medida tenha
-resolução útil.
-
-A \autoref{fig:bancada_espectros} mostra os espectros de corrente e de tensão
-com as faixas de interesse assinaladas: a fundamental elétrica, as raias de
-chaveamento do inversor e o patamar de ruído de banda larga que se estende
-muito acima delas. É esse patamar, mais do que o conteúdo útil, que orienta
-a escolha do corte.
+A frequência de corte dos filtros que antecedem o conversor foi definida a
+partir dos registros de bancada. Sem filtragem, o ruído do sensor de corrente
+ocupa cerca de quatro bits do conversor, de modo que o filtro é necessário
+para a medida ter resolução útil. A \autoref{fig:bancada_espectros} mostra os
+espectros de corrente e de tensão, com a fundamental, as raias de chaveamento
+e o ruído de banda larga.
 
 \begin{figure}[H]
     \centering
@@ -282,8 +225,8 @@ Há um limite inferior de operação. A malha de sincronismo responde a
 travar na posição do rotor, porque a amplitude da força contraeletromotriz cai
 com a rotação e o detector de fase perde referência. A velocidade estimada
 continua disponível nessa condição, mas o torque não, já que sua reconstrução
-depende da projeção da corrente sobre o ângulo. Na aplicação pretendida ---
-caracterização de conjuntos motopropulsores em regime de tração --- a faixa de
+depende da projeção da corrente sobre o ângulo. Na aplicação pretendida,
+caracterização de conjuntos motopropulsores em regime de tração, a faixa de
 interesse está acima desse limite, mas ele precisa ser respeitado na partida e
 nas transições de rotação baixa.
 
