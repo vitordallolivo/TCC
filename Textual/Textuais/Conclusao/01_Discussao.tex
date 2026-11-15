@@ -1,0 +1,52 @@
+\section{Discussão dos Resultados}
+\label{sec:discussao}
+
+\subsection{Coeficiente de Torque das Hélices}
+\label{sec:discussao_helices}
+
+O torque e o coeficiente $C_Q$ obtidos em bancada para as hélices APC 15x6E e
+17x10E (\autoref{sec:resultado_coef_aero_bancada}) reproduzem a forma das
+curvas do fabricante, mas ficam acima delas, de \SIrange{16}{20}{\percent} na
+17x10E e de \SIrange{21}{41}{\percent} na 15x6E. Uma diferença dessa ordem não
+se explica por uma causa isolada; os resultados sugerem a soma de três
+parcelas.
+
+A primeira é a própria referência. A tabela do fabricante é resultado de
+simulação, construída a partir de polares dos perfis das pás, e não de ensaio.
+A condição estática ($J = 0$) e as rotações baixas, em que o escoamento sobre
+as pás tem número de Reynolds menor, são justamente as situações em que esse
+tipo de previsão tende a ser menos preciso. A densidade do ar também não foi
+medida no dia: o valor adotado é o do nível do mar a \SI{15}{\celsius}, e um
+ar mais quente reduziria o torque previsto, ampliando a diferença em vez de
+reduzi-la. Além disso, o fabricante simula a hélice em ar livre, enquanto na
+bancada ela gira a menos de um diâmetro de um móvel vizinho
+(\autoref{fig:resultado_montagem_finalizada}); uma superfície tão próxima
+altera o escoamento que a hélice aspira e recircula, e pode modificar o torque
+em relação à condição livre.
+
+A segunda é o modelo de perdas descontado. O torque da hélice é o
+eletromagnético estimado menos as perdas a vazio, $B\,\omega + \tau_c$,
+levantadas em outra sessão de ensaios, com outro controlador e sem a hélice. Na
+rotação mais baixa da 15x6E, a hélice pede cerca de \SI{36}{\milli\newton\meter}
+segundo o fabricante, enquanto as perdas descontadas somam
+\SI{21}{\milli\newton\meter}; uma diferença de \SI{14}{\milli\newton\meter}
+nessas perdas, pequena frente ao torque total, bastaria para eliminar o erro de
+\SI{41}{\percent} daquele ponto. Isso é compatível com o erro ser maior quanto
+menor a rotação, e com o expoente ajustado aos pontos de bancada, \num{1,63} e
+\num{1,76}, ficar abaixo do teórico, de cerca de \num{1,87}: uma parcela de
+perdas subestimada pesa mais nas rotações baixas e achata a curva.
+
+A terceira é a estimativa de torque. O observador calcula o torque a partir
+das correntes que ele próprio estima, e na simulação esse cálculo ficou de
+\SIrange{4}{12}{\percent} acima do torque real com a carga da 17x10E
+(\autoref{sec:autotuning}). Uma estimativa independente do observador ajuda a
+separar essa parcela: a potência elétrica entregue ao motor, calculada
+diretamente das tensões e correntes medidas pela placa, dividida pela
+velocidade, levou a um torque de hélice cerca de \SI{18}{\percent} acima do
+fabricante com a 15x6E a \SI{2930}{RPM}, contra \SI{25}{\percent} do observador
+em rotação semelhante. Embora essa estimativa seja ruidosa, com poucas amostras
+por patamar, ela sugere que a maior parte da diferença não vem do observador, e
+sim da hélice real ou das perdas, com o observador acrescentando alguns pontos
+percentuais. O ajuste do ganho dos sensores de corrente ao divisor
+efetivamente montado, de \SI{9,1}{\kilo\ohm}, também elevou os valores em
+\SI{3,2}{\percent}.

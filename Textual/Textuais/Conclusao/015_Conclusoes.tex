@@ -1,0 +1,64 @@
+\section{Conclusões}
+\label{sec:conclusoes}
+
+Este trabalho desenvolveu um sistema integrado de aquisição para a bancada de
+ensaios de conjuntos motopropulsores da equipe Albatroz Aerodesign, reunindo
+em uma placa de medição a aquisição das grandezas elétricas do motor, a
+estimação de rotação e torque por um observador por modos deslizantes, o
+acionamento do motor e a segurança, e em uma aplicação de computador a
+supervisão e o registro dos ensaios. Os objetivos específicos são retomados a
+seguir.
+
+O sistema de medição do motor foi projetado e construído: a placa de
+condicionamento das fases leva as três tensões e as correntes de duas fases,
+medidas por sensores de efeito Hall com núcleo toroidal, aos dois conversores
+do microcontrolador, amostradas aos pares no mesmo instante, a
+\SI{111}{\kilo\hertz}. O conjunto núcleo--sensor foi caracterizado em bancada,
+e as cadeias de tensão e corrente foram dimensionadas para a faixa do
+conversor, com filtros de mesma frequência de corte nos dois ramos. Nos
+ensaios com o motor em rotação, as tensões lidas pela placa alcançaram a do
+barramento nas três fases e as correntes em repouso ficaram próximas de zero
+após o levantamento automático do deslocamento.
+
+O motor foi modelado e os parâmetros necessários ao observador foram
+identificados: resistência de fase de \SI{8,69}{\milli\ohm}, indutância pelo
+método da ressonância, perdas a vazio $B$ e $\tau_c$ por regressão sobre
+\num{19} patamares e constante de força contraeletromotriz equivalente a
+\num{310}~RPM/V, próxima da especificação de placa. O observador por modos
+deslizantes, com o PLL e a reconstrução analítica da força contraeletromotriz,
+foi validado em simulação, com ganhos obtidos por ajuste automático, e aplicado
+aos registros de bancada: a velocidade estimada teve erro médio de
+\SI{0,092}{\percent}, o ângulo ficou em média dentro de \SI{0,3}{\degree} da
+referência e o torque, calculado com a corrente medida, ficou
+\SI{7,2}{\percent} abaixo do medido. Abaixo de cerca de \num{1930}~RPM o
+sincronismo não trava, o que limita a estimação de torque nessa faixa.
+
+A medição, o acionamento e a segurança foram integrados na placa de medição.
+O observador roda embarcado, um passo a cada amostra, e o processamento de
+cada lote de amostras termina antes da chegada do seguinte, sem descarte nos
+ensaios realizados. A placa comanda o controlador do motor e os relés de
+potência com pré-carga, e a parada de emergência atua por meio físico,
+independentemente do microcontrolador. Com as hélices APC 15x6E e 17x10E, a
+rotação e o torque estimados assentaram em patamares a cada degrau de
+acelerador e reproduziram a forma das curvas do fabricante, com valores acima
+delas, diferença discutida na \autoref{sec:discussao_helices}.
+
+A placa e a aplicação de supervisão foram interligadas por rede Ethernet, com
+troca de pacotes por UDP. Comandos e telemetria são descritos em um único
+arquivo de configuração, do qual são gerados os cabeçalhos do
+\textit{firmware} e que a aplicação lê para montar e interpretar os pacotes,
+o que mantém as duas pontas coerentes. A telemetria chega ao computador a
+\SI{10}{\hertz}, com as grandezas medidas, as estimadas e os tempos de
+processamento da placa.
+
+Por fim, a aplicação de supervisão permite monitorar e comandar a bancada,
+calibrar os sensores, ajustar os parâmetros do observador, executar os
+procedimentos de estimação e registrar os ensaios em CSV. Os ajustes feitos
+pela interface ficam gravados na memória não volátil da placa.
+
+Em conjunto, os resultados indicam que o sistema cumpre o objetivo geral de
+adaptar a bancada para ensaios instrumentados de conjuntos motopropulsores,
+permitindo comparar as grandezas medidas com as estimadas pelo observador. A
+principal limitação é a ausência de uma medida de torque independente no
+mesmo eixo, que permitiria quantificar diretamente o erro da estimativa de
+torque nos ensaios das hélices.
