@@ -1,0 +1,183 @@
+commands:
+
+  sudo:
+    help: "Eleva privilégios para comandos restritos"
+    type: "function"
+
+  connect:
+    help: "Conecta um IP qualquer"
+    type: "string"
+
+  restart:
+    help: "Reinicia o sistema (Reroda a mainApp.py)"
+
+  exit:
+    help: "Fecha o terminal ou aplicacao se 'exit all' "
+    type: "string"
+
+  ping:
+    help: "Faz um ping de um site ou porta"
+    type: "string"
+
+  listing:
+    help: "Escuta uma porta aberta no PC"
+    type: "string"
+
+  tcpdump:
+    help: "Monitora pacotes brutos de um IP. Uso: tcpdump [IP] [tempo_segundos]"
+    type: "function"
+    admin_only: true # Nova flag de proteção
+    args:
+      target_ip: "string"
+      duration: "int"
+
+  ipconfig:
+    help: "Pega o ipconfig do computador, para descobrir se o PC tem ETH"
+
+  same:
+    help: "Controle de Inversor e Motor (SAME)"
+    
+    # Comandos de Operação
+    start:
+      motor: { help: "Inicia o chaveamento do inversor" }
+    stop:
+      motor: { help: "Corte imediato de fase (Emergency)" }
+    reset:
+      system: { help: "Reinicia o controlador" }
+
+    # Mock/Simulação interna na Board
+    mock:
+      help: "Simulação: same mock [start|stop]"
+      start: { help: "Inicia simulação interna de motor" }
+      stop: { help: "Retorna para leitura de sensores reais" }
+
+    # Firmware real via native_sim — placeholder: SAME ainda não tem alvo
+    # native_sim equivalente ao da SIBA (ver TODO "SAME board" no
+    # SIBA/CLAUDE.md); o comando existe para quando essa estrutura for criada.
+    native:
+      help: "Firmware real via native_sim: same native [start|stop] (ainda não disponível p/ SAME)"
+      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
+      stop:  { help: "Encerra o processo do firmware native_sim" }
+
+    test_io:
+      help: "Testa RX/TX da SAME isoladamente (envia CMD neutro, espera telemetria)"
+
+    # Calibração e Parâmetros
+    set:
+      help: "Ajuste de parâmetros: same set [target] [action] [value]"
+      
+      # Alvos Físicos (Sensores)
+      current_a: &sensor_cmds
+        linear: { help: "Ganho linear" }
+        offset: { help: "Offset/Zero" }
+        reset: { help: "Reseta calibração" }
+      current_b: *sensor_cmds
+      voltage_a: *sensor_cmds
+      voltage_b: *sensor_cmds
+      voltage_c: *sensor_cmds
+
+      # Alvos de Modelo (Motor & SMO)
+      resistance: { help: "Resistência de fase (Ohms)" }
+      inductance: { help: "Indutância de fase (Henry)" }
+      ks1: { help: "Ganho Ks1 do Observador" }
+      ks2: { help: "Ganho Ks2 do Observador" }
+      bemf_lpf: { help: "Frequência de corte do filtro BEMF (Hz)" }
+  
+  siba:
+    help: "Comandos da Placa de Gerenciamento de Energia (Power & Telemetry)"
+    
+    # Comandos de Operação
+    start:
+      telemetry: { help: "Inicia transmissão de dados via UDP" }
+    stop:
+      esc: { help: "Corte imediato de potência (Segurança)" }
+    reset:
+      system: { help: "Reinicia o firmware da board SIBA" }
+
+    # Mock/Simulação interna na Board
+    mock:
+      help: "Simulação: siba mock [start|stop]"
+      start: { help: "Inicia geração de dados randômicos" }
+      stop: { help: "Retorna para leitura de sensores físicos" }
+
+    # Firmware real rodando como processo (native_sim) — ver SIBA/CLAUDE.md
+    # "Modo Mock (native_sim)" e gui/CLAUDE.md
+    native:
+      help: "Firmware real via native_sim: siba native [start|stop|shell] (requer 'make native_sim' em SIBA/)"
+      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
+      stop:  { help: "Encerra o processo do firmware native_sim" }
+      shell: { help: "Manda a linha ao shell de UART do firmware: siba native shell tele", type: "string" }
+
+    test_io:
+      help: "Testa RX/TX da SIBA isoladamente (envia CMD neutro, espera telemetria)"
+
+    # Sobrescrita do botão FÍSICO de emergência. De propósito só aqui, e não
+    # como botão de tela: é desvio de segurança, não operação de rotina.
+    # Vale até 'siba force off' ou até a placa reiniciar.
+    force:
+      help: "Sobrescreve o botao fisico de emergencia: siba force [on|off]"
+      # Aspas obrigatorias: em YAML, `on`/`off` sem aspas viram booleanos
+      # (True/False) e o autocompletar/help do terminal mostraria "force True".
+      "on":  { help: "A SIBA passa a IGNORAR o botao de emergencia" }
+      "off": { help: "A SIBA volta a respeitar o botao de emergencia" }
+
+    # Calibração e Parâmetros (Padrão SAME)
+    set:
+      help: "Ajuste de parâmetros: siba set [target] [action] [value]"
+      
+      # Âncora para Sensores (Calibração Linear: y = ax + b)
+      sensor_base: &siba_sensor_cmds
+        linear: { help: "Define ganho de calibração (Scale/Linear)" }
+        offset: { help: "Define o zero do sensor (Tara/Offset)" }
+        reset:  { help: "Reseta para valores padrão de fábrica" }
+        max:    { help: "Define o limite MÁXIMO válido do sensor" }
+        min:    { help: "Define o limite MÍNIMO válido do sensor" }
+
+      # Alvos de Força e Pressão (Células de Carga e Pitot)
+      load_cell_0: *siba_sensor_cmds
+      load_cell_1: *siba_sensor_cmds
+      load_cell_2: *siba_sensor_cmds
+      load_cell_3: *siba_sensor_cmds
+      load_cell_4: *siba_sensor_cmds
+      load_cell_5: *siba_sensor_cmds
+      pitot_tube:  *siba_sensor_cmds
+      
+      # Alvos de Elétrica (Barramento Principal)
+      v_batt:      *siba_sensor_cmds
+      i_batt:      *siba_sensor_cmds
+
+      # Parâmetros de Bateria (SOC e Proteção)
+      # Aqui usamos 'value' como argumento direto
+      temp_limit: { help: "Limite de temperatura para alarme (°C)" }
+      relay:      { help: "Estado do Relé Principal (1=Ligado, 0=Desligado)" }
+      soc_p0:     { help: "Coeficiente polinomial P0 do SOC" }
+      soc_p1:     { help: "Coeficiente polinomial P1 do SOC" }
+      soc_p2:     { help: "Coeficiente polinomial P2 do SOC" }
+      soc_p3:     { help: "Coeficiente polinomial P3 do SOC" }
+      soc_p4:     { help: "Coeficiente polinomial P4 do SOC" }
+
+  graph:
+    help: "Gerencia os graficos"
+
+    clear:
+      help: "Limpa o buffer do grafico, se 'graph clear', limpa tudo se graph clear [1-24] limpa o especifico"
+      type: "string"
+
+    mock_data:
+      help: "Controla a geração de dados simulados para testes de UI"
+      
+      start:
+        help: "Inicia o mock. Uso: mock_data start [all | 1-24]"
+        type: "string"
+      stop:
+        help: "Para a geração de dados simulados"
+        type: "null"
+
+  logs:
+    help: "Telemetria das placas neste terminal: logs [on|off]. Comeca DESLIGADA"
+    # Aspas obrigatorias: `on`/`off` sem aspas viram booleanos em YAML.
+    "on":  { help: "Passa a imprimir cada pacote de telemetria recebido" }
+    "off": { help: "Silencia a telemetria (respostas de comando continuam)" }
+
+  clear: { help: "Limpa a tela do terminal" }
+  help: { help: "Mostra esta lista de ajuda" }

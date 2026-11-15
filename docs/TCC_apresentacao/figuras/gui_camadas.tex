@@ -1,0 +1,14 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/03_Interface.tex (figura: Camadas de responsabilidade)
+\begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, rounded corners, minimum width=6cm, minimum height=1cm, align=center}
+    ]
+        \node[layer, fill=black!5] (apresentacao) {\textbf{Apresentação}};
+        \node[layer, below=0.8cm of apresentacao, fill=black!10] (servico) {\textbf{Serviço}};
+        \node[layer, below=0.8cm of servico, fill=black!15] (dominio) {\textbf{Domínio}};
+        \node[layer, below=0.8cm of dominio, fill=black!20] (transporte) {\textbf{Transporte}};
+
+        \draw[<->, thick] (apresentacao.south) -- (servico.north);
+        \draw[<->, thick] (servico.south) -- (dominio.north);
+        \draw[<->, thick] (dominio.south) -- (transporte.north);
+    \end{tikzpicture}

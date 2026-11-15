@@ -1,0 +1,26 @@
+%% Extraído de docs/TCC_documento/Textuais/Resultados/01_ModelagemSMO.tex (figura: PLL e reconstrução)
+\begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (in_e) {};
+        \node [block, right=1.5cm of in_e] (pd) {Detector de Erro de Fase \\ $\epsilon = \frac{g_\alpha \hat{e}_\beta - g_\beta \hat{e}_\alpha}{|\hat{E}|}$};
+        \node [block, right=1cm of pd] (pi_pll) {Filtro de Loop (PI) \\ $\hat{\omega}_e = K_{p,pll} \epsilon + K_{i,pll} \int \epsilon$};
+        \node [block, below=1cm of pi_pll] (integ) {Integrador de Fase \\ $\hat{\theta} = \int \hat{\omega}_e\, dt$};
+        \node [block, left=1cm of integ] (recon) {Reconstrução Analítica \\ $\hat{e}_{\alpha ,\beta} = K_e \hat{\omega}_e f_{\alpha,\beta}(\hat{\theta})$};
+        \node [block, below=1cm of recon] (torque) {Equação de Torque \\ $\hat{T}_e = 1{,}5\, K_e\, p\, (\hat{e}_\alpha i_\alpha + \hat{e}_\beta i_\beta)$};
+        \draw [line] (in_e) -- node [above] {$\hat{e}_{\alpha\beta, raw}$} (pd);
+        \draw [line] (pd) -- node {$\epsilon$} (pi_pll);
+        \draw [line] (pi_pll) -- node [right] {$\hat{\omega}_e$} (integ);
+        \coordinate (loop_up) at ($(integ.east) + (1cm, 0)$);
+        \coordinate (loop_top_right) at (loop_up |- {$(pd.north) + (0, 1.2cm)$});
+        \coordinate (loop_top_left) at ($(pd.north) + (0, 1.2cm)$);
+        \draw [line] (integ.east) -- (loop_up) -- (loop_top_right) -- node [above] {$\hat{\theta}$} (loop_top_left) -- (pd.north);
+        \draw [line] (integ) -- node [above] {$\hat{\theta}$} (recon);
+        \draw [line] (pi_pll.south) ++(-1cm,0) -- node [left] {$\hat{\omega}_e$} ($(recon.north) + (2cm,0)$);
+        \draw [line] (recon) -- node [right] {$\hat{e}_{\alpha\beta, cln}$} (torque);
+        \coordinate (in_i) at ($(torque.west) + (-1.5cm, 0)$);
+        \draw [line, dashed] (in_i) -- node [above] {$i_{\alpha\beta}$ medida} (torque.west);
+    \end{tikzpicture}

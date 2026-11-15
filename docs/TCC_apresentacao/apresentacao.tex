@@ -1,0 +1,84 @@
+%%=====================================================================
+%% Apresentação do TCC — padrão UDESC (tema beamerthemeUDESC.sty)
+%%
+%%   make            (ou: pdflatex apresentacao.tex, duas passadas)
+%%
+%% Figuras PNG/JPG: ../TCC_documento/Textuais/Imgs (sem cópia).
+%% Diagramas TikZ: figuras/*.tex, extraídos dos .tex do TCC.
+%% Slides com a etiqueta "RESULTADO ILUSTRATIVO" trazem conteúdo
+%% provisório: substituir pelos dados reais antes da defesa.
+%%=====================================================================
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}}
+\usepackage{adjustbox}
+
+% --- mesmo ambiente TikZ do TCC (PacotesBasicos.tex) ---
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tikz}
+\usepackage[american, cuteinductors, smartlabels, fulldiode, siunitx,
+            americanvoltages, oldvoltagedirection]{circuitikz}
+\usetikzlibrary{quotes,angles,arrows,through,calc,math,graphs,backgrounds,
+                fit,shapes,positioning,patterns,shadows,
+                decorations.pathreplacing,shapes.geometric,arrows.meta,
+                intersections}
+\ctikzset{bipoles/thickness=1}
+\ctikzset{monopoles/ground/width/.initial=.2}
+\ctikzset{bipoles/resistor/height=0.25}
+\ctikzset{bipoles/resistor/width=0.6}
+\ctikzset{bipoles/capacitor/height=0.5}
+\ctikzset{bipoles/capacitor/width=0.15}
+\ctikzset{bipoles/generic/height=0.25}
+\ctikzset{bipoles/generic/width=0.6}
+\ctikzset{bipoles/vsourcesin/height=.5}
+\ctikzset{bipoles/vsourcesin/width=.5}
+
+\usetheme[semtrilha]{UDESC}
+
+\graphicspath{{../TCC_documento/Textuais/Imgs/}{./}}
+
+% diagrama TikZ ajustado ao espaço: \tikzfig{largura}{altura}{nome}
+\newcommand{\tikzfig}[3]{%
+  \begin{adjustbox}{max width=#1\linewidth, max totalheight=#2\textheight}
+    \input{figuras/#3}
+  \end{adjustbox}}
+
+% marca de conteúdo provisório (resultado ilustrativo)
+\newcommand{\ilustrativo}{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north east, fill=udescvermelhoB, text=white,
+          font=\tiny\bfseries, inner sep=3pt, rounded corners=2pt]
+      at ([xshift=-0.6cm, yshift=-0.45cm]current page.north east)
+      {RESULTADO ILUSTRATIVO};
+  \end{tikzpicture}}
+
+%%---------------------------------------------------------------------
+\title{Bancada de Medição para Sistemas Propulsivos Elétricos com Motor BLDC}
+\subtitulo{Trabalho de Conclusão de Curso\\Engenharia Elétrica}
+\author{Vitor Dall'Olivo Gonçalves}
+\orientador{Prof.\textsuperscript{a} Ana Teruko Yokomizo Watanabe}
+\coorientador{Aureo Guilherme Dobrikopf}
+\local{Joinville, 2026}
+
+\begin{document}
+
+\capaudesc
+
+\input{secoes/01_introducao}
+\input{secoes/02_planejamento}
+\input{secoes/03_metodologia}
+\input{secoes/04_resultados}
+\input{secoes/05_conclusao}
+\input{secoes/06_referencias}
+
+\fechamentoudesc
+
+\end{document}

@@ -1,0 +1,59 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/02_MotorBLDC.tex (figura: Esquema de Medição com ESC)
+\begin{tikzpicture}[auto, node distance=2cm, >=latex']
+
+        % --- Blocos principais ---
+        \node [draw, rectangle, minimum height=3em, minimum width=4em] (bat) {Bateria};
+
+        % Aumentei para 8em para comportar o deslocamento das fases com folga
+        \node [draw, rectangle, minimum height=8em, minimum width=4em, right=of bat, node distance=2.5cm] (esc) {ESC};
+
+        % BLDC posicionado à direita
+        \node [draw, rectangle, rounded corners=8pt, minimum height=8em, minimum width=5em, right=of esc, node distance=6.5cm] (motor) {BLDC};
+
+        % DAQ centralizado abaixo
+        \node [draw, rectangle, minimum height=4em, minimum width=10em, below=of esc, node distance=4.5cm, xshift=3.25cm] (daq) {Osciloscópio};
+
+        % --- Conexões Bateria -> ESC ---
+        \draw [thick] ([yshift=0.3cm]bat.east) -- node[above] {$V_{DC}$} ([yshift=0.3cm]esc.west);
+        \draw [thick] ([yshift=-0.3cm]bat.east) -- node[below] {GND} ([yshift=-0.3cm]esc.west);
+
+        % --- Coordenadas das Fases (A, B, C) ---
+        % Deslocadas para cima (+0.5cm) para não bater no centro (0) do Eixo
+        \coordinate (esc_a) at ([yshift=1.5cm]esc.east);
+        \coordinate (esc_b) at ([yshift=0.5cm]esc.east);
+        \coordinate (esc_c) at ([yshift=-0.5cm]esc.east);
+
+        \coordinate (mot_a) at ([yshift=1.5cm]motor.west);
+        \coordinate (mot_b) at ([yshift=0.5cm]motor.west);
+        \coordinate (mot_c) at ([yshift=-0.5cm]motor.west);
+
+        % --- Conexões das Fases ---
+        \draw [thick] (esc_a) -- node[above, pos=0.5, font=\large\bfseries] {A} (mot_a);
+        \draw [thick] (esc_b) -- node[above, pos=0.5, font=\large\bfseries] {B} (mot_b);
+        \draw [thick] (esc_c) -- node[below, pos=0.5, font=\large\bfseries] {C} (mot_c);
+
+        % --- Sensores de Corrente (Intercalados) ---
+        % Sensor A (Violeta) próximo ao ESC
+        \node [draw, circle, minimum size=0.45cm, inner sep=0pt, thick, fill=white] (sensA) at ([xshift=1.2cm]esc_a) {};
+        % Sensor B (Teal) próximo ao Motor
+        \node [draw, circle, minimum size=0.45cm, inner sep=0pt, thick, fill=white] (sensB) at ([xshift=1.5cm]esc_b) {};
+
+        % --- Sensor de Posição Óptico (No Eixo Central) ---
+        \node [draw, rectangle, minimum height=2em, right=of motor, node distance=2.2cm] (enc) {Sensor};
+        % O Eixo sai do centro exato (0), onde agora não há fios
+        \draw [thick, dashed] (motor.east) -- node[above] {Eixo} (enc.west);
+
+        % --- Conexões de Dados para o SAME (Intercaladas) ---
+        % Sensor A desce mais (3.5cm)
+        \draw [->, dashed, violet, thick] (sensA.south) -- ++(0,-3.5) -| ([xshift=-1.2cm]daq.north);
+
+        % Sensor B desce menos (1.8cm)
+        \draw [->, dashed, teal, thick] (sensB.south) -- ++(0,-3.5) -| ([xshift=-0.9cm]daq.north);
+
+        % Sensor de posição vem pela lateral
+        \draw [->, dashed, thick] (enc.south) |- (daq.east) node[pos=0.8, above] {$\theta, \omega$};
+
+        % --- Label de transformação ---
+        \node [below, font=\scriptsize, text width=5cm, align=center] at (daq.south) { $I_c = -(I_a + I_b)$ \\ Clarke \& Park $\to I_d, I_q$};
+
+    \end{tikzpicture}

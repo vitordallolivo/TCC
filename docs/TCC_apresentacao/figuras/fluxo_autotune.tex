@@ -1,0 +1,23 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/02_MotorBLDC.tex (figura: ajuste automático)
+\begin{tikzpicture}[
+        font=\small,
+        box/.style={draw, rounded corners, align=center, minimum height=1cm, text width=2.7cm},
+        dec/.style={draw, diamond, aspect=2, align=center, inner sep=1pt, font=\footnotesize},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[box] (pop)  at (0,0)    {População de\\candidatos $\mathbf{x}$};
+        \node[box] (gan)  at (3.5,0)  {$\Gamma = (+,-,+)\,10^{\mathbf{x}}$\\$K = \Gamma/T_s$};
+        \node[box] (sim)  at (7.0,0)  {Simula planta\\e observador};
+        \node[box] (cus)  at (10.5,0) {Custo $J$\\torque + rotação};
+        \node[dec] (conv) at (10.5,-2.2) {Convergiu?};
+        \node[box] (de)   at (5.25,-2.2) {Evolução Diferencial\\gera novos candidatos};
+        \node[box, fill=black!5] (fim) at (10.5,-4.2) {Ganhos $\Gamma^{\star}$};
+
+        \draw[arrow] (pop) -- (gan);
+        \draw[arrow] (gan) -- (sim);
+        \draw[arrow] (sim) -- (cus);
+        \draw[arrow] (cus) -- (conv);
+        \draw[arrow] (conv) -- node[above, font=\scriptsize]{não} (de);
+        \draw[arrow] (de) -| (pop);
+        \draw[arrow] (conv) -- node[right, font=\scriptsize]{sim} (fim);
+    \end{tikzpicture}

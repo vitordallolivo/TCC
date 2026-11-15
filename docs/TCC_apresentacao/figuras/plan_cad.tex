@@ -1,0 +1,35 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/00_Introducao.tex (figura: Planejamento: CAD)
+\begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4.6cm, minimum height=0.9cm, text width=4.3cm},
+        halfbox/.style={draw, rounded corners, fill=white, align=center, minimum width=2.9cm, minimum height=1cm, text width=2.6cm},
+        arrow/.style={-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
+    ]
+        % Faixas de fase (fundo), horizontais
+        \fill[green!45!black!25]  (-3.5,2.9) rectangle (3.5,6.9);
+        \fill[orange!55!black!20] (-3.5,0.4) rectangle (3.5,2.9);
+        \fill[red!55!black!20]    (-3.5,-3)  rectangle (3.5,0.4);
+
+        % Marcadores de transição de fase, na borda esquerda das faixas
+        \node[qmark] at (-4.2,6.9) {Q1};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-4.2,6.6) -- (-4.2,3.2);
+        \node[qmark] at (-4.2,2.9) {Q2};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-4.2,2.6) -- (-4.2,0.7);
+        \node[qmark] at (-4.2,0.4) {Q3};
+
+        \node[halfbox] (s1) at (-1.9,6.3)  {Diagrama simples\\de alimentação};
+        \node[halfbox] (s2) at (1.9,6.3)   {Definição dos\\equipamentos principais};
+        \node[flowbox] (s3) at (0,4.6)     {Localização das placas};
+        \node[flowbox] (s4) at (0,3.4)     {Definição de restrição\\física das placas};
+        \node[flowbox] (s5) at (0,1.6)     {Esboço da bancada física};
+        \node[halfbox] (s6) at (-1.9,-0.5) {Montagem das\\placas no gabinete};
+        \node[halfbox] (s7) at (1.9,-0.5)  {Modificações\\da bancada};
+
+        \draw[arrow] (s1) -- (s3);
+        \draw[arrow] (s2) -- (s3);
+        \draw[arrow] (s3) -- (s4);
+        \draw[arrow] (s4) -- (s5);
+        \draw[arrow] (s5) -- (s6);
+        \draw[arrow] (s5) -- (s7);
+    \end{tikzpicture}

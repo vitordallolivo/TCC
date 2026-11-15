@@ -32,80 +32,68 @@ Desenvolvido em parceria com a equipe **Albatroz Aerodesign**
 
 ## Sobre o projeto
 
-Este repositório reúne o TCC completo: uma **bancada de ensaios para conjuntos
-motopropulsores com motor BLDC**, do firmware ao texto final. A bancada faz a
-aquisição sincronizada das grandezas elétricas do motor, das forças
-aerodinâmicas da hélice e da velocidade do escoamento, e serve como ferramenta
-de caracterização para o projeto de aeronaves da equipe.
+Este repositório reúne o TCC completo: um **sistema de aquisição para ensaios
+de conjuntos motopropulsores com motor BLDC**, do firmware ao texto final. Uma
+placa de medição adquire as tensões e correntes de fase do motor, aciona o
+controlador e os relés de potência e envia a telemetria por Ethernet a uma
+aplicação de supervisão no PC.
 
 O ponto central é estimar **velocidade angular e torque no eixo sem sensores
-mecânicos**. Para isso, a placa SAME executa um **Observador por Modos
-Deslizantes (SMO)** associado a um **PLL**, reconstruindo a força
-contraeletromotriz (BEMF) a partir das correntes e tensões de fase.
+mecânicos**. Para isso, a placa executa um **Observador por Modos Deslizantes
+(SMO)** associado a um **PLL**, reconstruindo a força contraeletromotriz (BEMF)
+a partir das correntes e tensões de fase.
 
 ### Objetivos
 
-1. Projetar e fabricar o hardware de medição elétrica do motor BLDC (sensores
-   de corrente por fase, condicionamento de sinal e aquisição sincronizada de
-   tensão).
+1. Projetar e implementar o sistema de medição do motor BLDC (sensores de
+   corrente por fase, condicionamento de sinal e aquisição sincronizada).
 2. Modelar o motor no referencial αβ e projetar o observador (SMO + PLL) para
    estimar BEMF, velocidade e torque.
-3. Integrar os sensores aerodinâmicos da bancada (células de carga e tubo de
-   Pitot) para medir tração, momentos e velocidade do escoamento.
-4. Implementar a comunicação UDP/TCP entre os nós e a estação de supervisão.
-5. Desenvolver o software de supervisão em Python (monitoramento em tempo real,
-   calibração, registro em CSV, alarmes e estimação de parâmetros).
+3. Integrar medição, acionamento e segurança na placa de medição.
+4. Integrar a placa e a aplicação de supervisão em uma rede Ethernet (UDP).
+5. Desenvolver a aplicação de supervisão em Python (monitoramento, calibração,
+   registro em CSV, alarmes e estimação de parâmetros).
 
 ---
 
 ## Arquitetura
 
-A bancada é formada por **dois nós de aquisição**, ambos baseados no microcontrolador **CH32V307VCT6** (RISC-V,
-144 MHz, FPU e Ethernet MAC+PHY integrados) e rodando **Zephyr RTOS**. Um único
-programa de PC comanda os dois.
-
-| Placa | Nome | Papel |
-|:---:|---|---|
-| **SIBA** | Sistema Integrado da Bancada Aerodinâmica | Células de carga (6× HX711), Pitot, RPM, bateria e relés. **É a placa que aciona o ESC.** |
-| **SAME** | Sistema de Aquisição do Motor Elétrico | Lê tensões e correntes das 3 fases e roda o SMO + PLL embarcado. **Só observa, nunca aciona.** |
+O sistema tem **uma placa de medição**, baseada no microcontrolador
+**CH32V307VCT6** (RISC-V, 144 MHz, FPU e Ethernet MAC+PHY integrados) com
+**Zephyr RTOS**, e uma aplicação de supervisão no PC. A placa absorveu as
+funções da antiga SAME, que queimou; no código ela ainda se chama `SIBA`.
 
 ```mermaid
 flowchart LR
-    subgraph PC["Aplicacao_Pi — supervisão (PySide6)"]
+    subgraph PC["gui — supervisão (PySide6)"]
         GUI["GUI + TinyTerminal"]
-        YAML["Config/*.yaml<br/>fonte única do protocolo"]
+        YAML["Config/SIBA.yaml<br/>fonte única do protocolo"]
     end
 
-    SIBA["SIBA<br/>aero + bateria + ESC"]
-    SAME["SAME<br/>SMO + PLL"]
+    PLACA["firmware — placa de medição<br/>fases (V/I) + SMO + PLL, ESC, relés"]
     ESC["ESC"] --> MOTOR["Motor BLDC + hélice"]
 
-    GUI <-->|"UDP 5000 / 5555"| SIBA
-    GUI <-->|"UDP 4444 / 4445"| SAME
-    YAML -.->|"generate.py → headers C"| SIBA & SAME
-
-    SIBA -->|PWM| ESC
-    SAME -.->|"mede fases"| ESC
+    GUI <-->|"UDP 5000 / 5555"| PLACA
+    YAML -.->|"generate.py → headers C"| PLACA
+    PLACA -->|PWM| ESC
+    PLACA -.->|"mede fases"| ESC
 ```
 
-**Firmware.** SIBA e SAME seguem a mesma arquitetura: nenhuma thread mexe
-diretamente no estado de outra. Leituras de sensor e comandos de rede entram
-numa **fila de trabalho única** (`siba_wq` / `same_wq`) que serializa toda a
-lógica (calibração, segurança, telemetria). Só continuam como threads próprias
-as tarefas que bloqueiam em hardware ou socket (aquisição e recepção de rede).
-Os módulos principais são `NCI` (rede), `HAL` (periféricos), `OSSI` (fila),
-`CMD_Core` (comandos) e os *managers* de domínio.
+**Firmware.** Nenhuma thread mexe diretamente no estado de outra: valores
+medidos e comandos de rede entram numa **fila de trabalho única** (OSSI) que
+serializa a lógica (segurança, telemetria, comandos). A aquisição das fases
+tem fila própria, que roda Clarke + SMO + PLL a cada quadro do ADC. Os módulos
+principais são `NCI` (rede), `HAL` (periféricos), `OSSI` (fila), `CMD_Core`
+(comandos) e os *managers* de domínio.
 
-**Protocolo gerado.** Os arquivos `SIBA.yaml` e `SAME.yaml` em
-`Codigos/Aplicacao_Pi/Config/` são a **fonte única da verdade** do protocolo.
-O script `generate.py` gera, via Jinja2, os headers C do firmware
-(`Common_Types.h`, `CMD.h`, `Log_Manager.h`, `Error_Codes.h`,
-`CMD_Core_prm.h`, `Security_prm.h`), e a GUI lê os mesmos YAMLs em tempo de
-execução. **Os headers gerados nunca são editados à mão.**
+**Protocolo gerado.** `gui/Config/SIBA.yaml` é a **fonte única da verdade** do
+protocolo. O `generate.py` gera, via Jinja2, os headers C do firmware, e a GUI
+lê o mesmo YAML em tempo de execução. **Os headers gerados nunca são editados
+à mão.**
 
-**Três modos de execução.** Cada placa pode ser usada com o hardware real, com
-um simulador Python (só para testar a interface) ou em `native_sim`, que roda o
-firmware de verdade como processo Linux, com UDP real em loopback.
+**Três modos de execução.** Hardware real, simulador Python (só para testar a
+interface) ou `native_sim`, que roda o firmware de verdade como processo Linux,
+com UDP real em loopback.
 
 > O detalhamento de cada parte está nos READMEs das pastas, indicados na
 > tabela abaixo.
@@ -116,60 +104,41 @@ firmware de verdade como processo Linux, com UDP real em loopback.
 
 ```text
 .
-├── Codigos/                  Software da bancada
-│   ├── Aplicacao_Pi/         Supervisão em Python/PySide6 + geração do protocolo
-│   │   └── Config/           YAMLs do protocolo, templates Jinja2 e generate.py
-│   ├── SIBA/                 Firmware Zephyr do nó aerodinâmico e da bateria
-│   ├── SAME/                 Firmware Zephyr do nó elétrico (SMO + PLL) + testes do observador
-│   ├── Equations/            Scripts de referência: simulação do SMO, autotuning, hélice
-│   └── Teste/                Scripts de experimentos pontuais
-├── Simulacoes/               LTspice (front-end AMC1301, SS49E) e FEMM (toroide do sensor de corrente)
-├── Textual/                  Texto do TCC em LaTeX (abnTeX2, modelo UDESC)
-├── apresentacao/             Slides da defesa em Beamer (tema UDESC) + roteiro
+├── firmware/                 Firmware Zephyr da placa de medição
+├── gui/                      Aplicação de supervisão (PySide6) + protocolo + scripts
+│   ├── Config/               YAML do protocolo, templates Jinja2 e generate.py
+│   ├── Scripts/              Simulação do SMO, autotuning, coeficientes da hélice
+│   └── Ensaios/              Scripts e registros dos ensaios de bancada
+├── docs/
+│   ├── TCC_documento/        Texto do TCC em LaTeX (abnTeX2, modelo UDESC)
+│   └── TCC_apresentacao/     Slides da defesa em Beamer (tema UDESC)
+├── legado/                   Código antigo fora do build (Equations, Teste)
+├── Simulacoes/               LTspice e FEMM (sensor de corrente)
+├── Esquematicos/             Esquemáticos
 └── Figuras/                  Figuras de arquitetura usadas fora do LaTeX
 ```
 
 | Pasta | Documentação |
 |---|---|
-| `Codigos/` | [Visão geral do software](Codigos/README.md) |
-| `Codigos/Aplicacao_Pi/` | [Aplicação de supervisão](Codigos/Aplicacao_Pi/README.md) · [Geração do protocolo](Codigos/Aplicacao_Pi/Config/README.md) |
-| `Codigos/SIBA/` | [Firmware SIBA](Codigos/SIBA/README.md) |
-| `Codigos/SAME/` | [Firmware SAME](Codigos/SAME/README.md) |
-| `Textual/` | [Como compilar o texto](Textual/README.md) |
-| `apresentacao/` | [Como compilar os slides](apresentacao/README.md) |
+| `firmware/` | [Firmware da placa de medição](firmware/README.md) |
+| `gui/` | [Aplicação de supervisão](gui/README.md) · [Geração do protocolo](gui/Config/README.md) |
+| `docs/TCC_documento/` | [Como compilar o texto](docs/TCC_documento/README.md) |
+| `docs/TCC_apresentacao/` | [Como compilar os slides](docs/TCC_apresentacao/README.md) |
 
 ---
 
 ## Primeiros passos
 
-**Aplicação de supervisão**
+Os atalhos ficam no `Makefile` da raiz (`make help`):
 
 ```bash
-cd Codigos/Aplicacao_Pi
-python mainApp.py            # instala dependências faltantes do pyproject.toml ao abrir
-```
-
-**Firmware** (requer Zephyr SDK e `west`; ver o README de cada placa)
-
-```bash
-cd Codigos
-make help                    # lista os alvos
-make siba                    # compila a SIBA para a placa real
-make native_sim              # compila SIBA e SAME para rodar no PC (Linux)
-```
-
-**Protocolo** (sempre que `SIBA.yaml` ou `SAME.yaml` mudar)
-
-```bash
-cd Codigos/Aplicacao_Pi/Config
-python generate.py
-```
-
-**Texto e slides**
-
-```bash
-cd Textual && make           # gera abntex2-model_UDESC_2024.pdf
-cd apresentacao && make      # gera apresentacao.pdf
+make gui                     # aplicação de supervisão
+make protocolo               # regenera os headers C a partir de gui/Config/SIBA.yaml
+make firmware                # compila para a placa real (requer Zephyr SDK e west)
+make flash                   # grava na placa
+make native_sim              # compila o firmware para rodar no PC (Linux)
+make documento               # texto do TCC
+make apresentacao            # slides
 ```
 
 ---
@@ -250,12 +219,11 @@ Q = C_Q·ρ·n²·D⁵   ⇒   Q = k_Q·ω_m²,   com   k_Q = C_Q·ρ·D⁵ / (4
 
 | Componente | Estado |
 |---|---|
-| Firmware SIBA | Compila para a placa e para `native_sim`; UDP validado em `native_sim`. ADC desligado nesta versão da placa (circuitos analógicos não montados) |
-| Firmware SAME | SMO + PLL embarcado, diagnóstico por `error_code`, calibração persistente em EEPROM; compila para a placa e para `native_sim` |
-| Aplicação de supervisão | Funcional; cliente único das duas placas, nos modos hardware, simulador e `native_sim` |
-| Simulação do SMO + autotuning | Validada (prova de conceito) |
-| Identificação dos parâmetros elétricos | Concluída |
-| Validação experimental integrada (SIBA + SAME) | Em andamento |
+| Firmware da placa de medição | Fases (V/I) + SMO + PLL embarcado, ESC, relés e segurança; compila para a placa e para `native_sim` |
+| Aplicação de supervisão | Funcional nos modos hardware, simulador e `native_sim` |
+| Simulação do SMO + autotuning | Validada |
+| Identificação dos parâmetros elétricos | Concluída (indutância também ajustada aos registros: L_Y ≈ 11,3 µH) |
+| Ensaios com hélices APC 15x6E e 17x10E | Concluídos |
 
 ---
 

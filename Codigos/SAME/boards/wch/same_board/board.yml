@@ -1,6 +1,0 @@
-board:
-  name: same_board
-  full_name: SAME Board
-  vendor: wch
-  socs:
-    - name: ch32v307

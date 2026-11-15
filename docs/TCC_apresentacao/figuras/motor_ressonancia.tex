@@ -1,0 +1,18 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/02_MotorBLDC.tex (figura: ensaio de ressonância)
+\begin{circuitikz}[american, scale=1.1, transform shape]
+        % ---- Fonte e resistor série (ramo superior) ----
+        \draw (0,0) to[sV, l=$v_{in}$] (0,3);
+        \draw (0,3) to[R, l=$R$, i>^=$i_{in}$] (3,3);
+        % ---- Nó de medição (saída do gerador / topo do tanque) ----
+        \node[circ] (A) at (3,3) {};
+        \node[anchor=south] at (3,3.2) {\footnotesize nó A};
+        % ---- Ramo do indutor ----
+        \draw (A) to[L, l=$L_{fase}$] (3,0);
+        % ---- Ramo do capacitor (em paralelo) ----
+        \draw (A) -- (5.5,3);
+        \draw (5.5,3) to[C, l=$C$] (5.5,0);
+        % ---- Trilho de terra (retorno) ----
+        \draw (0,0) -- (5.5,0);
+        \node[circ] (G) at (3,0) {};
+        \node[ground] at (1.5,0) {};
+    \end{circuitikz}

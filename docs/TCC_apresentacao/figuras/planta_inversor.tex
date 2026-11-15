@@ -1,0 +1,23 @@
+%% Extraído de docs/TCC_documento/Textuais/Resultados/01_ModelagemSMO.tex
+\begin{tikzpicture}[
+        auto, node distance = 2.5cm,
+        block/.style={rectangle, draw, thick, fill=white, text width=4.5cm, text centered, minimum height=1.5cm, font=\small},
+        sum/.style={circle, draw, thick, fill=white, minimum size=6mm, text centered, font=\large},
+        line/.style={draw, thick, -{Stealth[length=2.5mm, width=1.5mm]}}
+    ]
+        \node [coordinate] (input) {};
+        \node [sum, right=1.5cm of input] (sum1) {$\Sigma$};
+        \node [block, right=1cm of sum1] (pi) {Controlador PI (Vel.) \\ $V_{cmd} = K_{pw} e + K_{iw} \int e\, dt$};
+        \node [block, right=1cm of pi] (inv) {Inversor (6-Passos) \\ Aplica $V_{act}$ ou $0$ a partir de $f_{PWM}$ e $\theta_e$};
+        \node [block, below=1cm of inv] (motor) {Modelo BLDC (Elétrico)};
+        \node [block, left=1cm of motor] (mec) {Dinâmica Mecânica};
+        \draw [line] (input) -- node {$\omega_{ref}$} (sum1);
+        \draw [line] (sum1) -- node {$e_\omega$} (pi);
+        \draw [line] (pi) -- node {$V_{cmd}$} (inv);
+        \draw [line] (inv) -- node {$v_{abc}$} (motor);
+        \draw [line] (motor) -- node [above] {$T_e$} (mec);
+        \draw [line] (mec) -| node [near end, right] {$\omega_m$} (sum1);
+        \coordinate (out_i) at ($(motor.east) + (1cm, 0)$);
+        \draw [line] (motor.east) -- node [above] {$i_{abc}$} (out_i);
+        \draw [line, dashed] (mec.south) -- ++(0,-0.5) -| node [near start, below] {$\theta_e, \omega_m \rightarrow e_{abc}$} (motor.south);
+    \end{tikzpicture}

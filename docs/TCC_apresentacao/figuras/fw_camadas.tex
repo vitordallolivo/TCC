@@ -1,0 +1,12 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/05_Placas.tex (figura: Camadas lógicas)
+\begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, rounded corners, minimum width=8cm, minimum height=1cm, align=center}
+    ]
+        \node[layer, fill=black!5] (app) {\textbf{Application}};
+        \node[layer, below=0.8cm of app, fill=black!10] (sys) {\textbf{System}};
+        \node[layer, below=0.8cm of sys, fill=black!15] (vcore) {\textbf{Vcore - OS}};
+
+        \draw[<->, thick] (app.south) -- (sys.north);
+        \draw[<->, thick] (sys.south) -- (vcore.north);
+    \end{tikzpicture}
