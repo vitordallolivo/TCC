@@ -4,10 +4,6 @@ commands:
     help: "Eleva privilégios para comandos restritos"
     type: "function"
 
-  connect:
-    help: "Conecta um IP qualquer"
-    type: "string"
-
   restart:
     help: "Reinicia o sistema (Reroda a mainApp.py)"
 
@@ -34,127 +30,83 @@ commands:
   ipconfig:
     help: "Pega o ipconfig do computador, para descobrir se o PC tem ETH"
 
-  same:
-    help: "Controle de Inversor e Motor (SAME)"
-    
-    # Comandos de Operação
-    start:
-      motor: { help: "Inicia o chaveamento do inversor" }
-    stop:
-      motor: { help: "Corte imediato de fase (Emergency)" }
-    reset:
-      system: { help: "Reinicia o controlador" }
+  # --- Placa de medição (mesma gramática do placa.py, ver comandos.py) ---
+  connect:
+    help: "Conecta na placa (connect [IP] troca o IP antes)"
+    type: "string"
 
-    # Mock/Simulação interna na Board
-    mock:
-      help: "Simulação: same mock [start|stop]"
-      start: { help: "Inicia simulação interna de motor" }
-      stop: { help: "Retorna para leitura de sensores reais" }
+  arm:   { help: "Pronto: pré-carga -> potência -> ESC armado" }
+  "off": { help: "Desarma o ESC e abre os relés" }
+  estop: { help: "Parada de emergência" }
+  esc:   { help: "Throttle em %: esc <0..100>", type: "string" }
+  reset: { help: "Reinicia o firmware" }
+  raw:   { help: "CMD cru pelos índices: raw <f> <i> <t> <valor> <acao>", type: "string" }
+  alvos: { help: "Lista os sensores e parâmetros aceitos pelo 'set'" }
 
-    # Firmware real via native_sim — placeholder: SAME ainda não tem alvo
-    # native_sim equivalente ao da SIBA (ver TODO "SAME board" no
-    # SIBA/CLAUDE.md); o comando existe para quando essa estrutura for criada.
-    native:
-      help: "Firmware real via native_sim: same native [start|stop] (ainda não disponível p/ SAME)"
-      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
-      stop:  { help: "Encerra o processo do firmware native_sim" }
+  # Sobrescrita do botão FÍSICO de emergência. De propósito só aqui, e não
+  # como botão de tela: é desvio de segurança, não operação de rotina.
+  force:
+    help: "Sobrescreve o botão físico de emergência: force [on|off]"
+    # Aspas obrigatórias: em YAML, `on`/`off` sem aspas viram booleanos.
+    "on":  { help: "A placa passa a IGNORAR o botão de emergência" }
+    "off": { help: "A placa volta a respeitar o botão de emergência" }
 
-    test_io:
-      help: "Testa RX/TX da SAME isoladamente (envia CMD neutro, espera telemetria)"
+  set:
+    help: "set <sensor> linear|offset|min|max <valor> | set <sensor> reset | set <parâmetro> <valor>"
+    load_cell_0: &sensor_cmds
+      linear: { help: "Ganho de calibração" }
+      offset: { help: "Zero do sensor (tara nas células de carga)" }
+      reset:  { help: "Volta ao default" }
+      max:    { help: "Limite MÁXIMO válido" }
+      min:    { help: "Limite MÍNIMO válido" }
+    load_cell_1: *sensor_cmds
+    load_cell_2: *sensor_cmds
+    load_cell_3: *sensor_cmds
+    load_cell_4: *sensor_cmds
+    load_cell_5: *sensor_cmds
+    v_batt:      *sensor_cmds
+    i_batt:      *sensor_cmds
+    v_a:         *sensor_cmds
+    v_b:         *sensor_cmds
+    v_c:         *sensor_cmds
+    i_a:         *sensor_cmds
+    i_b:         *sensor_cmds
+    i_c:         *sensor_cmds
+    # Parâmetros do motor e do observador: 'set <parâmetro> <valor>'
+    pole_pairs:  { help: "Pares de polos" }
+    resistance:  { help: "Resistência de fase (Ohms)" }
+    inductance:  { help: "Indutância de fase (Henry)" }
+    kv:          { help: "Kv do motor (RPM/V)" }
+    gamma1:      { help: "Ganho Γ1 do observador" }
+    gamma2:      { help: "Ganho Γ2 do observador" }
+    gammat:      { help: "Ganho Γt do observador" }
+    bemf_lpf:    { help: "Corte do filtro da FCEM (Hz)" }
+    torque_lpf:  { help: "Corte do filtro do torque (Hz)" }
+    ts_adc:      { help: "Período do quadro do ADC (µs)" }
 
-    # Calibração e Parâmetros
-    set:
-      help: "Ajuste de parâmetros: same set [target] [action] [value]"
-      
-      # Alvos Físicos (Sensores)
-      current_a: &sensor_cmds
-        linear: { help: "Ganho linear" }
-        offset: { help: "Offset/Zero" }
-        reset: { help: "Reseta calibração" }
-      current_b: *sensor_cmds
-      voltage_a: *sensor_cmds
-      voltage_b: *sensor_cmds
-      voltage_c: *sensor_cmds
+  bat:
+    help: "Parâmetros da bateria: bat <p0..p4|temp_limit|relay> <valor>"
+    p0: { help: "Coeficiente P0 do polinômio do SOC" }
+    p1: { help: "Coeficiente P1 do polinômio do SOC" }
+    p2: { help: "Coeficiente P2 do polinômio do SOC" }
+    p3: { help: "Coeficiente P3 do polinômio do SOC" }
+    p4: { help: "Coeficiente P4 do polinômio do SOC" }
+    temp_limit: { help: "Limite de temperatura (°C)" }
+    relay: { help: "Só os relés: 1 liga, 0 desliga" }
 
-      # Alvos de Modelo (Motor & SMO)
-      resistance: { help: "Resistência de fase (Ohms)" }
-      inductance: { help: "Indutância de fase (Henry)" }
-      ks1: { help: "Ganho Ks1 do Observador" }
-      ks2: { help: "Ganho Ks2 do Observador" }
-      bemf_lpf: { help: "Frequência de corte do filtro BEMF (Hz)" }
-  
-  siba:
-    help: "Comandos da Placa de Gerenciamento de Energia (Power & Telemetry)"
-    
-    # Comandos de Operação
-    start:
-      telemetry: { help: "Inicia transmissão de dados via UDP" }
-    stop:
-      esc: { help: "Corte imediato de potência (Segurança)" }
-    reset:
-      system: { help: "Reinicia o firmware da board SIBA" }
+  mock:
+    help: "Simulador Python (fake): mock [start|stop]"
+    start: { help: "Inicia o simulador em 127.0.0.1" }
+    stop:  { help: "Volta para a placa real" }
 
-    # Mock/Simulação interna na Board
-    mock:
-      help: "Simulação: siba mock [start|stop]"
-      start: { help: "Inicia geração de dados randômicos" }
-      stop: { help: "Retorna para leitura de sensores físicos" }
+  native:
+    help: "Firmware real em native_sim (Linux): native [start|stop|shell]"
+    start: { help: "Sobe firmware/build_native_sim/zephyr/zephyr.exe (make native_sim)" }
+    stop:  { help: "Encerra o processo do firmware" }
+    shell: { help: "Linha para o shell do firmware: native shell tele", type: "string" }
 
-    # Firmware real rodando como processo (native_sim) — ver SIBA/CLAUDE.md
-    # "Modo Mock (native_sim)" e gui/CLAUDE.md
-    native:
-      help: "Firmware real via native_sim: siba native [start|stop|shell] (requer 'make native_sim' em SIBA/)"
-      start: { help: "Sobe build_native_sim/zephyr/zephyr.exe e conecta via 127.0.0.1 (UDP real)" }
-      stop:  { help: "Encerra o processo do firmware native_sim" }
-      shell: { help: "Manda a linha ao shell de UART do firmware: siba native shell tele", type: "string" }
-
-    test_io:
-      help: "Testa RX/TX da SIBA isoladamente (envia CMD neutro, espera telemetria)"
-
-    # Sobrescrita do botão FÍSICO de emergência. De propósito só aqui, e não
-    # como botão de tela: é desvio de segurança, não operação de rotina.
-    # Vale até 'siba force off' ou até a placa reiniciar.
-    force:
-      help: "Sobrescreve o botao fisico de emergencia: siba force [on|off]"
-      # Aspas obrigatorias: em YAML, `on`/`off` sem aspas viram booleanos
-      # (True/False) e o autocompletar/help do terminal mostraria "force True".
-      "on":  { help: "A SIBA passa a IGNORAR o botao de emergencia" }
-      "off": { help: "A SIBA volta a respeitar o botao de emergencia" }
-
-    # Calibração e Parâmetros (Padrão SAME)
-    set:
-      help: "Ajuste de parâmetros: siba set [target] [action] [value]"
-      
-      # Âncora para Sensores (Calibração Linear: y = ax + b)
-      sensor_base: &siba_sensor_cmds
-        linear: { help: "Define ganho de calibração (Scale/Linear)" }
-        offset: { help: "Define o zero do sensor (Tara/Offset)" }
-        reset:  { help: "Reseta para valores padrão de fábrica" }
-        max:    { help: "Define o limite MÁXIMO válido do sensor" }
-        min:    { help: "Define o limite MÍNIMO válido do sensor" }
-
-      # Alvos de Força e Pressão (Células de Carga e Pitot)
-      load_cell_0: *siba_sensor_cmds
-      load_cell_1: *siba_sensor_cmds
-      load_cell_2: *siba_sensor_cmds
-      load_cell_3: *siba_sensor_cmds
-      load_cell_4: *siba_sensor_cmds
-      load_cell_5: *siba_sensor_cmds
-      pitot_tube:  *siba_sensor_cmds
-      
-      # Alvos de Elétrica (Barramento Principal)
-      v_batt:      *siba_sensor_cmds
-      i_batt:      *siba_sensor_cmds
-
-      # Parâmetros de Bateria (SOC e Proteção)
-      # Aqui usamos 'value' como argumento direto
-      temp_limit: { help: "Limite de temperatura para alarme (°C)" }
-      relay:      { help: "Estado do Relé Principal (1=Ligado, 0=Desligado)" }
-      soc_p0:     { help: "Coeficiente polinomial P0 do SOC" }
-      soc_p1:     { help: "Coeficiente polinomial P1 do SOC" }
-      soc_p2:     { help: "Coeficiente polinomial P2 do SOC" }
-      soc_p3:     { help: "Coeficiente polinomial P3 do SOC" }
-      soc_p4:     { help: "Coeficiente polinomial P4 do SOC" }
+  test_io:
+    help: "Testa RX/TX (envia CMD neutro, espera telemetria)"
 
   graph:
     help: "Gerencia os graficos"

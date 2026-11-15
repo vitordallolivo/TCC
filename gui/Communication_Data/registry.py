@@ -1,8 +1,8 @@
 """Camada 2 · Domínio — registry de placas dirigido por YAML.
 
 Remove o hardcode de IP/porta/protocolo que estava espalhado em
-`EthernetManager` (os `if board == "SIBA"`). Cada placa vira um `BoardConfig`
-carregado de `Config/<board>.yaml`. O `LinkManager` itera este registry, sem
+`EthernetManager` (os `if board == "PLACA"`). Cada placa vira um `BoardConfig`
+carregado de `Config/protocolo.yaml` (uma placa só, id "PLACA"). O `LinkManager` itera este registry, sem
 conhecer nomes de placa específicos.
 
 Fonte de verdade de endereçamento: bloco `link:` do YAML de cada placa. Se
@@ -17,10 +17,8 @@ import yaml
 # Defaults retrocompatíveis (usados só quando o YAML não traz bloco `link:`).
 # Espelham o esquema fixo de portas do CLAUDE.md / EthernetManager antigo.
 _DEFAULT_LINKS = {
-    "SIBA": {"transport": "udp_struct", "ip": "169.254.97.200",
+    "PLACA": {"transport": "udp_struct", "ip": "169.254.97.200",
              "ports": {"pc_rx": 5555, "board_rx": 5000}},
-    "SAME": {"transport": "udp_struct", "ip": "169.254.97.100",
-             "ports": {"pc_rx": 4445, "board_rx": 4444}},
 }
 
 
@@ -101,11 +99,11 @@ class BoardRegistry:
         return board_id.upper() in self._boards
 
     @classmethod
-    def load(cls, config_dir, board_ids=("SIBA",)):
-        """Carrega Config/<board>.yaml para cada id (ignora ausentes)."""
+    def load(cls, config_dir, board_ids=("PLACA",)):
+        """Carrega Config/protocolo.yaml para cada id (hoje só "PLACA")."""
         reg = cls()
         for bid in board_ids:
-            path = os.path.join(config_dir, f"{bid}.yaml")
+            path = os.path.join(config_dir, "protocolo.yaml")
             raw = {}
             if os.path.exists(path):
                 with open(path, "r") as f:

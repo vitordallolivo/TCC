@@ -24,11 +24,12 @@ from PySide6.QtCore import QFile, Slot, QTimer, QThread, Signal, Qt
 from PySide6.QtGui import QAction
 
 from Communication_Data import codecs
+from Communication_Data import motor_config as mc
 
 # Importações de hardware e componentes customizados
 from Communication_Data.Ethernet import EthernetManager
 from Communication_Data.discovery import DiscoveryService
-from GUI.SAMEConfigDialog import SAMEConfigDialog
+from GUI.MotorConfigDialog import MotorConfigDialog
 from GUI.TinyTerminal import TinyTerminal
 from GUI.BoardManagerDialog import BoardManagerDialog
 from GUI.EstimationDialog import EstimationDialog
@@ -61,7 +62,7 @@ class AlbatrozGUI(QMainWindow):
         if getattr(sys, "frozen", False):
             # Congelado (PyInstaller): __file__ apontaria pro _MEIPASS (pasta
             # temp apagada ao fechar) — usa a pasta do executável de verdade,
-            # senão perfis de motor/SAME.yaml/preferências não persistem.
+            # senão perfis de motor/estimativas/preferências não persistem.
             self.root_dir = os.path.dirname(os.path.abspath(sys.executable))
             self.script_dir = os.path.join(self.root_dir, "GUI")
         else:
@@ -71,19 +72,19 @@ class AlbatrozGUI(QMainWindow):
         self.gui_dir = os.path.join(self.root_dir, "GUI")
         
         self.prefs_path = os.path.join(self.config_dir, "user_prefs.yaml")
-        self.same_yaml_path = os.path.join(self.config_dir, "SAME.yaml")
-        self.siba_yaml_path = os.path.join(self.config_dir, "SIBA.yaml")
+        # Resultados das estimativas (ganhos do SMO, coeficientes da hélice).
+        self.estimates_yaml_path = os.path.join(self.config_dir, "estimativas.yaml")
+        self.protocol_yaml_path = os.path.join(self.config_dir, "protocolo.yaml")
 
         self.plots_yaml_path = os.path.join(self.config_dir, "plots.yaml")
         
         # 2. Carrega as Configurações das Placas (Necessário para EthernetManager e Buffers)
         self.configs = {
-            "SIBA": self._load_config_file(self.siba_yaml_path),
-            "SAME": self._load_config_file(self.same_yaml_path)
+            "PLACA": self._load_config_file(self.protocol_yaml_path),
         }
         self.plot_config = self._load_config_file(self.plots_yaml_path)
 
-        print(f"Configs carregadas: SIBA({'OK' if self.configs['SIBA'] else 'Falha'}), SAME({'OK' if self.configs['SAME'] else 'Falha'})")
+        print(f"Protocolo carregado: {'OK' if self.configs['PLACA'] else 'Falha'}")
 
         # 3. Atributos de Memória e Swap (Devem existir antes de qualquer dado chegar via rede)
         self.ptr = 0
@@ -116,8 +117,7 @@ class AlbatrozGUI(QMainWindow):
 
         # 4. Inicializa Gerenciador de Rede (Agora com o callback central process_network_data)
         self.eth = EthernetManager(
-            self.siba_yaml_path,
-            self.same_yaml_path,
+            self.protocol_yaml_path,
             handle_callback=self.process_network_data,
         )
 
@@ -125,7 +125,7 @@ class AlbatrozGUI(QMainWindow):
         # (uma vez por conexão, no primeiro pacote de cada placa).
         self.discovery = DiscoveryService(self.eth)
         self._ready_announced = set()
-        # "Pronto" periódico da SIBA; Desligar (Motor) suspende até reconectar.
+        # "Pronto" periódico para a placa; Desligar (Motor) suspende até reconectar.
         self._ready_paused = False
         self._ready_timer = QTimer(self)
         self._ready_timer.setInterval(READY_PERIOD_MS)
@@ -241,68 +241,29 @@ class AlbatrozGUI(QMainWindow):
         
         # Menu Actions
         self.ui.actionLoad.triggered.connect(self.on_load_motor)
-        self.ui.actionCreate.triggered.connect(self.open_same_config)
+        self.ui.actionCreate.triggered.connect(self.open_motor_config)
         self.ui.actionClaro.triggered.connect(lambda: self.change_theme("claro"))
         self.ui.actionEscuro.triggered.connect(lambda: self.change_theme("escuro"))
 
         # Reorganiza a barra de menus (tudo em português, menus de topo).
         self._build_menus()
-        # Seletor "Modo de Operação" (canto direito da barra de menus).
-        self._build_mode_selector()
-
-    # ================================================================== #
-    # Modo de Operação — define quais placas sobem e para qual o throttle vai
-    # ================================================================== #
-    def _build_mode_selector(self):
-        self.op_mode = "SIBA+SAME"   # modo padrão
-        # Guarda em self (posse) — widget local seria coletado pelo GC e sumiria.
-        self._mode_box = QWidget(self.ui.menubar)
-        lay = QHBoxLayout(self._mode_box); lay.setContentsMargins(4, 0, 8, 0)
-        lay.addWidget(QLabel("Modo:"))
-        self.cmb_mode = QComboBox()
-        self.cmb_mode.addItems(["SIBA+SAME", "SIBA", "SAME"])
-        self.cmb_mode.currentTextChanged.connect(self.on_mode_changed)
-        lay.addWidget(self.cmb_mode)
-        self.ui.menubar.setCornerWidget(self._mode_box, Qt.TopRightCorner)
+        # Uma placa só: o "modo" fica fixo. O mecanismo de modo foi
+        # mantido para filtrar os gráficos pelas variáveis da placa.
+        self.op_mode = "PLACA"
 
     def _boards_in_mode(self, mode):
-        return {"SIBA": ["SIBA"], "SAME": ["SAME"],
-                "SIBA+SAME": ["SIBA", "SAME"]}.get(mode, [])
+        return {"PLACA": ["PLACA"]}.get(mode, [])
 
     def _motor_board(self, mode):
-        """Placa que ACIONA o ESC no modo atual.
-
-        - SIBA: a SIBA controla o ESC (inclusive no modo SIBA+SAME).
-        - SAME: NÃO aciona — a SAME é só LEITURA das correntes/tensões a,b,c
-          do ESC + estimativa (SMO). Por isso 'SAME' sozinho não tem throttle.
-        """
-        if mode in ("SIBA", "SIBA+SAME"):
-            return "SIBA"
-        return None
+        """Placa que aciona o ESC no modo atual."""
+        return "PLACA" if mode == "PLACA" else None
 
     def _observer_boards(self, mode=None):
         """Placas do modo que têm o observador (SMO) e recebem os parâmetros
-        do motor. A SIBA absorveu a SAME: no modo SIBA é só ela."""
+        do motor."""
         mode = mode or self.op_mode
-        out = [b for b in self._boards_in_mode(mode)
-               if mc.has_observer(codecs.board_protocol_cfg(self.configs.get(b, {}), b))]
-        return out or ["SAME"]
-
-    @Slot(str)
-    def on_mode_changed(self, mode):
-        self.op_mode = mode
-        print(f"Modo de Operação: {mode}")
-        # Sobe os links das placas do modo (sob demanda).
-        for b in self._boards_in_mode(mode):
-            self.eth.start_link(b)
-        self._refresh_motor_controls()
-        self._apply_mode_plots(mode)
-
-    def _refresh_motor_controls(self):
-        """Habilita slider/Atualizar só se o modo aciona um ESC."""
-        en = self._motor_board(self.op_mode) is not None
-        self.ui.Motor_action.setEnabled(en)
-        self.ui.Motor_update.setEnabled(en)
+        return [b for b in self._boards_in_mode(mode)
+                if mc.has_observer(codecs.board_protocol_cfg(self.configs.get(b, {}), b))]
 
     def _build_var_board_map(self):
         """var de telemetria -> conjunto de placas que a produzem (p/ filtrar
@@ -313,7 +274,7 @@ class AlbatrozGUI(QMainWindow):
             if var:
                 self._var_boards.setdefault(var, set()).add(board)
 
-        for board in ("SIBA", "SAME"):
+        for board in self.configs:
             cfg = codecs.board_protocol_cfg(self.configs.get(board, {}), board)
             for f in codecs.telemetry_layout(cfg):
                 add(f.get("name"), board)
@@ -502,7 +463,7 @@ class AlbatrozGUI(QMainWindow):
     def process_network_data(self, protocol, data, addr):
         """Recebe pacotes reais da Ethernet."""
         try:
-            # Só SIBA/SAME (placas com TELEMETRY_LOG no YAML).
+            # Só placas com TELEMETRY_LOG no YAML.
             if protocol not in self.configs:
                 return
             # Acessa a estrutura correta no YAML (structs -> TELEMETRY_LOG)
@@ -593,9 +554,9 @@ class AlbatrozGUI(QMainWindow):
         errors.ensure_registered(protocol, self.configs.get(protocol, {}))
         if hasattr(self, 'terminal'):
             for _m, msg, grp in errors.decode_error_code(code & ~prev, protocol):   # novos
-                self.terminal.append_log(protocol, f"⚠ PROBLEMA ({grp}): {msg}", "#ff4136")
+                self.terminal.append_log("ERRO", f"⚠ PROBLEMA ({grp}): {msg}", "#ff4136")
             for _m, msg, grp in errors.decode_error_code(prev & ~code, protocol):   # resolvidos
-                self.terminal.append_log(protocol, f"✓ Resolvido ({grp}): {msg}", "#2ecc40")
+                self.terminal.append_log("ERRO", f"✓ Resolvido ({grp}): {msg}", "#2ecc40")
 
         # Rótulo persistente = erros ativos de TODAS as placas, cada uma
         # decodificada com a sua tabela (em pt-BR).
@@ -637,7 +598,7 @@ class AlbatrozGUI(QMainWindow):
                 self._t0 = time.time()
             self.time_buffer[idx] = time.time() - self._t0
 
-            # Sample-and-hold (forward-fill): DUAS placas (SIBA+SAME) partilham
+            # Sample-and-hold (forward-fill): se mais de uma placa partilhar
             # ESTE mesmo buffer/ptr/base-de-tempo. Um pacote só traz as variáveis
             # da SUA placa; sem isto, as variáveis da OUTRA placa ficavam NaN
             # neste índice, e o pacote seguinte da outra placa preenchia o índice
@@ -759,7 +720,7 @@ class AlbatrozGUI(QMainWindow):
             print("Rede parada.")
             return
 
-        boards = self._boards_in_mode(getattr(self, "op_mode", "SIBA+SAME"))
+        boards = self._boards_in_mode(getattr(self, "op_mode", "PLACA"))
         print(f"Procurando placas do modo {self.op_mode}: {boards}")
         self.on_clear_all()
         self._ready_announced.clear()
@@ -808,24 +769,23 @@ class AlbatrozGUI(QMainWindow):
 
     @Slot()
     def _send_periodic_ready(self):
-        """Repete o "pronto" com o link da SIBA ativo, mesmo sem telemetria."""
-        if self._ready_paused or "SIBA" not in self.eth.workers:
+        """Repete o "pronto" com o link ativo, mesmo sem telemetria."""
+        if self._ready_paused or "PLACA" not in self.eth.workers:
             return
-        self._send_board_cmd("SIBA", "FUNC_START", 1.0,
+        self._send_board_cmd("PLACA", "FUNC_START", 1.0,
                              instr="INSTR_WRITE", status="STATUS_OK")
 
     def _announce_ready(self, board):
         """Declara à placa que o supervisório está pronto, uma vez por conexão.
 
-        É uma das DUAS condições que a SIBA exige para armar a bancada (a
+        É uma das DUAS condições que a placa exige para armar a bancada (a
         outra é o botão de emergência liberado) — por isso vai sozinho,
         assim que o primeiro pacote de telemetria chega, sem botão na tela.
-        Só a SIBA trata este comando: é ela que tem a cadeia de potência.
         """
-        if board != "SIBA" or board in self._ready_announced:
+        if board != "PLACA" or board in self._ready_announced:
             return
         self._ready_announced.add(board)
-        print(f"[NET] {board}: primeiro log recebido — avisando que o "
+        print(f"[NET] primeiro log recebido — avisando que o "
               f"supervisorio esta pronto.")
         self._send_board_cmd(board, "FUNC_START", 1.0,
                              instr="INSTR_WRITE", status="STATUS_OK")
@@ -1005,14 +965,12 @@ class AlbatrozGUI(QMainWindow):
     # Métodos de carregamento de menus...
     @Slot()
     def on_load_motor(self):
-        """Carrega um motor de um .yaml (Config/motors/ ou embutido no SAME.yaml)
-        e pergunta se aplica os parâmetros no hardware (envia os CMDs)."""
+        """Carrega um motor de um .yaml (Config/motors/) e pergunta se aplica
+        os parâmetros no hardware (envia os CMDs)."""
         from Communication_Data import motor_config as mc
         try:
             files = mc.list_motor_files(self.config_dir)       # {nome: caminho}
-            same = self._load_config_file(self.same_yaml_path)
-            embedded = list((same.get("motors") or {}).keys())
-            options = list(files.keys()) + [f"{m}  (SAME.yaml)" for m in embedded]
+            options = list(files.keys())
             if not options:
                 QMessageBox.information(self, "Carregar Motor",
                     "Nenhum motor salvo. Use 'Criar' para salvar um .yaml em Config/motors/.")
@@ -1022,11 +980,7 @@ class AlbatrozGUI(QMainWindow):
             if not ok or not choice:
                 return
 
-            if choice in files:
-                params = mc.load_motor_file(files[choice])
-            else:
-                name = choice.replace("  (SAME.yaml)", "")
-                params = mc.params_from_motor_dict((same.get("motors") or {}).get(name, {}))
+            params = mc.load_motor_file(files[choice])
 
             self.prefs["last_motor_name"] = choice
             self.save_user_prefs()
@@ -1074,7 +1028,7 @@ class AlbatrozGUI(QMainWindow):
         """Abre o popout de estimação dos ganhos do SMO (menu Motor)."""
         print("Abrindo Estimador de Ganhos (SMO)...")
         if not getattr(self, "_estim_dlg", None):
-            self._estim_dlg = EstimationDialog(self.config_dir, self.same_yaml_path, self)
+            self._estim_dlg = EstimationDialog(self.config_dir, self.estimates_yaml_path, self)
         self._estim_dlg.show()
         self._estim_dlg.raise_()
         self._estim_dlg.activateWindow()
@@ -1094,21 +1048,21 @@ class AlbatrozGUI(QMainWindow):
         """Abre o popout de estimação do coeficiente da hélice (kQ via CSV)."""
         print("Abrindo Estimador de Coeficiente da Hélice...")
         if not getattr(self, "_helice_dlg", None):
-            self._helice_dlg = HeliceDialog(self.config_dir, self.same_yaml_path, self)
+            self._helice_dlg = HeliceDialog(self.config_dir, self.estimates_yaml_path, self)
         self._helice_dlg.show()
         self._helice_dlg.raise_()
         self._helice_dlg.activateWindow()
 
     @Slot()
-    def open_same_config(self):
-        print("Abrindo diálogo de configuração SAME...")
+    def open_motor_config(self):
+        print("Abrindo diálogo de configuração do motor...")
         
         # 1. Pegamos as preferências (ou as configs carregadas)
         # 2. Passamos o diretório de configs (self.config_dir já existe no seu __init__)
         # 3. Passamos o objeto ethernet (self.eth)
         
         try:
-            dialog = SAMEConfigDialog(
+            dialog = MotorConfigDialog(
                 self.prefs,           # Argumento 1: prefs
                 self.config_dir,      # Argumento 2: config_dir
                 self.eth,             # Argumento 3: ethernet_mgr
@@ -1121,7 +1075,7 @@ class AlbatrozGUI(QMainWindow):
                 self.save_user_prefs() # Salva o que o dialog alterou no self.prefs
                 
         except Exception as e:
-            print(f"Erro ao abrir o menu SAME: {e}")
+            print(f"Erro ao abrir a configuração do motor: {e}")
 
     @Slot(int)
     def on_slider_changed(self, val):
@@ -1135,38 +1089,38 @@ class AlbatrozGUI(QMainWindow):
     def apply_throttle(self):
         """Envia o throttle atual para quem ACIONA o ESC no modo atual.
 
-        SIBA: manda um CMD FUNC_ESC com value = throttle (0–100 %) — a SIBA
-              controla o ESC (servo PWM). A SAME NÃO aciona (só lê/estima)."""
+        Manda um CMD FUNC_ESC com value = throttle (0–100 %); a placa
+        controla o ESC (servo PWM)."""
         board = self._motor_board(self.op_mode)
         val = self.ui.Motor_action.value()
-        if board == "SIBA":
-            if "SIBA" not in self.eth.workers:
-                self.eth.start_link("SIBA")
-            # A SIBA ignora throttle com o ESC desarmado. Mexer no slider é ato
+        if board == "PLACA":
+            if "PLACA" not in self.eth.workers:
+                self.eth.start_link("PLACA")
+            # A placa ignora throttle com o ESC desarmado. Mexer no slider é ato
             # explícito do operador: arma a bancada (pré-carga → potência → ESC)
             # e retoma o "pronto" periódico que o Desligar suspendeu. A placa
             # processa os CMDs em ordem, então o throttle entra já armado.
-            if self._ready_paused or "SIBA" not in self._ready_announced:
+            if self._ready_paused or "PLACA" not in self._ready_announced:
                 self._ready_paused = False
-                self._ready_announced.add("SIBA")
+                self._ready_announced.add("PLACA")
                 print("[Motor] Armando a bancada antes do throttle.")
-                self._send_board_cmd("SIBA", "FUNC_START", 1.0,
+                self._send_board_cmd("PLACA", "FUNC_START", 1.0,
                                      instr="INSTR_WRITE", status="STATUS_OK")
-            self._send_board_cmd("SIBA", "FUNC_ESC", float(val), instr="INSTR_WRITE")
-            print(f"[Motor] SIBA ESC throttle {val}%")
+            self._send_board_cmd("PLACA", "FUNC_ESC", float(val), instr="INSTR_WRITE")
+            print(f"[Motor] ESC throttle {val}%")
         else:
-            print("[Motor] Modo atual não aciona o ESC (SAME é só leitura/estimativa).")
+            print("[Motor] Modo atual não aciona o ESC.")
 
     @Slot()
     def motor_stop(self):
         """Para o motor com segurança conforme o modo e zera o slider."""
         board = self._motor_board(self.op_mode)
-        if board == "SIBA":
+        if board == "PLACA":
             # ESC em idle (0 %) + corte imediato de potência (FUNC_STOP).
-            self._send_board_cmd("SIBA", "FUNC_ESC", 0.0, instr="INSTR_WRITE")
-            self._send_board_cmd("SIBA", "FUNC_STOP", 0.0)
+            self._send_board_cmd("PLACA", "FUNC_ESC", 0.0, instr="INSTR_WRITE")
+            self._send_board_cmd("PLACA", "FUNC_STOP", 0.0)
             self._ready_paused = True
-            print("[Motor] SIBA ESC parado (throttle 0 % + stop).")
+            print("[Motor] ESC parado (throttle 0 % + stop).")
         self.ui.Motor_action.setValue(0)
 
     def _send_board_cmd(self, board, func_name, value, target="TARGET_DEFAULT",
@@ -1185,7 +1139,7 @@ class AlbatrozGUI(QMainWindow):
         cmd = codecs.encode_cmd(fi, ii, ti, value, ai)
         # Log da quebra: hex dos 8 bytes + tradução dos campos.
         print(f"[NET] CMD -> [{cmd.hex(' ').upper()}]")
-        print(f"[DECODE] [{board}] {func_name}(f={fi}) | {instr}(i={ii}) | "
+        print(f"[DECODE] {func_name}(f={fi}) | {instr}(i={ii}) | "
               f"{target}(t={ti}) | VAL: {value:.4f} | ACT: {ai}"
               f"{f' ({status})' if status else ''}")
         self.eth.send_command(board, cmd)
@@ -1195,10 +1149,7 @@ class AlbatrozGUI(QMainWindow):
         args = ["--no-comment"] if quiet else []
         
         # Ativa os mocks de hardware através do terminal
-        if target == "all" or "siba" in target.lower():
-            self.terminal._cmd_siba_mock_start(args)
-        if target == "all" or "same" in target.lower():
-            self.terminal._cmd_same_mock_start(args)
+        self.terminal._cmd_mock_start(args)
 
     def clear_graph_buffers(self, target_str):
         """Limpa buffers de memória para um gráfico específico ou todos."""

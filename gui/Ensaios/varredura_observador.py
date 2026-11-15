@@ -1,4 +1,4 @@
-"""Varredura de um parâmetro do observador da SIBA com o motor num degrau fixo.
+"""Varredura de um parâmetro do observador com o motor num degrau fixo.
 
 Arma a bancada, sobe o throttle até THR e, com a rotação estável, troca o
 parâmetro (por CMD, pela rede) a cada DWELL segundos, gravando toda a
@@ -8,8 +8,8 @@ No fim (ou em erro/Ctrl-C): devolve o parâmetro ao default, throttle 0 e
 desliga ESC + relés.
 
 Uso (GUI FECHADA):
-    .venv/bin/python Ensaios/varredura_obs_siba.py [alvo] [valores] [thr%] [s_por_valor]
-    .venv/bin/python Ensaios/varredura_obs_siba.py TARGET_INDUCTANCE 11.3e-6,5.65e-6,22.6e-6,45.2e-6,11.3e-6 30 8
+    .venv/bin/python Ensaios/varredura_observador.py [alvo] [valores] [thr%] [s_por_valor]
+    .venv/bin/python Ensaios/varredura_observador.py TARGET_INDUCTANCE 11.3e-6,5.65e-6,22.6e-6,45.2e-6,11.3e-6 30 8
 """
 import socket, struct, time, sys, csv, os, yaml
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # gui/
@@ -23,8 +23,8 @@ THR = float(sys.argv[3]) if len(sys.argv) > 3 else 30.0
 DWELL = float(sys.argv[4]) if len(sys.argv) > 4 else 8.0
 ARM_WAIT, SETTLE = 15.0, 8.0          # relés + arranque do ESC; rotação estabilizar
 
-raw = yaml.safe_load(open(os.path.join(APP, 'Config', 'SIBA.yaml'))); en = raw['enums']
-lay = codecs.telemetry_layout(codecs.board_protocol_cfg(raw, 'SIBA'))
+raw = yaml.safe_load(open(os.path.join(APP, 'Config', 'protocolo.yaml'))); en = raw['enums']
+lay = codecs.telemetry_layout(codecs.board_protocol_cfg(raw, 'PLACA'))
 ix = lambda c, n: en[c].index(n)
 BOARD = ('169.254.97.200', 5000)
 def c_start(st): return struct.pack('<BBBfb', ix('func_type','FUNC_START'), ix('instruct_type','INSTR_WRITE'), ix('target_type','TARGET_DEFAULT'), 1.0, ix('status_type', st))

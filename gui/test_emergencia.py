@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testa a lógica do botão de emergência da SIBA pela rede.
+"""Testa a lógica do botão de emergência da placa pela rede.
 
 Manda o mesmo comando de "pronto" da GUI (FUNC_START/STATUS_OK) e confere o
 resultado na telemetria, pelos bits do error_code:
@@ -19,20 +19,20 @@ import signal
 import sys
 import time
 
-from native_cli import NativeTester
+from placa import Placa
 
 BIT_EMERGENCIA = 1 << 19
 BIT_RELE_ABERTO = 1 << 25
-PRECARGA_S = 5.0        # CONFIG_SIBA_RELAY_PRECHARGE_MS
+PRECARGA_S = 5.0        # CONFIG_RELAY_PRECHARGE_MS
 ESPERA_BOTAO_S = 120.0
 
 
 class Teste:
     def __init__(self, native):
         self.native = native
-        self.t = NativeTester("SIBA", spawn=native)
-        if not native:
-            self.t.ip = self.t.cfg.ip
+        self.t = Placa(native=native)
+        if not self.t.escutar():
+            raise SystemExit(1)
         self.resultados = []
 
     # ------------------------------------------------------------- telemetria

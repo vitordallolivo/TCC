@@ -1,6 +1,6 @@
 """InfoDialog — "Sobre / Ajuda": explica o software do ponto de vista do usuário.
 
-Texto em português, sem jargão de código: o que é cada placa (SIBA/SAME),
+Texto em português, sem jargão de código: o que a placa mede,
 como conectar, como calibrar, o que os menus fazem e como ler os erros.
 """
 from PySide6.QtCore import Qt
@@ -9,26 +9,20 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextBrowser, QPushButton, Q
 
 _HTML = """
 <h2>Aplicação Albatroz — Guia do Usuário</h2>
-<p>Este programa é o <b>painel de controle único</b> das placas eletrônicas do
-projeto. Ele conecta ao hardware pela rede, mostra a telemetria em gráficos,
+<p>Este programa é o <b>painel de controle</b> da placa de medição. Ele conecta ao hardware pela rede, mostra a telemetria em gráficos,
 envia comandos, calibra sensores e roda as estimativas do motor.</p>
 
-<h3>As duas placas</h3>
-<ul>
-  <li><b>SIBA</b> — placa de <b>energia e telemetria aerodinâmica</b>. Lê as
-      <b>células de carga</b> (força/empuxo e momentos), a <b>bateria</b>
-      (tensão, corrente, temperatura, carga/SOC), o <b>tubo de Pitot</b>
-      (velocidade do ar) e a <b>rotação (RPM)</b>. É ela também que
-      <b>aciona o ESC</b> (acelerador do motor).</li>
-  <li><b>SAME</b> — placa de <b>controle do inversor/motor</b>. Lê as correntes
-      e tensões das três fases do motor e <b>estima</b> parâmetros do controle
-      (observador SMO). É só leitura/estimativa — não aciona o motor sozinha.</li>
-</ul>
+<h3>A placa de medição</h3>
+<p>Lê a <b>bateria</b> (tensão e corrente), as <b>tensões e correntes das três
+fases</b> do motor e, com elas, <b>estima rotação e torque</b> (observador SMO).
+Também <b>aciona o ESC</b> (acelerador do motor) e os relés de potência, e tem
+entradas para <b>células de carga</b>.</p>
 
-<h3>Modo de Operação</h3>
-<p>No canto da barra de menus você escolhe o modo: <b>SIBA</b>, <b>SAME</b>
-ou <b>SIBA+SAME</b>. O modo define quais placas conectam e quais
-gráficos/comandos aparecem.</p>
+<h3>Linha de comando</h3>
+<p>Os comandos do <b>TinyTerminal</b> também funcionam fora da aplicação, em
+qualquer terminal (Linux ou Windows): <code>python placa.py set i_a linear
+0.0809</code>, <code>python placa.py tele</code>, ou só
+<code>python placa.py</code> para abrir o prompt.</p>
 
 <h3>Como conectar (3 formas)</h3>
 <ol>
@@ -47,7 +41,7 @@ gráficos/comandos aparecem.</p>
       <b>Tarar</b> zera a leitura sem carga; <b>calibrar o ganho</b> é colocar um
       <b>peso conhecido</b> e informar o valor — a placa ajusta a escala para a
       leitura passar a valer aquele peso.</li>
-  <li><b>Sensores da bateria/Pitot (ADC)</b> — calibração linear
+  <li><b>Sensores da bateria e das fases (ADC)</b> — calibração linear
       <i>valor = ganho·leitura + offset</i>.</li>
 </ul>
 <p>Use <b>Opções → Configuração de Sensores</b> para ajustar ganho, offset e os

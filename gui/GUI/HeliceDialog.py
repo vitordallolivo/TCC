@@ -1,9 +1,9 @@
 """Camada 4 · Apresentação — coeficientes da hélice (CT, CQ, J) via CSV.
 
 Consome o CSV exportado pela GUI (botão "Iniciar/Encerrar Registro" — Timestamp
-do PC + telemetria SIBA/SAME). O usuário escolhe:
+do PC + telemetria da placa). O usuário escolhe:
 - qual FORÇA usar como TRAÇÃO (obrigatório — pergunta explícita);
-- a coluna de TORQUE (padrão: o estimado pela SAME, `torque_eletrico`);
+- a coluna de TORQUE (padrão: o estimado pelo observador, `torque_eletrico`);
 - a coluna de RPM (padrão: `rpm_same`) e de velocidade do ar (`air_speed`);
 - diâmetro D e densidade ρ.
 
@@ -45,10 +45,10 @@ class HeliceDialog(QDialog):
     sig_result = Signal(dict)
     sig_done = Signal(int)
 
-    def __init__(self, config_dir, same_yaml_path, parent=None):
+    def __init__(self, config_dir, estimates_yaml_path, parent=None):
         super().__init__(parent)
         self.config_dir = config_dir
-        self.same_yaml_path = same_yaml_path
+        self.estimates_yaml_path = estimates_yaml_path
         self.gui = parent
         self.setWindowTitle("Coeficientes da Hélice (CT, CQ, J)")
         self.setWindowFlags(Qt.Window)
@@ -83,7 +83,7 @@ class HeliceDialog(QDialog):
     def _build_ui(self):
         root = QVBoxLayout(self)
 
-        src = QGroupBox("Fonte: CSV exportado (Timestamp + telemetria SIBA/SAME)")
+        src = QGroupBox("Fonte: CSV exportado (Timestamp + telemetria)")
         form = QFormLayout(src)
         pick = QHBoxLayout()
         self.lbl_csv = QLineEdit(); self.lbl_csv.setReadOnly(True)
@@ -137,7 +137,7 @@ class HeliceDialog(QDialog):
         bottom = QHBoxLayout()
         self.btn_save_csv = QPushButton("Salvar resultados (CSV)...")
         self.btn_save_csv.setEnabled(False); self.btn_save_csv.clicked.connect(self._save_csv)
-        self.btn_apply = QPushButton("Aplicar ao SAME.yaml")
+        self.btn_apply = QPushButton("Gravar em estimativas.yaml")
         self.btn_apply.setEnabled(False); self.btn_apply.clicked.connect(self._apply)
         bottom.addStretch(); bottom.addWidget(self.btn_save_csv); bottom.addWidget(self.btn_apply)
         root.addLayout(bottom)
@@ -184,9 +184,9 @@ class HeliceDialog(QDialog):
             if i >= 0:
                 combo.setCurrentIndex(i)
 
-        # Torque: padrão = estimado pela SAME (torque_eletrico).
+        # Torque: padrão = estimado pelo observador (torque_eletrico).
         fill(self.cmb_torque, ["torque_eletrico", "torque_helice", "te"], "torque_eletrico")
-        # RPM: padrão = estimado pela SAME (rpm_same).
+        # RPM: padrão = estimado pelo observador (rpm_same).
         fill(self.cmb_rpm, ["rpm_same", "rpm"], "rpm_same")
         # Velocidade do ar.
         fill(self.cmb_v, ["air_speed"], "air_speed")
@@ -282,12 +282,15 @@ class HeliceDialog(QDialog):
             return
         resp = QMessageBox.question(
             self, "Aplicar coeficientes",
-            f"Gravar a lista de {len(self._points)} pontos (CT/CQ/J) no SAME.yaml?",
+            f"Gravar a lista de {len(self._points)} pontos (CT/CQ/J) em Config/estimativas.yaml?",
             QMessageBox.Yes | QMessageBox.No)
         if resp != QMessageBox.Yes:
             return
         try:
-            data = yaml.safe_load(open(self.same_yaml_path)) or {}
+            data = {}
+            if os.path.exists(self.estimates_yaml_path):
+                with open(self.estimates_yaml_path, encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
             data["helice"] = {
                 "D": self.sp_D.value(), "rho": self.sp_rho.value(),
                 "thrust_col": self.cmb_thrust.currentData(),
@@ -300,8 +303,8 @@ class HeliceDialog(QDialog):
                            for p in self._points],
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
-            with open(self.same_yaml_path, "w") as f:
+            with open(self.estimates_yaml_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-            QMessageBox.information(self, "Aplicado", "Coeficientes gravados em SAME.yaml (bloco helice).")
+            QMessageBox.information(self, "Aplicado", "Coeficientes gravados em Config/estimativas.yaml (bloco helice).")
         except Exception as e:
             QMessageBox.warning(self, "Erro ao gravar", str(e))

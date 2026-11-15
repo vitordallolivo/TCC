@@ -1,6 +1,6 @@
 """Camada 1 · Transporte — BoardSimulator (modo 2 · fake Python).
 
-Simula o firmware SIBA/SAME: recebe CMD e devolve TELEMETRY_LOG senoidal.
+Simula o firmware da placa: recebe CMD e devolve TELEMETRY_LOG senoidal.
 É um FAKE (não roda nenhuma linha do firmware real) — para validar contra o
 firmware de verdade, use o modo native_sim. Movido de `Ethernet.py` sem mudar
 o comportamento; agora reaproveita os codecs de domínio.

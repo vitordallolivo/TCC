@@ -1,5 +1,6 @@
 # ===================================================
-#  This file contains setting of SIBA board 
+#  Protocolo da placa de medição (fonte única: gera os headers C
+#  do firmware via generate.py e é lido pela GUI e pelo placa.py)
 # ===================================================
 
 # CMD -> FUNCTION, INSTRUCTION, TARGET, VALUE, STATUS OR ACTION
@@ -52,7 +53,7 @@ enums:
     - TARGET_PITOT_TUBE           # 10 -> SENSOR_ID_AIR_SPEED
     - TARGET_DEFAULT              # 11 -> alvo genérico (START/STOP/RESET)
     - TARGET_TEMPERATURE_MOTOR    # 12 -> SENSOR_ID_TEMPERATURE_MOTOR
-    # Fases do motor pela AQ1 (vindo da SAME). Mesma ordem dos SENSOR_ID_V_A..I_C
+    # Fases do motor pela AQ1. Mesma ordem dos SENSOR_ID_V_A..I_C
     # (13..18): calibração por FUNC_SENSOR igual aos outros sensores ADC.
     - TARGET_PHASE_V_A            # 13 -> SENSOR_ID_V_A
     - TARGET_PHASE_V_B            # 14 -> SENSOR_ID_V_B
@@ -60,9 +61,9 @@ enums:
     - TARGET_PHASE_I_A            # 16 -> SENSOR_ID_I_A
     - TARGET_PHASE_I_B            # 17 -> SENSOR_ID_I_B
     - TARGET_PHASE_I_C            # 18 -> SENSOR_ID_I_C
-    # Observador SMO+PLL (vindo da SAME): FUNC_SENSOR + INSTR_WRITE, `value` =
+    # Observador SMO+PLL: FUNC_SENSOR + INSTR_WRITE, `value` =
     # novo valor; action SENSE_RESET_DEFAULT volta ao default. Ganhos na forma
-    # Γ = K·Ts (ver SAME/CLAUDE.md). TS_ADC em µs.
+    # Γ = K·Ts. TS_ADC em µs.
     - TARGET_POLES_PAIRS          # 19
     - TARGET_RESISTANCE           # 20
     - TARGET_INDUCTANCE           # 21
@@ -157,7 +158,7 @@ error_bits:
   # --- Sistema ---
   - { name: ERROR_OS_GPIO_INIT_FAILED,        bit: 24, group: "Sistema",      msg: "Falha ao inicializar um módulo de hardware (GPIO)" }
   - { name: ERROR_MCU_POWER_READY,            bit: 25, group: "Sistema",      msg: "Bancada não inicializada — aguardando sequência de energização (relé)" }
-  # --- Fases do motor e observador (vindos da SAME). Só diagnóstico: não
+  # --- Fases do motor e observador. Só diagnóstico: não
   # disparam parada de emergência. BEMF baixa / PLL sem lock NÃO viram bit
   # (são o estado normal com o motor parado e apagariam o LED de pronto). ---
   - { name: ERROR_MEAS_OVERCURRENT,           bit: 11, group: "Medição",      msg: "Corrente de fase acima do limite seguro" }
@@ -185,8 +186,7 @@ security_limits:
 # por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).
 # `target` é SENSOR_ID_<NOME_DO_CAMPO_TELEMETRY_LOG> (gerado em Log_Manager.h)
 # — não target_type, porque a ordem de TELEMETRY_LOG diverge da de target_type
-# nalgumas placas (ver SAME.yaml, que já usa target_type direto porque lá
-# bate). `error_bit` é opcional (siba_error_bit_t, Security_Manager.h) — só
+# em alguns sensores. `error_bit` é opcional (siba_error_bit_t, Security_Manager.h) — só
 # nos sensores que disparam emergência quando saem da faixa [min,max].
 sensor_defaults:
   - { target: SENSOR_ID_LOAD_CELL_0, linear: 1.0, offset: 0.0, min: "-CMD_CORE_NO_LIMIT", max: "CMD_CORE_NO_LIMIT" }
@@ -213,13 +213,13 @@ sensor_defaults:
   #     linear = sqrt(2/(rho*S)) convertido para mV = 1,691423
   #
   # `zero` é TENSÃO do sensor, não contagem de ADC: não muda com a resolução
-  # do conversor. O ensaio usou Arduino Uno (10 bits/5 V, 4,89 mV/LSB); a SIBA
+  # do conversor. O ensaio usou Arduino Uno (10 bits/5 V, 4,89 mV/LSB); a placa
   # lê com 12 bits/3,3 V (0,806 mV/LSB), 6,1x mais fino — a incerteza de 1 LSB
   # a 5 m/s cai de 1,40 para 0,23 m/s.
   #
   # ⚠️ `linear` carrega a densidade do ar embutida. Operar em altitude ou
   # temperatura bem diferentes exige recalcular por linear = sqrt(2/(rho*S));
-  # enquanto rho for o da calibração o erro se cancela. A SIBA não tem
+  # enquanto rho for o da calibração o erro se cancela. A placa não tem
   # barômetro para fazer isso sozinha (ver sec:calibracao_pitot).
   #
   # min/max: 0 (a raiz satura ali) a 42 m/s, onde a entrada do conversor
@@ -230,7 +230,7 @@ sensor_defaults:
   # do termistor de bateria (0,040 °C/mV). Máximo 150 °C (limite típico de
   # enrolamentos BLDC classe F). Sem bit de erro por ora (só diagnóstico).
   - { target: SENSOR_ID_TEMPERATURE_MOTOR, linear: 0.040, offset: 0.0, min: -40.0, max: 150.0 }
-  # Fases do motor pela AQ1 (mesma cadeia da SAME), x = mV no pino.
+  # Fases do motor pela AQ1, x = mV no pino.
   # Tensão: divisor 100k/5k6 → 0,0188571 V/mV.
   # Corrente: SS49E + divisor 4k7/10k → 0,0784 A/mV; o offset é o zero de cada
   # fase, refeito a cada boot com o ESC parado (calibração de offset no HAL).
@@ -276,19 +276,19 @@ structs:
     - { name: temperature_motor, type: float }   # Motor winding temperature (°C), ADC1 CH3/PA3
     - { name: status, type: log_status }         # Integrity of the telemetry frame
     - { name: error_code, type: uint32_t }        # Bitfield agregado pelo Security_Manager (1 bit/condição) — ver CLAUDE.md "Error_Detect/Error_Erase"
-    # Fases do motor medidas pela placa AQ1 (mesma cadeia da SAME).
+    # Fases do motor medidas pela placa AQ1.
     - { name: V_a, type: float }
     - { name: V_b, type: float }
     - { name: V_c, type: float }
     - { name: i_a, type: float }
     - { name: i_b, type: float }
     - { name: i_c, type: float }
-    # Tempo do pipeline do ADC (ISR do DMA → fim do lote). Ver SIBA/lib/OS/HAL.c.
+    # Tempo do pipeline do ADC (ISR do DMA → fim do lote). Ver firmware/lib/OS/HAL.c.
     - { name: t_proc_us, type: float }            # pior tempo de EXECUÇÃO do processamento de um lote na janela [µs]
     - { name: t_batch_us, type: float }           # pior intervalo entre ISRs do DMA na janela [µs]
     - { name: batch_drops, type: float }          # lotes descartados por chegarem durante o processamento (acumulado)
     - { name: t_lat_us, type: float }             # pior latência ISR → início do processamento na janela [µs]
-    # Observador SMO+PLL (vindo da SAME), com LPF de 2 Hz nas saídas.
+    # Observador SMO+PLL, com LPF de 2 Hz nas saídas.
     - { name: rpm_same, type: float }             # rotação mecânica estimada [rpm]
     - { name: torque_eletrico, type: float }      # torque eletromagnético estimado [N·m]
     - { name: torque_helice, type: float }        # torque na hélice (hoje = torque_eletrico) [N·m]

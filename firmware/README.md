@@ -388,7 +388,7 @@ A SIBA troca dois tipos de pacote com o programa de PC, sempre por UDP:
 
 Esses dois formatos **não são escritos à mão no C** — eles são gerados
 automaticamente a partir de um arquivo `.yaml` (`../gui/Config/
-SIBA.yaml`) por um script Python (`generate.py`), explicado na seção
+protocolo.yaml`) por um script Python (`generate.py`), explicado na seção
 própria mais abaixo. A razão de gerar em vez de escrever à mão nos dois
 lados (firmware em C e GUI em Python) é evitar que os dois lados
 divirjam silenciosamente — se alguém adicionasse um campo na struct do
@@ -583,7 +583,7 @@ escravo. Cada palavra do DMA traz as duas leituras.
 | ADC2 CH12 | PC2 | Reserva (não publicado) | — |
 
 Em vez de embutir a fórmula física exata de cada sensor, o firmware usa
-um modelo genérico com ponto de zero, escolhido por sensor no `SIBA.yaml`
+um modelo genérico com ponto de zero, escolhido por sensor no `protocolo.yaml`
 (`sensor_defaults`):
 
 $$y = \text{linear} \cdot (x_{mV} - \text{zero}) + \text{offset} \qquad \text{(lei afim, padrão)}$$
@@ -720,7 +720,7 @@ leitura, sem ambiguidade.
 | 24 | `OS_GPIO_INIT_FAILED` | Algum periférico de GPIO não conseguiu ser inicializado no boot |
 | 25 | `MCU_POWER_READY` | Informativo: o micro está pronto e os relés estão abertos (ligado no boot pelo `Security_Manager`) |
 
-A tabela é gerada a partir da seção `error_bits` do `SIBA.yaml` (vira
+A tabela é gerada a partir da seção `error_bits` do `protocolo.yaml` (vira
 `lib/SYS/Error_Codes.h` no firmware e as mensagens do Painel de Erros na
 GUI).
 
@@ -907,7 +907,7 @@ boot os dois ficam assim (relés abertos).
 ## Como o protocolo é gerado (`generate.py`)
 
 O `CMD`/`TELEMETRY_LOG` mostrados acima **não são escritos à mão** — eles
-nascem de um arquivo `SIBA.yaml` (em `../gui/Config/`), que
+nascem de um arquivo `protocolo.yaml` (em `../gui/Config/`), que
 declara os enums (`func_type`, `target_type`, etc.) e as structs
 (`CMD`, `TELEMETRY_LOG`) junto com a **ordem exata dos campos** — essa
 ordem dita o layout de memória, porque o pacote na rede é só uma sequência
@@ -917,7 +917,7 @@ escreve os arquivos `.h` finais em C:
 
 ```mermaid
 flowchart LR
-    yaml["gui/Config/SIBA.yaml<br/>enums + structs + ordem dos campos"] --> gen["generate.py<br/>+ templates Jinja2 (*.h.j2)"]
+    yaml["gui/Config/protocolo.yaml<br/>enums + structs + ordem dos campos"] --> gen["generate.py<br/>+ templates Jinja2 (*.h.j2)"]
     gen --> ct["lib/OS/Common_Types.h<br/>(os enums)"]
     gen --> cmd["lib/OS/CMD.h<br/>(struct CMD)"]
     gen --> log["lib/SYS/Log_Manager.h<br/>(struct TELEMETRY_LOG + tabela de sensores)"]
@@ -936,7 +936,7 @@ python generate.py
 #   ../../SIBA/lib/SYS/Error_Codes.h   (os bits do error_code)
 ```
 
-**Sempre que o `SIBA.yaml` for editado, é preciso rodar `generate.py` antes
+**Sempre que o `protocolo.yaml` for editado, é preciso rodar `generate.py` antes
 de recompilar o firmware** — os arquivos gerados nunca devem ser editados
 à mão (uma edição manual seria sobrescrita na próxima geração, e mais
 importante, ficaria dessincronizada do lado Python, que lê o mesmo

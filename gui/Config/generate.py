@@ -1,14 +1,14 @@
 """
-generate.py — Gerador de headers C para os firmwares SIBA e SAME.
-Lê SIBA.yaml e SAME.yaml e renderiza os templates Jinja2 para CADA firmware,
-tudo de uma vez (a fonte de verdade do protocolo é o .yaml de cada placa).
+generate.py — Gerador dos headers C do firmware a partir do protocolo.yaml.
+Renderiza os templates Jinja2 (a fonte de verdade do protocolo é o .yaml).
 
-Para cada placa gera:
-  <placa>/lib/OS/Common_Types.h  — Enums compartilhados
-  <placa>/lib/OS/CMD.h           — Struct de comando (PC -> Board)
-  <placa>/lib/SYS/Log_Manager.h  — Struct de telemetria (Board -> PC) + SENSORS
-  <placa>/lib/OS/CMD_Core_prm.h  — Defaults de calibração/faixa por sensor
-                                    (se o .yaml tiver `sensor_defaults`)
+Gera, em firmware/:
+  lib/OS/Common_Types.h  — Enums compartilhados
+  lib/OS/CMD.h           — Struct de comando (PC -> placa)
+  lib/SYS/Log_Manager.h  — Struct de telemetria (placa -> PC) + SENSORS
+  lib/OS/CMD_Core_prm.h  — Defaults de calibração/faixa por sensor
+  lib/SYS/Error_Codes.h  — Bits de erro
+  lib/SYS/Security_prm.h — Limiares do Security_Manager
 """
 
 import yaml
@@ -18,10 +18,12 @@ from jinja2 import Environment, FileSystemLoader
 TEMPLATE_DIR = os.path.dirname(os.path.abspath(__file__))
 CODIGOS_DIR  = os.path.abspath(os.path.join(TEMPLATE_DIR, "../.."))   # raiz do repositório
 
-# Placas a gerar: (arquivo .yaml, pasta do firmware na raiz do repositório).
-BOARDS = [
-    ("SIBA.yaml", "firmware", "SIBA"),
-]
+# (arquivo .yaml, pasta do firmware na raiz do repositório)
+PROTOCOLO_YAML = "protocolo.yaml"
+FIRMWARE_DIR = "firmware"
+# Prefixo dos identificadores gerados que o firmware usa (SIBA_SENSOR_TABLE,
+# siba_error_bit_t). É nome interno do firmware: mudar aqui exige mudar lá.
+PREFIXO_FW = "SIBA"
 
 env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), keep_trailing_newline=True)
 
@@ -43,17 +45,16 @@ def _c_float(v):
     return f"{float(v)}f"
 
 
-def generate_board(yaml_name, board_dir, board_name):
-    """Gera Common_Types.h / CMD.h / Log_Manager.h de uma placa a partir do seu
-    .yaml, na estrutura <raiz>/<board_dir>/lib/{OS,SYS}/."""
+def generate(yaml_name, board_dir):
+    """Gera os headers a partir do .yaml, em <raiz>/<board_dir>/lib/{OS,SYS}/."""
     yaml_path = os.path.join(TEMPLATE_DIR, yaml_name)
     if not os.path.exists(yaml_path):
         print(f"⚠  {yaml_name} não encontrado — pulando {board_dir}.")
         return
     with open(yaml_path, 'r') as f:
         cfg = yaml.safe_load(f)
-    cfg['board_yaml'] = yaml_name        # p/ o comentário "edite <placa>.yaml"
-    cfg['board'] = board_name
+    cfg['board_yaml'] = yaml_name        # p/ o comentário "edite <yaml>"
+    cfg['board'] = PREFIXO_FW
 
     # Enums usados como campo do CMD precisam ter 1 byte para o struct bater com
     # o formato de fio compacto (<BBBfb>, 8 bytes). O tamanho de um enum C é
@@ -73,10 +74,10 @@ def generate_board(yaml_name, board_dir, board_name):
     render('CMD_template.h.j2',    cfg, os.path.join(lib_os,  'CMD.h'))
     render('LOG_template.h.j2',    cfg, os.path.join(lib_sys, 'Log_Manager.h'))
 
-    # Enum de códigos de erro (<board>_error_bit_t) — fonte única compartilhada
+    # Enum de códigos de erro (<prefixo>_error_bit_t) — fonte única compartilhada
     # com a GUI (errors.py). Só gera se o yaml trouxer a seção `error_bits`.
     if cfg.get('error_bits'):
-        cfg['error_bit_type'] = f"{board_name.lower()}_error_bit_t"
+        cfg['error_bit_type'] = f"{PREFIXO_FW.lower()}_error_bit_t"
         render('Error_Codes_template.h.j2', cfg, os.path.join(lib_sys, 'Error_Codes.h'))
     else:
         print(f"[{board_dir}] sem `error_bits` no yaml — Error_Codes.h não gerado.")
@@ -125,8 +126,7 @@ def generate_board(yaml_name, board_dir, board_name):
 
 
 def main():
-    for yaml_name, board_dir, board_name in BOARDS:
-        generate_board(yaml_name, board_dir, board_name)
+    generate(PROTOCOLO_YAML, FIRMWARE_DIR)
 
 
 if __name__ == "__main__":

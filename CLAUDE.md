@@ -1,9 +1,10 @@
 # TCC — sistema de aquisição para ensaios de motores BLDC
 
-Placa de medição (CH32V307, Zephyr) + aplicação de supervisão no PC. A antiga
-SAME queimou e foi absorvida pela placa de medição; o código dela saiu do
-repositório (fica no histórico do git). No código, a placa ainda se chama
-`SIBA` (enums, `SIBA.yaml`, nomes de arquivo); a pasta é `firmware/`.
+Placa de medição (CH32V307, Zephyr) + aplicação de supervisão no PC, uma
+placa só. A GUI e o CLI (`gui/placa.py`) não distinguem placas. O firmware
+**não foi renomeado** (decisão do autor, 15/11/2026): por dentro ainda usa o
+prefixo `SIBA` (`siba_wq`, `SIBA_SENSOR_TABLE`, board `siba_board`,
+`CONFIG_SIBA_*`) e o campo de telemetria `rpm_same`. Não renomear sem pedido.
 
 ## Estrutura
 
@@ -20,7 +21,7 @@ repositório (fica no histórico do git). No código, a placa ainda se chama
 
 ## Regras que valem para tudo
 
-- **Protocolo tem fonte única**: `gui/Config/SIBA.yaml`. Os headers C
+- **Protocolo tem fonte única**: `gui/Config/protocolo.yaml`. Os headers C
   (`CMD.h`, `Common_Types.h`, `Log_Manager.h`, `CMD_Core_prm.h`,
   `Error_Codes.h`) são **gerados** por `make protocolo`
   (`gui/Config/generate.py`). Nunca editar `.h` gerado à mão.

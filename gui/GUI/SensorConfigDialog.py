@@ -1,9 +1,9 @@
 """SensorConfigDialog — ajusta ganho, offset e limites de todos os sensores
-da SIBA e da SAME num só lugar.
+da placa num só lugar.
 
-Cada célula editada vira um comando `<siba|same> set <sensor> <campo>
-<valor>`, e só o que foi editado é enviado ao clicar "Aplicar". Mín/máx
-só disparam alarme na SIBA (Security_Manager) — a SAME apenas registra.
+Cada célula editada vira um comando `set <sensor> <campo> <valor>`, e
+só o que foi editado é enviado ao clicar "Aplicar". Mín/máx disparam alarme
+no Security_Manager.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -12,15 +12,15 @@ from PySide6.QtWidgets import (
 )
 
 # Sensores calibráveis/monitoráveis, por placa (soc e rpm não têm ganho/offset
-# próprios). SAME: as 3 correntes E as 3 tensões de fase têm calibração
-# própria cada uma (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C).
+# próprios). As 3 correntes e as 3 tensões de fase têm calibração própria
+# cada uma (TARGET_PHASE_I_A..C, TARGET_PHASE_V_A..C).
 _SENSORS = [
-    ("SIBA", "load_cell_0"), ("SIBA", "load_cell_1"), ("SIBA", "load_cell_2"),
-    ("SIBA", "load_cell_3"), ("SIBA", "load_cell_4"), ("SIBA", "load_cell_5"),
-    ("SIBA", "v_batt"), ("SIBA", "i_batt"),
-    ("SIBA", "temperature_battery"), ("SIBA", "air_speed"),
-    ("SAME", "i_a"), ("SAME", "i_b"), ("SAME", "i_c"),
-    ("SAME", "V_a"), ("SAME", "V_b"), ("SAME", "V_c"),
+    ("PLACA", "load_cell_0"), ("PLACA", "load_cell_1"), ("PLACA", "load_cell_2"),
+    ("PLACA", "load_cell_3"), ("PLACA", "load_cell_4"), ("PLACA", "load_cell_5"),
+    ("PLACA", "v_batt"), ("PLACA", "i_batt"),
+    ("PLACA", "temperature_battery"), ("PLACA", "air_speed"),
+    ("PLACA", "i_a"), ("PLACA", "i_b"), ("PLACA", "i_c"),
+    ("PLACA", "V_a"), ("PLACA", "V_b"), ("PLACA", "V_c"),
 ]
 
 # Coluna -> (título, sub-ação do CMD)
@@ -69,9 +69,12 @@ class SensorConfigDialog(QDialog):
     def _default_for(self, board, sensor):
         """Entrada de sensor_defaults (yaml) do sensor da linha, indexada
         pelo MESMO índice de target_type que o firmware usa (ver
-        TinyTerminal._resolve_target_index) — ou None se não houver default
+        comandos.Protocolo.alvo) — ou None se não houver default
         declarado pra esse índice."""
-        idx = self.gui.terminal._resolve_target_index(board, sensor)
+        try:
+            idx = self.gui.terminal.proto.alvo(sensor)
+        except ValueError:
+            return None
         cfg = self.gui.eth.registry.get(board)
         defaults = (cfg.protocol_cfg.get('sensor_defaults') if cfg else None) or []
         if 0 <= idx < len(defaults):
@@ -80,13 +83,12 @@ class SensorConfigDialog(QDialog):
 
     def _friendly(self, board, var):
         """Legenda dos gráficos (FX/FY/…) se existir; senão o próprio nome,
-        prefixado com a placa dona do sensor (SIBA/SAME têm sensores distintos,
-        mas o prefixo deixa claro pra onde cada comando vai)."""
+        com o nome da variável entre parênteses."""
         for info in (self.gui.plot_config.get("plots_mapping", {}) or {}).values():
             for v, leg in (info.get("vars") or {}).items():
                 if v == var and leg:
-                    return f"{board}: {leg}  ({var})"
-        return f"{board}: {var}"
+                    return f"{leg}  ({var})"
+        return var
 
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -94,8 +96,7 @@ class SensorConfigDialog(QDialog):
         info = QLabel(
             "Células em <span style='color:#8a8a8a;'>cinza</span> mostram o "
             "valor <b>default</b> (yaml) — só viram pendente se você editar. "
-            "Clique <b>Aplicar</b> pra mandar só as células destacadas, cada "
-            "uma pra placa dona daquele sensor (SIBA ou SAME).<br>"
+            "Clique <b>Aplicar</b> pra mandar só as células destacadas.<br>"
             "⚠ <b>Células de carga</b>: <i>Ganho</i> = calibrar pelo PESO conhecido; "
             "<i>Offset</i> = TARAR (o valor é ignorado, zera pela leitura bruta)."
         )
@@ -193,14 +194,12 @@ class SensorConfigDialog(QDialog):
             except ValueError:
                 failed += 1
                 continue
-            parts = [board.lower(), "set", sensor, action, f"{value:.6f}"]
-            try:
-                self.gui.terminal._handle_hardware_command(parts)
+            if self.gui.terminal.enviar_comando(f"set {sensor} {action} {value:.6f}"):
                 sent += 1
                 self.table.blockSignals(True)
                 self.table.item(r, c).setData(Qt.BackgroundRole, None)
                 self.table.blockSignals(False)
-            except Exception:
+            else:
                 failed += 1
 
         self._pending.clear()
@@ -225,11 +224,9 @@ class SensorConfigDialog(QDialog):
 
         sent, failed = 0, 0
         for board, sensor in _SENSORS:
-            try:
-                self.gui.terminal._handle_hardware_command(
-                    [board.lower(), "set", sensor, "reset", "0.0"])
+            if self.gui.terminal.enviar_comando(f"set {sensor} reset"):
                 sent += 1
-            except Exception:
+            else:
                 failed += 1
                 continue
             default = self._default_for(board, sensor) or {}
@@ -237,11 +234,7 @@ class SensorConfigDialog(QDialog):
                 val = _numeric_default(default.get(action))
                 if val is None:
                     continue
-                try:
-                    self.gui.terminal._handle_hardware_command(
-                        [board.lower(), "set", sensor, action, f"{val:.6f}"])
-                except Exception:
-                    pass
+                self.gui.terminal.enviar_comando(f"set {sensor} {action} {val:.6f}")
 
         self._loading = True
         self.table.blockSignals(True)

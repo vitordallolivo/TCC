@@ -1,3 +1,6 @@
 *.log
 *.csv
 *.xlsx
+# Saídas do Scripts/helice_coeff.py e resultados das estimativas
+Helice_CT_CQ.png
+Config/estimativas.yaml

@@ -1,7 +1,7 @@
 """Camada 3 · Serviço — LinkManager (ex-EthernetManager, genérico).
 
 Orquestra UM link por placa, dirigido pelo `BoardRegistry` (sem hardcode de
-SIBA/SAME). Mantém a API pública que a GUI/TinyTerminal já usam (start_worker,
+nomes de placa). Mantém a API pública que a GUI/TinyTerminal já usam (start_worker,
 set_mock_mode, start/stop_native_sim, test_io, send_command, check_*, stop),
 para migração sem quebra — o antigo `EthernetManager` vira um alias em
 `Ethernet.py`.
@@ -21,12 +21,12 @@ from Communication_Data.simulators.board_simulator import BoardSimulator
 
 
 
-# Pasta do firmware de cada placa, relativa à raiz do repositório.
-FIRMWARE_DIRS = {"SIBA": "firmware"}
+# Pasta do firmware, relativa à raiz do repositório.
+FIRMWARE_DIR = "firmware"
 
 class LinkManager:
     def __init__(self, config_dir=None, handle_callback=None,
-                 registry=None, board_ids=("SIBA", "SAME")):
+                 registry=None, board_ids=("PLACA",)):
         self.running = False
         self.config_dir = config_dir
         self.callback = handle_callback
@@ -39,7 +39,7 @@ class LinkManager:
         self.native_enabled = {bid: False for bid in self.registry.ids()}
 
         # `configs` mantido por compat: GUI/TinyTerminal acessam
-        # eth.configs["SIBA"] esperando o YAML bruto completo.
+        # eth.configs["PLACA"] esperando o YAML bruto completo.
         self.configs = {bid: self.registry.get(bid).raw_yaml for bid in self.registry.ids()}
 
     # ------------------------------------------------------------------ #
@@ -112,8 +112,8 @@ class LinkManager:
         """IP de loopback DISTINTO por placa para mock/native_sim.
 
         Mapeia o último octeto do IP real da placa para 127.0.0.<octeto>
-        (SIBA 169.254.97.200 -> 127.0.0.200, SAME .100 -> 127.0.0.100), para
-        as placas não colidirem no mesmo 127.0.0.1 ao rodar juntas. Precisa
+        (169.254.97.200 -> 127.0.0.200), para não colidir com outros serviços
+        em 127.0.0.1. Precisa
         casar com CONFIG_NET_CONFIG_*_IPV4_ADDR de cada <board>/boards/
         native_sim.conf. Cai em 127.0.0.1 se o IP não puder ser derivado."""
         try:
@@ -160,8 +160,8 @@ class LinkManager:
     def native_exe_path(self, board):
         """Resolve o binário native_sim da placa.
 
-        Em dev, as placas (SIBA/SAME) são pastas irmãs de gui
-        dentro do repo git: ../<board>/build_native_sim/zephyr/zephyr.exe.
+        Em dev, o firmware fica na pasta irmã de gui
+        dentro do repo git: ../firmware/build_native_sim/zephyr/zephyr.exe.
         Num build empacotado (PyInstaller) esse repo não existe na máquina
         de destino — os `zephyr.exe` precisam ter sido copiados PRA DENTRO
         do próprio bundle em build-time (--add-binary, ver build/pyinstaller),
@@ -173,7 +173,7 @@ class LinkManager:
             return os.path.join(base, "native_sim_bin", board, "zephyr.exe")
         base = self.config_dir or "."
         # config_dir = gui/Config -> sobe 2 níveis até a raiz do repositório
-        board_dir = os.path.normpath(os.path.join(base, "..", "..", FIRMWARE_DIRS.get(board, board)))
+        board_dir = os.path.normpath(os.path.join(base, "..", "..", FIRMWARE_DIR))
         return os.path.normpath(os.path.join(board_dir, "build_native_sim", "zephyr", "zephyr.exe"))
 
     def start_native_sim(self, board, exe_path=None):
@@ -205,8 +205,7 @@ class LinkManager:
         if worker is None:
             return False
 
-        # Cada placa ganha um loopback distinto (SIBA .200, SAME .100), para
-        # as duas poderem rodar juntas sem misturar pacotes.
+        # Loopback derivado do IP real (.200 -> 127.0.0.200).
         worker.original_ip = worker.ip
         loopback = self._native_loopback(cfg)
         if hasattr(worker, "update_ip"):
@@ -214,8 +213,8 @@ class LinkManager:
         else:
             worker.ip = loopback
 
-        # -uart_stdinout dá acesso ao shell de diagnóstico do firmware da SIBA
-        # por `siba native shell <comando>`. É um canal EXTRA — o comando
+        # -uart_stdinout dá acesso ao shell de diagnóstico do firmware
+        # por `native shell <comando>`. É um canal EXTRA — o comando
         # normal continua indo por UDP.
         proc = NativeSimProcess(
             board, exe_path,
@@ -330,27 +329,19 @@ class LinkManager:
         return result
 
     # ------------------------------------------------------------------ #
-    # IP conveniências (compat: eth.ip_siba / eth.ip_same, leitura e escrita)
+    # IP da placa (leitura e escrita)
     # ------------------------------------------------------------------ #
     def _board_ip(self, board):
         cfg = self.registry.get(board)
         return cfg.ip if cfg else None
 
     @property
-    def ip_siba(self):
-        return self._board_ip("SIBA")
+    def ip_placa(self):
+        return self._board_ip("PLACA")
 
-    @ip_siba.setter
-    def ip_siba(self, value):
-        self.update_link("SIBA", ip=value)
-
-    @property
-    def ip_same(self):
-        return self._board_ip("SAME")
-
-    @ip_same.setter
-    def ip_same(self, value):
-        self.update_link("SAME", ip=value)
+    @ip_placa.setter
+    def ip_placa(self, value):
+        self.update_link("PLACA", ip=value)
 
     # ------------------------------------------------------------------ #
     def start(self):

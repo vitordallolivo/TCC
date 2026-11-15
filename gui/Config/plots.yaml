@@ -1,4 +1,4 @@
-# Mapeamento de variáveis de Telemetria (SIBA/SAME) para os Widgets da UI
+# Mapeamento de variáveis de telemetria para os widgets da UI
 plots_mapping:
   Plot_1:
     title: "Forças"
@@ -54,7 +54,7 @@ plots_mapping:
       air_speed: ""
 
   Plot_8:
-    title: "RPM (SIBA vs SAME)"
+    title: "RPM (tacômetro vs estimado)"
     ylabel: "RPM"
     xlabel: "Tempo [s]"
     vars:

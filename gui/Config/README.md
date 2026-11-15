@@ -1,18 +1,18 @@
 # Configuração e Geração de Protocolo
 
-> Parte da [aplicação de supervisão](../README.md) · [README principal](../../../README.md)
+> Parte da [aplicação de supervisão](../README.md) · [README principal](../../README.md)
 
 Este diretório centraliza a **fonte única de verdade** do protocolo de rede
-(`CMD`/`TELEMETRY_LOG`) e gera os headers C consumidos pelos firmwares da
-SIBA e da SAME.
+(`CMD`/`TELEMETRY_LOG`) e gera os headers C consumidos pelo firmware da
+placa (`../../firmware`).
 
 ## Fluxo de automação
 
-1. **`SIBA.yaml`** / **`SAME.yaml`**: definição declarativa de enums e
-   structs (bloco `enums`/`structs`) + endereçamento (bloco `link:`). A
-   ordem dos campos dita o layout exato de memória.
-2. **`generate.py`**: lê os dois YAMLs e renderiza os templates Jinja2 para
-   cada placa, de uma vez.
+1. **`protocolo.yaml`**: definição declarativa de enums e structs (blocos
+   `enums`/`structs`) + endereçamento (bloco `link:`). A ordem dos campos
+   dita o layout exato de memória. A GUI e o `placa.py` leem o mesmo
+   arquivo.
+2. **`generate.py`**: lê o YAML e renderiza os templates Jinja2.
 3. **Templates (`.j2`)**: modelos que definem a implementação final dos
    headers C.
 
@@ -22,23 +22,24 @@ SIBA e da SAME.
 
 | Arquivo | Papel |
 | :--- | :--- |
-| `SIBA.yaml` / `SAME.yaml` | Protocolo de cada placa: `link`, `enums`, `structs`, `error_bits`, `sensor_defaults` e (SAME) `security_limits` |
-| `generate.py` | Renderiza os templates para SIBA e SAME |
+| `protocolo.yaml` | Protocolo da placa: `link`, `enums`, `structs`, `error_bits`, `sensor_defaults` e `security_limits` |
+| `generate.py` | Renderiza os templates para `firmware/` |
 | `*_template.h.j2` | Templates Jinja2 dos headers C |
 | `plots.yaml` | Mapeamento telemetria → gráficos da GUI (títulos, eixos, legendas) |
-| `commands.yaml` | Árvore de comandos e textos de ajuda do `TinyTerminal` |
-| `motors/` | Perfis de motor salvos pela GUI (Motor → Criar); criado sob demanda |
+| `commands.yaml` | Árvore de comandos e textos de ajuda do `TinyTerminal` (a gramática fica em `Communication_Data/comandos.py`) |
+| `motors/` | Perfis de motor salvos pela GUI (Motor → Criar) |
+| `estimativas.yaml` | Resultados gravados pelos diálogos de estimativa (ganhos do SMO, coeficientes da hélice); criado sob demanda |
 
 ### Headers gerados
 
-| Fonte (template) | Destino (por placa) | Gerado quando | Escopo |
+| Fonte (template) | Destino (em `firmware/`) | Gerado quando | Escopo |
 | :--- | :--- | :--- | :--- |
 | `Common_template.h.j2` | `lib/OS/Common_Types.h` | sempre | Enums compartilhados (`func_type`, `target_type`, ...) |
 | `CMD_template.h.j2` | `lib/OS/CMD.h` | sempre | Struct de comando (PC → placa) |
 | `LOG_template.h.j2` | `lib/SYS/Log_Manager.h` | sempre | Struct de telemetria (placa → PC) + `SENSOR_ID_*` |
-| `Error_Codes_template.h.j2` | `lib/SYS/Error_Codes.h` | yaml tem `error_bits` | Enum `<placa>_error_bit_t` (mesma tabela que a GUI usa em `errors.py`) |
+| `Error_Codes_template.h.j2` | `lib/SYS/Error_Codes.h` | yaml tem `error_bits` | Enum `siba_error_bit_t` (mesma tabela que a GUI usa em `errors.py`) |
 | `CMD_Core_prm_template.h.j2` | `lib/OS/CMD_Core_prm.h` | yaml tem `sensor_defaults` | Calibração/faixa padrão por sensor, com lei `affine` ou `sqrt` (Pitot) |
-| `Security_prm_template.h.j2` | `lib/SYS/Security_prm.h` | yaml tem `security_limits` | Limiares `SM_*` do `Security_Manager` (hoje só a SAME) |
+| `Security_prm_template.h.j2` | `lib/SYS/Security_prm.h` | yaml tem `security_limits` | Limiares `SM_*` do `Security_Manager` |
 
 ## Integridade de memória e alinhamento
 
@@ -60,13 +61,17 @@ SIBA e da SAME.
 
 ## Procedimento
 
-Sempre que `SIBA.yaml` ou `SAME.yaml` forem modificados, rode o gerador
-antes de compilar o firmware correspondente:
+Sempre que o `protocolo.yaml` for modificado, rode o gerador antes de
+compilar o firmware:
 
 ```bash
-python generate.py
-# SIBA/lib/OS/{Common_Types,CMD,CMD_Core_prm}.h + SIBA/lib/SYS/{Log_Manager,Error_Codes}.h
-# SAME/lib/OS/{Common_Types,CMD,CMD_Core_prm}.h + SAME/lib/SYS/{Log_Manager,Error_Codes,Security_prm}.h
+make protocolo        # na raiz do repositório
+# firmware/lib/OS/{Common_Types,CMD,CMD_Core_prm}.h
+# firmware/lib/SYS/{Log_Manager,Error_Codes,Security_prm}.h
 ```
+
+Os identificadores gerados mantêm o prefixo histórico do firmware
+(`SIBA_SENSOR_TABLE`, `siba_error_bit_t`), definido em `PREFIXO_FW` no
+`generate.py`: mudá-lo exige mudar o firmware junto.
 
 Os `.h` gerados nunca são editados à mão.

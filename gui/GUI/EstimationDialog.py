@@ -4,7 +4,7 @@ Recebe R/L/Ts/maxiter/popsize, roda Scripts/autotune_cost.py via
 EstimationRunner e mostra progresso em tempo real (parseando stdout:
 PROGRESS/GEN/RESULT, levado à UI por sinais Qt). Resultado final em Γ
 (invariante ao passo, o que o firmware recebe) — pergunta antes de gravar
-no SAME.yaml.
+em Config/estimativas.yaml.
 """
 import os
 import time
@@ -42,10 +42,10 @@ class EstimationDialog(QDialog):
     sig_log = Signal(str)
     sig_done = Signal(int)
 
-    def __init__(self, config_dir, same_yaml_path, parent=None):
+    def __init__(self, config_dir, estimates_yaml_path, parent=None):
         super().__init__(parent)
         self.config_dir = config_dir
-        self.same_yaml_path = same_yaml_path
+        self.estimates_yaml_path = estimates_yaml_path
         self.setWindowTitle("Estimar Ganhos do SMO (autotuning)")
         self.setWindowFlags(Qt.Window)
         self.resize(1000, 780)
@@ -176,27 +176,24 @@ class EstimationDialog(QDialog):
         self.grp_result = QGroupBox("Resultado")
         rl = QHBoxLayout(self.grp_result)
         self.lbl_result = QLabel("—")
-        self.btn_apply = QPushButton("Aplicar ao SAME.yaml")
+        self.btn_apply = QPushButton("Gravar em estimativas.yaml")
         self.btn_apply.setEnabled(False)
         self.btn_apply.clicked.connect(self._apply)
         rl.addWidget(self.lbl_result, 1); rl.addWidget(self.btn_apply)
         root.addWidget(self.grp_result)
 
     def _prefill_from_motor(self):
-        """Pré-preenche R/L a partir do motor do SAME.yaml, se existir."""
+        """Pré-preenche R/L a partir do primeiro perfil em Config/motors/."""
+        from Communication_Data import motor_config as mc
         try:
-            data = yaml.safe_load(open(self.same_yaml_path)) or {}
+            files = mc.list_motor_files(self.config_dir)
+            if not files:
+                return
+            p = mc.load_motor_file(next(iter(files.values())))
         except Exception:
             return
-        motors = data.get("motors", {}) or {}
-        for _name, mot in motors.items():
-            if not isinstance(mot, dict):
-                continue
-            r = mot.get("resistance") or mot.get("R")
-            l = mot.get("inductance") or mot.get("L")
-            if r is not None: self.ed_R.setText(str(r))
-            if l is not None: self.ed_L.setText(str(l))
-            break
+        if p.get("resistance"): self.ed_R.setText(str(p["resistance"]))
+        if p.get("inductance"): self.ed_L.setText(str(p["inductance"]))
 
     # ------------------------------------------------------------------ #
     def _start(self):
@@ -277,7 +274,7 @@ class EstimationDialog(QDialog):
     def _on_result(self, d):
         self._result = d
         # Mostra os ganhos na forma Γ (Gamma = K·Ts, invariante ao passo) — é o
-        # que se configura no firmware da SAME. Ks* dependem de Ts (só referência).
+        # que se configura no firmware. Ks* dependem de Ts (só referência).
         self.lbl_result.setText(
             f"<b>Γ1</b>={d.get('Gamma_s1', 0):.4f}  "
             f"<b>Γ2</b>={d.get('Gamma_s2', 0):.4f}  "
@@ -302,7 +299,7 @@ class EstimationDialog(QDialog):
         r = self._result
         resp = QMessageBox.question(
             self, "Aplicar ganhos",
-            f"Gravar no SAME.yaml (bloco smo_gains)?\n\n"
+            f"Gravar em Config/estimativas.yaml (bloco smo_gains)?\n\n"
             f"Ganhos Γ (invariantes ao passo — é o que o firmware recebe):\n"
             f"Γ1 (Gamma_s1) = {r.get('Gamma_s1', 0):.5f}\n"
             f"Γ2 (Gamma_s2) = {r.get('Gamma_s2', 0):.5f}\n"
@@ -311,7 +308,10 @@ class EstimationDialog(QDialog):
         if resp != QMessageBox.Yes:
             return
         try:
-            data = yaml.safe_load(open(self.same_yaml_path)) or {}
+            data = {}
+            if os.path.exists(self.estimates_yaml_path):
+                with open(self.estimates_yaml_path, encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
             # Γ é o primário (o que vai por CMD p/ TARGET_GAMMA1/2/T). Ks* ficam
             # só como referência @ Ts_sim (dependem do passo).
             data["smo_gains"] = {
@@ -323,9 +323,9 @@ class EstimationDialog(QDialog):
                 "R": float(self.ed_R.text()), "L": float(self.ed_L.text()),
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
-            with open(self.same_yaml_path, "w") as f:
+            with open(self.estimates_yaml_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-            self._append_log("[GUI] Ganhos gravados em SAME.yaml (smo_gains).")
-            QMessageBox.information(self, "Aplicado", "Ganhos gravados em SAME.yaml.")
+            self._append_log("[GUI] Ganhos gravados em estimativas.yaml (smo_gains).")
+            QMessageBox.information(self, "Aplicado", "Ganhos gravados em Config/estimativas.yaml.")
         except Exception as e:
             QMessageBox.warning(self, "Erro ao gravar", str(e))

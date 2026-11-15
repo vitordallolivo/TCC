@@ -6,8 +6,8 @@ Concentra toda a (des)serialização binária que antes vivia espalhada em
 isoladamente e reutilizáveis por qualquer camada acima.
 
 Protocolos:
-- SIBA/SAME (`udp_struct`): TX `CMD` 8 bytes `<BBBfb>`; RX `TELEMETRY_LOG`
-  (layout vem do `.yaml` de cada placa em `structs.TELEMETRY_LOG`).
+- `udp_struct`: TX `CMD` 8 bytes `<BBBfb>`; RX `TELEMETRY_LOG`
+  (layout vem do `protocolo.yaml`, em `structs.TELEMETRY_LOG`).
 """
 import struct
 
@@ -20,7 +20,7 @@ TYPE_MAP = {
     "uint8_t": "B",
 }
 
-# --- CMD (PC -> placa), SIBA/SAME -------------------------------------------
+# --- CMD (PC -> placa) ------------------------------------------------------
 CMD_FORMAT = "<BBBfb"  # func(B) instr(B) target(B) value(f) action(b)
 CMD_SIZE = struct.calcsize(CMD_FORMAT)
 
@@ -45,11 +45,11 @@ def decode_cmd(raw):
 NEUTRAL_CMD = encode_cmd(0, 2, 10, 0.0, 2)
 
 
-# --- TELEMETRY_LOG (placa -> PC), SIBA/SAME ---------------------------------
+# --- TELEMETRY_LOG (placa -> PC) -------------------------------------------
 def board_protocol_cfg(cfg, board):
     """Normaliza o acesso ao bloco de protocolo do YAML.
 
-    Alguns YAMLs têm a raiz aninhada sob o nome da placa (ex.: `siba:` ->
+    Alguns YAMLs têm a raiz aninhada sob o nome da placa (ex.: `placa:` ->
     `enums:`/`structs:`), outros não. Replica o padrão
     `if board.lower() in cfg: cfg = cfg[board.lower()]` usado em toda a app.
     """

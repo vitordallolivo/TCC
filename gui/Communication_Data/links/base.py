@@ -2,7 +2,7 @@
 
 `BoardLink` é a abstração que separa *transporte* de *gerência*. Cada placa
 tem UM link (uma thread de I/O). Implementações concretas:
-- `UdpStructLink` (SIBA/SAME): CMD 8B em TX, TELEMETRY_LOG em RX.
+- `UdpStructLink`: CMD 8B em TX, TELEMETRY_LOG em RX.
 
 A camada de serviço (`LinkManager`) só conhece este contrato — nunca os
 detalhes de socket/protocolo de cada placa.

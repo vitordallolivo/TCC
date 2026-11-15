@@ -4,7 +4,7 @@
 a = Analysis(
     ['mainApp.py'],
     pathex=[],
-    binaries=[('../firmware/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/SIBA')],
+    binaries=[('../firmware/build_native_sim/zephyr/zephyr.exe', 'native_sim_bin/PLACA')],
     datas=[('Config', 'Config'), ('Scripts', 'Scripts'), ('GUI/mainAlbatrozGUI.ui', 'GUI')],
     hiddenimports=[],
     hookspath=[],

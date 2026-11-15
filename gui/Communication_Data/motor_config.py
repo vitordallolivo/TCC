@@ -1,15 +1,14 @@
 """Camada 2/3 — perfis de motor em `.yaml` (Config/motors/) e CMDs de aplicação.
 
 Cada motor é um `.yaml` em `Config/motors/` (salvo pelo diálogo "Criar",
-listado no "Carregar", removível no "Apagar"). Formato igual ao bloco `motors`
-do SAME.yaml:
+listado no "Carregar", removível no "Apagar"). Formato:
 
     name: MeuMotor
     physical_params: { pole_pairs, resistance_ohm, inductance_henry, kv_rating }
     smo_config:      { ks1, ks2, bemf_lpf_hz, torque_filter_hz }
 
-`build_motor_cmds` gera os CMDs (8 bytes) para aplicar os parâmetros no hardware
-SAME (FUNC_SENSOR / INSTR_WRITE / DEFAULT_ACTION_SET_VALUE por target).
+`build_motor_cmds` gera os CMDs (8 bytes) para aplicar os parâmetros na placa
+(FUNC_SENSOR / INSTR_WRITE por target).
 """
 import math
 import os
@@ -36,7 +35,7 @@ def ke_kt_from_kv(kv, pole_pairs):
 
 # Ponto de partida do diálogo "Criar Motor" quando não há perfil salvo. São os
 # valores REAIS da bancada — motor Scorpion A-5025-310Kv — e os defaults que o
-# firmware da SAME traz compilados (DEF_* em lib/SYS/Observer_Manager.c), para
+# firmware traz compilados (DEF_* em lib/SYS/Observer_Manager.c), para
 # o formulário abrir coerente com a placa em vez de tudo zerado.
 #
 # Procedência:
@@ -74,8 +73,7 @@ def check_conditions(p):
     """Confere as condições de validade do observador sobre um dict de
     parâmetros. Devolve lista de (nivel, texto), nivel in {'erro','aviso'}.
 
-    São as mesmas listadas em SAME/CLAUDE.md ("Limites a checar em
-    Observer_Set_Param") e que até aqui não eram verificadas em lugar nenhum,
+    São os limites a checar em Observer_Set_Param, que até aqui não eram verificadas em lugar nenhum,
     nem na GUI nem no firmware. Violá-las não gera erro: gera estimativa
     errada em silêncio, que é pior.
     """
@@ -136,9 +134,9 @@ def check_conditions(p):
     return out
 
 
-# chave interna (usada pela GUI) -> TARGET_* do SAME.yaml
+# chave interna (usada pela GUI) -> TARGET_* do protocolo.yaml
 # Ganhos do SMO na forma Gamma (Γ = K·Ts, invariante ao passo) — NÃO Ks* (que
-# dependem de Ts). Ver ../../SAME/CLAUDE.md.
+# dependem de Ts).
 MOTOR_TARGET_MAP = {
     "pole_pairs": "TARGET_POLES_PAIRS",
     "resistance": "TARGET_RESISTANCE",
@@ -183,7 +181,7 @@ def params_from_motor_dict(md):
         "pole_pairs": pole_pairs,
         "connection": phys.get("connection", "Y"),   # "Y" (estrela) ou "Delta"
         "kv_rating": phys.get("kv_rating", 0),
-        # R e L já em Y (estrela) por padrão — ver ../SAME/CLAUDE.md.
+        # R e L já em Y (estrela) por padrão.
         "resistance": phys.get("resistance_ohm", 0.0),
         "inductance": phys.get("inductance_henry", 0.0),
         "v_bus": phys.get("v_bus", 0.0),
@@ -251,20 +249,20 @@ def save_motor_file(config_dir, name, params):
 
 def has_observer(protocol_cfg):
     """True se a placa tem o observador (SMO) — o enum de alvos traz os
-    parâmetros do motor. Hoje: SAME e SIBA (que absorveu a SAME)."""
+    parâmetros do motor."""
     return "TARGET_POLES_PAIRS" in (protocol_cfg.get("enums", {}).get("target_type") or [])
 
 
 def build_motor_cmds(protocol_cfg, params, with_keys=False, skip_keys=()):
     """Lista de CMDs (8 bytes `<BBBfb>`) p/ aplicar os params no observador de
-    uma placa (SAME ou SIBA), usando os enums do YAML DELA.
+    a placa, usando os enums do protocolo.yaml.
 
-    Alvo que a placa não tem (ex.: TARGET_TS_UDP na SIBA) é PULADO — antes
-    caía no índice 0 e virava TARGET_LOAD_CELL_0 na SIBA.
-    A SIBA não tem DEFAULT_ACTION_SET_VALUE: lá qualquer ação que não seja
-    RESET_DEFAULT grava `value`, então vai DEFAULT_ACTION_NONE.
+    Alvo que o protocolo não tem (ex.: TARGET_TS_UDP) é PULADO; antes caía no
+    índice 0 e virava TARGET_LOAD_CELL_0.
+    Qualquer ação que não seja RESET_DEFAULT grava `value`, então vai
+    DEFAULT_ACTION_NONE (índice 0).
     with_keys=True devolve [(cmd, gui_key, target_name)]. skip_keys: chaves
-    do perfil que NÃO vão para a placa (ex.: ts_adc_us na SIBA, onde o Ts é
+    do perfil que NÃO vão para a placa (ex.: ts_adc_us, cujo Ts é
     fixado pelo hardware do ADC e não pelo perfil do motor).
     """
     enums = protocol_cfg.get("enums", {})
@@ -290,9 +288,9 @@ def build_motor_cmds(protocol_cfg, params, with_keys=False, skip_keys=()):
 def board_skip_keys(board):
     """Chaves do perfil de motor que NÃO são enviadas a uma placa.
 
-    SIBA: o Ts do observador é o período real do quadro do ADC (9,0 µs com
-    SMP 41,5 — ver SIBA/lib/SYS/Observer_Manager.h). Vem do firmware, não do
+    O Ts do observador é o período real do quadro do ADC (9,0 µs com
+    SMP 41,5, ver firmware/lib/SYS/Observer_Manager.h). Vem do firmware, não do
     perfil: mandar o ts_adc_us do perfil (10 µs) deixaria Φi/Γv errados.
     Para mudar o Ts de propósito, usar o CMD TARGET_TS_ADC direto.
     """
-    return ("ts_adc_us",) if board == "SIBA" else ()
+    return ("ts_adc_us",) if board == "PLACA" else ()

@@ -1,4 +1,4 @@
-"""Camada 1 · Transporte — link UDP `CMD`/`TELEMETRY_LOG` (SIBA/SAME).
+"""Camada 1 · Transporte — link UDP `CMD`/`TELEMETRY_LOG` da placa.
 
 Generalização do antigo `BoardWorker` de `Ethernet.py`: uma thread que faz
 RX (telemetria, placa->PC) e TX (comandos, PC->placa) por UDP, nas portas

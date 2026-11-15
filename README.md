@@ -59,14 +59,14 @@ a partir das correntes e tensões de fase.
 
 O sistema tem **uma placa de medição**, baseada no microcontrolador
 **CH32V307VCT6** (RISC-V, 144 MHz, FPU e Ethernet MAC+PHY integrados) com
-**Zephyr RTOS**, e uma aplicação de supervisão no PC. A placa absorveu as
-funções da antiga SAME, que queimou; no código ela ainda se chama `SIBA`.
+**Zephyr RTOS**, e uma aplicação de supervisão no PC. Os comandos da placa
+também funcionam por linha de comando, de qualquer shell (`gui/placa.py`).
 
 ```mermaid
 flowchart LR
     subgraph PC["gui — supervisão (PySide6)"]
-        GUI["GUI + TinyTerminal"]
-        YAML["Config/SIBA.yaml<br/>fonte única do protocolo"]
+        GUI["GUI + TinyTerminal<br/>placa.py (CLI)"]
+        YAML["Config/protocolo.yaml<br/>fonte única do protocolo"]
     end
 
     PLACA["firmware — placa de medição<br/>fases (V/I) + SMO + PLL, ESC, relés"]
@@ -85,7 +85,7 @@ tem fila própria, que roda Clarke + SMO + PLL a cada quadro do ADC. Os módulos
 principais são `NCI` (rede), `HAL` (periféricos), `OSSI` (fila), `CMD_Core`
 (comandos) e os *managers* de domínio.
 
-**Protocolo gerado.** `gui/Config/SIBA.yaml` é a **fonte única da verdade** do
+**Protocolo gerado.** `gui/Config/protocolo.yaml` é a **fonte única da verdade** do
 protocolo. O `generate.py` gera, via Jinja2, os headers C do firmware, e a GUI
 lê o mesmo YAML em tempo de execução. **Os headers gerados nunca são editados
 à mão.**
@@ -132,7 +132,8 @@ Os atalhos ficam no `Makefile` da raiz (`make help`):
 
 ```bash
 make gui                     # aplicação de supervisão
-make protocolo               # regenera os headers C a partir de gui/Config/SIBA.yaml
+make protocolo               # regenera os headers C a partir de gui/Config/protocolo.yaml
+cd gui && .venv/bin/python placa.py tele      # comandos da placa pela linha de comando
 make firmware                # compila para a placa real (requer Zephyr SDK e west)
 make flash                   # grava na placa
 make native_sim              # compila o firmware para rodar no PC (Linux)

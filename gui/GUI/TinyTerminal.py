@@ -15,9 +15,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
 from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import QEvent, Slot, Qt, Signal
 from Communication_Data.Ethernet import EthernetManager
-
-
-import struct
+from Communication_Data.comandos import Protocolo, ErroComando, AJUDA
 
 
 class TinyTerminal(QWidget):
@@ -59,38 +57,21 @@ class TinyTerminal(QWidget):
         
         sys.stdout = self
 
-        # 1. Caminhos corrigidos conforme a tree (Case Sensitive e nomes reais)
-        yaml_siba = os.path.join(self.config_dir, "SIBA.yaml")
-        yaml_same = os.path.join(self.config_dir, "SAME.yaml")
-        
-        # 2. USA O GERENCIADOR DA PARENT (GUI Principal) para evitar conflito de portas
-        self.eth = parent.eth if hasattr(parent, 'eth') else EthernetManager(yaml_siba, yaml_same, handle_callback=self._on_udp_receive)
+        # Usa o gerenciador da GUI principal (evita conflito de portas).
+        self.eth = parent.eth if hasattr(parent, 'eth') else EthernetManager(config_dir=self.config_dir, handle_callback=self._on_udp_receive)
         if not hasattr(parent, 'eth'): self.eth.start()
 
-        # 3. Mapeamento Dinâmico de Targets (Extração segura das configs carregadas)
-        self.siba_targets = self._extract_targets_from_config("SIBA")
-        self.same_targets = self._extract_targets_from_config("SAME")
+        # Mesma gramática de comandos do CLI (placa.py).
+        self.proto = Protocolo(self.eth.configs.get("PLACA", {}))
 
         self.old_stdout = sys.stdout
         sys.stdout = self
 
         self.append_log("SYS", "===============================================================", "#ADFF2F")
-        self.append_log("SYS", "Esse é o Tiny Terminal ele não é um terminal shell é completamente auto contido, feito para facilitar mudanças de parametros online. \n Como ele funciona? Bem ele usa de arquivos .yaml para conseguir configurar as placas (SIBA e SAME) e o próprio terminal, ou seja os codigos são padronizados. \n Além disso ele conta com funções de MOCK, para testar features da própria. \n A telemetria das placas nao e impressa aqui por padrao (ela rolaria a tela a 10 Hz) — use 'logs on' para ver. \n Para mais informações use o comando help", "#ADFF2F")
+        self.append_log("SYS", "TinyTerminal: comandos da placa direto (ex.: 'set i_a linear 0.0809', 'arm', 'esc 20'). \n Os mesmos comandos funcionam fora da GUI, em qualquer shell: python placa.py <comando>. \n A telemetria não é impressa aqui por padrão (rolaria a tela a 10 Hz): use 'logs on'. \n 'help' lista tudo; 'alvos' lista sensores e parâmetros.", "#ADFF2F")
         self.append_log("SYS", "===============================================================", "#ADFF2F")
 
 
-    def _extract_targets_from_config(self, board_key):
-        """Helper para mapear target_type para índices sem quebrar por KeyError."""
-        cfg = self.eth.configs.get(board_key, {})
-        
-        # Se o YAML tiver uma chave raiz (ex: 'siba: enums: ...'), desce um nível
-        if board_key.lower() in cfg:
-            cfg = cfg[board_key.lower()]
-            
-        enums = cfg.get('enums', {})
-        target_list = enums.get('target_type', [])
-        
-        return {name: i for i, name in enumerate(target_list)}
     def _load_commands(self):
         """Carrega o YAML de comandos."""
         path = os.path.join(self.config_dir, "commands.yaml")
@@ -224,7 +205,14 @@ class TinyTerminal(QWidget):
             if len(parts) > 1 and parts[1].lower() == "all": QApplication.quit()
             else: self.close()
         elif cmd_root == "help":
+            if len(parts) == 1:
+                for linha in AJUDA.splitlines():
+                    self.append_log("HELP", linha, "#FFFFFF")
             self._show_help(self.cmd_config, target=parts[1].lower() if len(parts) > 1 else None)
+        elif cmd_root == "alvos":
+            sensores, params = self.proto.alvos()
+            self.append_log("HELP", "sensores: " + " ".join(sensores), "#FFFFFF")
+            self.append_log("HELP", "parâmetros: " + " ".join(params), "#FFFFFF")
         elif cmd_root == "clear": self.clear_shell()
         else:
             # Despacho dinâmico para os demais comandos
@@ -233,38 +221,40 @@ class TinyTerminal(QWidget):
         self.input.clear()
 
     def _execute_command(self, parts):
-        """Despacho dinâmico: busca métodos como _cmd_siba_start_mock."""
-        # Tenta do mais específico para o mais geral (ex: siba start mock -> siba start -> siba)
+        """Despacho dinâmico: busca métodos como _cmd_native_start."""
+        # Tenta do mais específico para o mais geral (ex: native start -> native)
         for i in range(len(parts), 0, -1):
             method_name = "_cmd_" + "_".join(parts[:i]).lower()
             if hasattr(self, method_name):
                 getattr(self, method_name)(parts[i:])
                 return
 
-        # Fallback para comandos de hardware ou validação via YAML
+        # Comandos da placa (comandos.py): arm, off, estop, esc, reset,
+        # force, set, bat, raw.
         root = parts[0].lower()
-        if root in ["same", "siba"]:
-            if self._is_complete(parts, self.cmd_config):
-                self._handle_hardware_command(parts)
-            else: self.append_log("ERR", f"Comando incompleto. Use 'help {root}'", "#FF4500")
+        if root in ("arm", "off", "estop", "esc", "reset", "force", "set", "bat", "raw"):
+            self.enviar_comando(" ".join(parts))
         elif root in self.cmd_config:
             if self._is_complete(parts, self.cmd_config):
                 self.append_log("ERR", f"Método Python para '{' '.join(parts)}' não implementado.", "#FF4500")
             else: self.append_log("ERR", "Sintaxe inválida para o comando.", "#FF4500")
         else: self.append_log("ERR", f"Comando '{root}' desconhecido.", "#FF4500")
 
-    def _handle_hardware_command(self, parts):
-        """Trata o envio de comandos reais (binários) para as placas."""
-        root = parts[0].upper()
-        cmd_struct = self._parse_to_cmd_struct(parts)
-        if cmd_struct:
-            hex_dump = cmd_struct.hex(' ').upper()
-            self.append_log("NET", f"CMD -> [{hex_dump}]", "#00FFFF")
-            traducao = self.decode_hex_to_cmd(
-                hex_dump, self.eth.configs["SAME"], self.eth.configs["SIBA"], origin=root
-            )
-            self.append_log("DECODE", traducao, "#DCDCDC")
-            if hasattr(self, 'eth'): self.eth.send_command(root, cmd_struct)
+    def enviar_comando(self, linha):
+        """Interpreta uma linha da gramática da placa e envia. Também usado
+        pelos diálogos (sensores, células de carga). True se enviou."""
+        try:
+            cmds = self.proto.interpretar(linha)
+        except ErroComando as e:
+            self.append_log("ERR", str(e), "#FF4500")
+            return False
+        for cmd in cmds:
+            self.append_log("NET", f"CMD -> [{cmd.hex(' ').upper()}]  {self.proto.descrever(cmd)}", "#00FFFF")
+            self.eth.send_command("PLACA", cmd)
+        if linha.split()[:2] == ["force", "on"]:
+            self.append_log("WARN", "Botão de emergência SOBRESCRITO: a placa ignora o "
+                                    "botão físico até 'force off' ou até reiniciar.", "#FFA500")
+        return True
 
     def _is_complete(self, parts, config):
         """Valida se o comando segue a estrutura do YAML."""
@@ -291,7 +281,7 @@ class TinyTerminal(QWidget):
         help_txt_color = "#FFFFFF"
 
         if target and target in config:
-            # Pega o bloco do comando específico (ex: 'siba')
+            # Pega o bloco do comando específico (ex: 'native')
             info = config[target]
             main_help = info.get('help', 'Sem descrição')
             self.append_log("HELP", f"<b>{target.upper()}</b>: {main_help}", help_txt_color)
@@ -318,7 +308,7 @@ class TinyTerminal(QWidget):
             if sub_help:
                 self.append_log("HELP", f"  -> <b>{prefix}{key}</b>: {sub_help}", color)
             
-            # Opcional: recursividade para níveis mais profundos (ex: siba sensor linear)
+            # Opcional: recursividade para níveis mais profundos (ex: set i_a linear)
             self._list_subcommands(value, prefix=f"{prefix}{key} ", color=color)
 
     def log_board_data(self, board, data, decoded=None):
@@ -339,17 +329,14 @@ class TinyTerminal(QWidget):
             # Tradução simplificada para o terminal
             msg = ", ".join([f"{k}: {v:.2f}" for k, v in decoded.items() if isinstance(v, float)])
         
-        col = "#32CD32" if board == "SIBA" else "#1E90FF"
-        self.append_log("LOG", f"({board}) {msg}", col)
+        self.append_log("LOG", msg, "#32CD32")
 
     def closeEvent(self, e):
         # Restaura o stdout original para evitar erros de I/O após fechar
         sys.stdout = self.old_stdout
         # Garante que os mocks/processos native_sim sejam desligados ao fechar o terminal
-        self.eth.set_mock_mode("SIBA", False)
-        self.eth.set_mock_mode("SAME", False)
-        self.eth.stop_native_sim("SIBA")
-        self.eth.stop_native_sim("SAME")
+        self.eth.set_mock_mode("PLACA", False)
+        self.eth.stop_native_sim("PLACA")
         e.accept()
 
     # --- Implementações de Comandos Específicos ---
@@ -367,14 +354,15 @@ class TinyTerminal(QWidget):
         # Para o mock interno da UI (se existir) e os mocks de hardware
         if hasattr(self.parent(), 'worker'): 
             self.parent().worker.stop()
-        self.eth.set_mock_mode("SIBA", False)
-        self.eth.set_mock_mode("SAME", False)
+        self.eth.set_mock_mode("PLACA", False)
         print("Todas as simulações paradas.")
 
     def _cmd_connect(self, args):
-        ip = args[0] if args else "127.0.0.1"
-        self.append_log("SYS", f"IP Global alterado: {ip}", "#FFFF00")
-        self.parent().eth.ip_siba = self.parent().eth.ip_same = ip
+        """connect [IP]: troca o IP da placa (se dado) e testa o link."""
+        if args:
+            self.eth.ip_placa = args[0]
+            self.append_log("SYS", f"IP da placa: {args[0]}", "#FFFF00")
+        self._hardware_connect_flow()
 
     def _cmd_ping(self, args):
         if not args: return self.append_log("ERR", "Uso: ping [IP]", "#FF4500")
@@ -402,42 +390,27 @@ class TinyTerminal(QWidget):
         if not self.is_admin: return self.append_log("ERR", "Requer 'sudo'", "#FF4500")
         if len(args) >= 2: self._execute_tcpdump(args[0], int(args[1]))
 
-    def _cmd_siba_connect(self, args): self._hardware_connect_flow("SIBA")
-    def _cmd_same_connect(self, args): self._hardware_connect_flow("SAME")
-
-    def _hardware_connect_flow(self, board):
-        ip = self.eth.ip_siba if board == "SIBA" else self.eth.ip_same
-        self.append_log("NET", f"Tentando conectar com {board} ({ip})...", "#00BFFF")
-        
-        # 1. Verifica Subnet
+    def _hardware_connect_flow(self):
+        ip = self.eth.ip_placa
+        self.append_log("NET", f"Tentando conectar com a placa ({ip})...", "#00BFFF")
         ok, local_ip = self.eth.check_subnet(ip)
         if not ok:
             self.append_log("WARN", f"Seu IP ({local_ip}) parece estar em subrede diferente de {ip}!", "#FFA500")
             self.append_log("SYS", "Dica: Configure seu IP fixo para 169.254.97.x", "#DCDCDC")
-        
-        # 2. Inicia o Worker
-        self.eth.start_worker(board)
-        
-        # 3. Ping de Teste
+        self.eth.start_worker("PLACA")
         if self.eth.check_connectivity(ip):
-            self.append_log("NET", f"Link com {board} estabelecido com sucesso!", "#32CD32")
+            self.append_log("NET", "Link com a placa estabelecido.", "#32CD32")
         else:
-            self.append_log("ERR", f"Não foi possível pingar a board {board}. Verifique cabos.", "#FF4500")
+            self.append_log("ERR", "Não foi possível pingar a placa. Verifique cabos.", "#FF4500")
 
-    def _cmd_siba_mock_start(self, args): self._mock_hardware_flow("SIBA", args)
-    def _cmd_siba_mock_stop(self, args): 
-        self.eth.set_mock_mode("SIBA", False)
-        self.quiet_mocks.discard("SIBA")
+    def _cmd_mock_start(self, args): self._mock_hardware_flow("PLACA", args)
+    def _cmd_mock_stop(self, args):
+        self.eth.set_mock_mode("PLACA", False)
+        self.quiet_mocks.discard("PLACA")
 
-    def _cmd_same_mock_start(self, args): self._mock_hardware_flow("SAME", args)
-    def _cmd_same_mock_stop(self, args):
-        self.eth.set_mock_mode("SAME", False)
-        self.quiet_mocks.discard("SAME")
-
-    def _cmd_siba_native_start(self, args): self._native_sim_flow("SIBA")
-    def _cmd_siba_native_stop(self, args): self.eth.stop_native_sim("SIBA")
-    def _cmd_siba_native_shell(self, args): self._native_shell_flow("SIBA", args)
-    def _cmd_same_native_shell(self, args): self._native_shell_flow("SAME", args)
+    def _cmd_native_start(self, args): self._native_sim_flow("PLACA")
+    def _cmd_native_stop(self, args): self.eth.stop_native_sim("PLACA")
+    def _cmd_native_shell(self, args): self._native_shell_flow("PLACA", args)
 
     def _native_shell_flow(self, board, args):
         """Manda a linha crua ao shell de UART do firmware em native_sim.
@@ -449,19 +422,15 @@ class TinyTerminal(QWidget):
         está na UART da placa.
         """
         if not args:
-            self.append_log("ERR", f"uso: {board.lower()} native shell <comando>   "
-                                   f"(ex.: {board.lower()} native shell tele)",
+            self.append_log("ERR", "uso: native shell <comando>   (ex.: native shell tele)",
                             "#FF4500")
             return
         line = " ".join(args)
         if not self.eth.native_shell(board, line):
-            self.append_log("ERR", f"{board} não está em native_sim — use "
-                                   f"'{board.lower()} native start' antes.",
+            self.append_log("ERR", "a placa não está em native_sim: use 'native start' antes.",
                             "#FF4500")
             return
-        self.append_log("SHELL", f"({board}) -> {line}", "#DDA0DD")
-    def _cmd_same_native_start(self, args): self._native_sim_flow("SAME")
-    def _cmd_same_native_stop(self, args): self.eth.stop_native_sim("SAME")
+        self.append_log("SHELL", f"-> {line}", "#DDA0DD")
 
     def _native_sim_flow(self, board):
         """Sobe o binário REAL do firmware (`make native_sim` na pasta da
@@ -469,24 +438,18 @@ class TinyTerminal(QWidget):
         host e conversa com ele via UDP/loopback (127.0.0.1) — mesmas portas
         do hardware físico. Diferente de 'mock', aqui não é um fake Python:
         é o firmware de verdade (System_Manager/CMD_Core/NCI reais), útil
-        para validar o link UDP fim-a-fim sem placa/W-Link. Ver
-        SIBA/CLAUDE.md "Modo Mock (native_sim)" e gui/CLAUDE.md."""
-        # config_dir = .../gui/Config -> sobe 2 níveis até a raiz do
-        # repositório, onde fica a pasta firmware/ da placa
-        from Communication_Data.manager import FIRMWARE_DIRS
-        board_dir = os.path.normpath(os.path.join(self.config_dir, "..", "..", FIRMWARE_DIRS.get(board, board)))
-        exe_path = os.path.normpath(os.path.join(board_dir, "build_native_sim", "zephyr", "zephyr.exe"))
-
-        self.append_log("SYS", f"Procurando binário native_sim de {board} em {exe_path}...", "#00BFFF")
+        para validar o link UDP fim-a-fim sem placa/W-Link. Ver gui/CLAUDE.md."""
+        exe_path = self.eth.native_exe_path(board)
+        self.append_log("SYS", f"Procurando binário native_sim em {exe_path}...", "#00BFFF")
         if not os.path.exists(exe_path):
-            self.append_log("ERR", f"Binário não encontrado. Rode 'make native_sim' em {board}/.", "#FF4500")
+            self.append_log("ERR", "Binário não encontrado. Rode 'make native_sim' na raiz do repositório.", "#FF4500")
             return
 
         if self.eth.start_native_sim(board, exe_path):
-            self.append_log("SYS", f"Firmware {board} (native_sim) rodando em 127.0.0.1.", "#ADFF2F")
+            self.append_log("SYS", "Firmware (native_sim) rodando em loopback.", "#ADFF2F")
             self.append_log("SYS", "Esse é o FIRMWARE DE VERDADE (não um fake) — testa TX/RX UDP reais.", "#DCDCDC")
         else:
-            self.append_log("ERR", f"Falha ao iniciar native_sim para {board} (ver console).", "#FF4500")
+            self.append_log("ERR", "Falha ao iniciar o native_sim (ver console).", "#FF4500")
 
     def _cmd_logs_on(self, args):  self._set_board_logs(True)
     def _cmd_logs_off(self, args): self._set_board_logs(False)
@@ -501,51 +464,7 @@ class TinyTerminal(QWidget):
             self.append_log("SYS", "Telemetria das placas silenciada "
                                    "('logs on' para ver de novo).", "#ADFF2F")
 
-    def _cmd_siba_force_on(self, args):  self._emergency_override_flow(True)
-    def _cmd_siba_force_off(self, args): self._emergency_override_flow(False)
-
-    def _emergency_override_flow(self, on):
-        """Sobrescreve (ou restaura) o botão físico de emergência da SIBA.
-
-        Fica só aqui, no terminal, e não como botão de tela: é desvio de
-        segurança, não operação de rotina. Vale só até a placa reiniciar.
-        """
-        status = "STATUS_EMERGENCY_OVERRIDE" if on else "STATUS_EMERGENCY_RESTORE"
-        cfg = self.eth.configs.get("SIBA", {})
-        if "siba" in cfg:
-            cfg = cfg["siba"]
-        enums = cfg.get("enums", {})
-
-        def idx(cat, name, default=0):
-            lst = enums.get(cat, [])
-            return lst.index(name) if name in lst else default
-
-        if status not in enums.get("status_type", []):
-            self.append_log("ERR", f"{status} não existe no SIBA.yaml — "
-                                   "regere o protocolo (Config/generate.py).",
-                            "#FF4500")
-            return
-
-        cmd = struct.pack(
-            "<BBBfb",
-            idx("func_type", "FUNC_START"),
-            idx("instruct_type", "INSTR_WRITE", 1),
-            idx("target_type", "TARGET_DEFAULT", 11),
-            0.0,
-            idx("status_type", status),
-        )
-        self.append_log("NET", f"CMD -> [{cmd.hex(' ').upper()}]", "#00FFFF")
-        if on:
-            self.append_log("WARN", "Botao de emergencia SOBRESCRITO — a SIBA "
-                                    "vai ignorar o botao fisico ate 'siba force "
-                                    "off' ou ate reiniciar a placa.", "#FFA500")
-        else:
-            self.append_log("SYS", "Botao de emergencia restaurado.", "#ADFF2F")
-        if hasattr(self, 'eth'):
-            self.eth.send_command("SIBA", cmd)
-
-    def _cmd_siba_test_io(self, args): self._test_io_flow("SIBA")
-    def _cmd_same_test_io(self, args): self._test_io_flow("SAME")
+    def _cmd_test_io(self, args): self._test_io_flow("PLACA")
 
     def _test_io_flow(self, board):
         """Testa RX e TX da placa de forma isolada — envia um CMD neutro e
@@ -553,24 +472,24 @@ class TinyTerminal(QWidget):
         pacote de telemetria dentro do timeout (RX). Funciona com mock,
         native_sim ou hardware real (eth.test_io só observa contadores do
         BoardWorker)."""
-        self.append_log("SYS", f"Testando RX/TX de {board} (aguarde ~2s)...", "#00BFFF")
+        self.append_log("SYS", f"Testando RX/TX da placa (aguarde ~2s)...", "#00BFFF")
         result = self.eth.test_io(board, timeout=2.0)
         tx_color = "#32CD32" if result["tx_ok"] else "#FF4500"
         rx_color = "#32CD32" if result["rx_ok"] else "#FF4500"
-        self.append_log("TEST", f"TX (PC -> {board}): {'OK' if result['tx_ok'] else 'FALHOU'}", tx_color)
-        self.append_log("TEST", f"RX ({board} -> PC): {'OK' if result['rx_ok'] else 'FALHOU'} "
+        self.append_log("TEST", f"TX (PC -> placa): {'OK' if result['tx_ok'] else 'FALHOU'}", tx_color)
+        self.append_log("TEST", f"RX (placa -> PC): {'OK' if result['rx_ok'] else 'FALHOU'} "
                                  f"({result['rx_packets']} pacote(s))", rx_color)
 
     def _mock_hardware_flow(self, board, args):
         """Ativa o modo MOCK no gerenciador de rede."""
         if "--no-comment" in args:
             self.quiet_mocks.add(board)
-            self.append_log("SYS", f"Logs de telemetria ocultados para {board}.", "#FFFF00")
+            self.append_log("SYS", f"Logs de telemetria ocultados.", "#FFFF00")
         else:
             self.quiet_mocks.discard(board)
 
         self.eth.set_mock_mode(board, True)
-        self.append_log("SYS", f"Modo MOCK para {board} ATIVADO.", "#ADFF2F")
+        self.append_log("SYS", f"Modo MOCK ATIVADO.", "#ADFF2F")
         self.append_log("SYS", "A placa agora responde em 127.0.0.1 e simula Telemetria.", "#DCDCDC")
 
     def eventFilter(self, obj, event):
@@ -755,184 +674,6 @@ class TinyTerminal(QWidget):
         # que chama self.terminal.log_board_data, que já respeita quiet_mocks.
         pass
 
-    # Aliases: o nome que o usuário digita (e o nome da variável de
-    # telemetria) nem sempre bate por substring com o enum target_type.
-    # Ex.: `v_batt`/`i_batt` NÃO contêm "VOLTAGE_DIVIDOR"/"CURRENT_SENSOR",
-    # então sem isso caíam em TARGET_DEFAULT e o firmware rejeitava a
-    # calibração (era o "não funciona para o resto"). load_cell_* e
-    # pitot_tube já batem por substring e não precisam de alias.
-    TARGET_ALIASES = {
-        "V_BATT": "TARGET_VOLTAGE_DIVIDOR",
-        "I_BATT": "TARGET_CURRENT_SENSOR",
-        "AIR_SPEED": "TARGET_PITOT_TUBE",
-        "PITOT": "TARGET_PITOT_TUBE",
-        "TEMPERATURE_BATTERY": "TARGET_TEMPERATURE_SENSOR",
-        "TEMP_SENSOR": "TARGET_TEMPERATURE_SENSOR",
-        # SAME: telemetria usa i_a/i_b/i_c e V_a/V_b/V_c; os nomes de
-        # calibração (TARGET_CURRENT_A/B/C, TARGET_VOLTAGE_A/B/C) são
-        # 1:1 com a telemetria mas não batem por substring ("I_A" não
-        # está contido em "CURRENT_A", etc.), daí o alias.
-        "I_A": "TARGET_CURRENT_A",
-        "I_B": "TARGET_CURRENT_B",
-        "I_C": "TARGET_CURRENT_C",
-        "V_A": "TARGET_VOLTAGE_A",
-        "V_B": "TARGET_VOLTAGE_B",
-        "V_C": "TARGET_VOLTAGE_C",
-    }
-
-    def _resolve_target_index(self, root, target_raw):
-        """Resolve um nome de sensor/target digitado (ou vindo da GUI) pro
-        índice numérico de target_type da placa `root` (SIBA/SAME). Usado
-        tanto pelo parser de CMD quanto pelo SensorConfigDialog (pra achar o
-        default em sensor_defaults, que é indexado na MESMA ordem)."""
-        targets_dict = self.siba_targets if root == "SIBA" else self.same_targets
-        target_raw = target_raw.upper()
-        exact_key = f"TARGET_{target_raw}"
-        if target_raw in self.TARGET_ALIASES and self.TARGET_ALIASES[target_raw] in targets_dict:
-            return targets_dict[self.TARGET_ALIASES[target_raw]]
-        if exact_key in targets_dict:
-            return targets_dict[exact_key]
-        for name, idx in targets_dict.items():
-            if target_raw in name:
-                return idx
-        return targets_dict.get("TARGET_DEFAULT", 10)
-
-    def _parse_to_cmd_struct(self, parts):
-        """
-        Parser Final: Mapeamento dinâmico SAME/SIBA baseado nos YAMLs.
-        """
-        try:
-            root = parts[0].upper()      # SAME ou SIBA
-            action = parts[1].upper()    # SET, START, STOP, RESET
-            target_raw = parts[2].upper() if len(parts) > 2 else "DEFAULT"
-            
-            cfg = self.eth.configs.get(root, {})
-            if root.lower() in cfg: 
-                cfg = cfg[root.lower()]
-            
-            enums = cfg.get('enums', {})
-
-            # --- 1. FUNCTION ID ---
-            func_val = 0
-            search_func = ""
-            if action in ["SET", "GET"]:
-                if root == "SIBA":
-                    # Calibração de SENSOR (offset/linear/reset) é SEMPRE
-                    # FUNC_SENSOR — inclui v_batt/i_batt, que contêm "BATT" mas
-                    # são SENSORES (não parâmetros de bateria). Só os parâmetros
-                    # de bateria (SOC poly/temp/relé), que NÃO usam offset/linear,
-                    # vão para FUNC_BATTERY.
-                    sub = parts[3].upper() if len(parts) > 3 else ""
-                    if sub in ("LINEAR", "OFFSET", "RESET", "MAX", "MIN"):
-                        search_func = "FUNC_SENSOR"
-                    else:
-                        bat_keywords = ["TEMP", "RELAY", "SOC", "P0", "P1", "P2", "P3", "P4"]
-                        search_func = ("FUNC_BATTERY"
-                                       if any(x in target_raw for x in bat_keywords)
-                                       else "FUNC_SENSOR")
-                else:
-                    search_func = "FUNC_SENSOR"
-            else:
-                search_func = f"FUNC_{action}" # FUNC_START, FUNC_STOP, FUNC_RESET
-
-            f_list = enums.get('func_type', [])
-            for i, name in enumerate(f_list):
-                if search_func == name:
-                    func_val = i
-                    break
-
-            # --- 2. INSTRUCTION ID ---
-            inst_val = 0
-            search_inst = "INSTR_WRITE" if action == "SET" else "INSTR_READ" if action == "GET" else "INSTR_DEFAULT"
-            
-            i_list = enums.get('instruct_type', [])
-            for i, name in enumerate(i_list):
-                if search_inst == name:
-                    inst_val = i
-                    break
-
-            # --- 3. TARGET ID ---
-            target_val = self._resolve_target_index(root, target_raw)
-
-            # --- 4. VALUE ---
-            try:
-                if action == "STOP": value_val = 0.0
-                elif action in ["START", "RESET"]: value_val = 1.0
-                else: value_val = float(parts[-1])
-            except:
-                value_val = 0.0
-
-            # --- 5. ACTION / STATUS (CORREÇÃO DO TEMP_LIMIT) ---
-            status_val = 0
-            if root == "SIBA" and search_func == "FUNC_BATTERY":
-                bat_actions = enums.get('battery_action', [])
-                # Se target_raw for TEMP_LIMIT, busca a action que tenha TEMP e LIMIT
-                # Se for SOC_P2, busca a que tenha P2
-                clean_target = target_raw.replace("SOC_", "")
-                
-                for i, name in enumerate(bat_actions):
-                    # Verifica se todas as partes da palavra chave estão no enum
-                    # Ex: 'TEMP_LIMIT' dá match em 'BAT_ACTION_TEMP_LIMIT_OVERWRITE'
-                    keywords = clean_target.split('_')
-                    if all(k in name for k in keywords):
-                        status_val = i
-                        break
-            elif len(parts) > 3 and action == "SET":
-                sub_cmd = parts[3].upper()
-                def_actions = enums.get('default_action', [])
-                for i, name in enumerate(def_actions):
-                    if sub_cmd in name:
-                        status_val = i
-                        break
-
-            return struct.pack("<BBBfb", func_val, inst_val, target_val, value_val, status_val)
-
-        except Exception as e:
-            self.append_log("ERR", f"Erro Parser: {e}", "#FF4500")
-            return None
-
-
-    def decode_hex_to_cmd(self, hex_str, same_config, siba_config, origin=None):
-        import struct
-        try:
-            raw_bytes = bytes.fromhex(hex_str.replace(" ", ""))
-            # B, B, B, f, b
-            f_idx, i_idx, t_idx, val, a_idx = struct.unpack('<BBBfb', raw_bytes)
-
-            # 1. Seleção Forçada pela Origem
-            if origin == "SIBA":
-                cfg = siba_config
-                # Se o YAML tiver a chave raiz 'siba', acessamos ela
-                if "siba" in cfg: cfg = cfg["siba"]
-            else:
-                cfg = same_config
-                if "same" in cfg: cfg = cfg["same"]
-
-            enums = cfg.get('enums', {})
-            
-            # 2. Tradução de Categorias Principais
-            def get_enum_name(category, index):
-                lst = enums.get(category, [])
-                return lst[index] if index < len(lst) else f"ID:{index}"
-
-            f_name = get_enum_name('func_type', f_idx)
-            i_name = get_enum_name('instruct_type', i_idx)
-            t_name = get_enum_name('target_type', t_idx)
-            
-            # 3. Lógica de Action/Status (Contextual)
-            # Se a função for Bateria na SIBA, usa battery_action, senão default_action
-            if origin == "SIBA" and "BATTERY" in f_name:
-                a_list = enums.get('battery_action', [])
-            else:
-                a_list = enums.get('default_action', [])
-            
-            a_name = a_list[a_idx] if a_idx < len(a_list) else f"ACT:{a_idx}"
-
-            return f"[{origin}] {f_name} | {i_name} | {t_name} | VAL: {val:.4f} | ACT: {a_name}"
-
-        except Exception as e:
-            return f"ERRO DECODE ({origin}): {e}"
-        
     def restart_program(self, ethernet_manager=None):
         """Fecha o programa e reinicia especificamente a mainApp.py na raiz."""
         print("\n[SYS] Preparando reinicialização do sistema Albatroz...")

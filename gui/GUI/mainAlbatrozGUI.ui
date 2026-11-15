@@ -428,16 +428,6 @@
     <string>Infos</string>
    </property>
   </action>
-  <action name="actionSIBA">
-   <property name="text">
-    <string>SIBA</string>
-   </property>
-  </action>
-  <action name="actionSAME">
-   <property name="text">
-    <string>SAME</string>
-   </property>
-  </action>
   <action name="actionTare">
    <property name="text">
     <string>Tare</string>

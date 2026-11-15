@@ -1,12 +1,11 @@
 """ErrorPanelDialog — painel completo de erros/alarmes com "lâmpadas".
 
-Mostra TODAS as condições possíveis de CADA placa (SIBA, SAME, …), lidas da
-seção `error_bits` do yaml de cada uma (via Communication_Data/errors.py), uma
+Mostra TODAS as condições possíveis da placa, lidas da
+seção `error_bits` do protocolo.yaml (via Communication_Data/errors.py), uma
 por linha com uma lâmpada: acesa (vermelha) quando a condição está ativa na
-telemetria, apagada (cinza) quando não. Agrupado por placa → área, em pt-BR.
+telemetria, apagada (cinza) quando não. Agrupado por área, em pt-BR.
 
-Cada placa é decodificada com a SUA tabela (bits iguais significam coisas
-diferentes entre placas). O código por placa vem de
+O código vem de
 `AlbatrozGUI.current_error_codes()`, atualizado a cada ~300 ms.
 """
 from PySide6.QtCore import Qt, QTimer
@@ -86,8 +85,8 @@ class ErrorPanelDialog(QDialog):
         inner = QWidget()
         vbox = QVBoxLayout(inner)
 
-        # Uma seção por placa (SIBA, SAME, …), subdividida por área. A tabela de
-        # cada placa vem da sua seção error_bits do yaml (errors.py).
+        # Uma seção para a placa, subdividida por área. A tabela vem da
+        # seção error_bits do yaml (errors.py).
         configs = getattr(self.gui, "configs", {}) or {}
         for board, cfg in configs.items():
             table = errors.ensure_registered(board, cfg or {})
@@ -99,7 +98,7 @@ class ErrorPanelDialog(QDialog):
             for mask, (msg, grp) in table.items():
                 por_grupo.setdefault(grp, []).append((mask, msg))
 
-            board_box = QGroupBox(f"● {board}")
+            board_box = QGroupBox("● Placa de medição")
             board_box.setStyleSheet("QGroupBox { font-weight: bold; }")
             bl = QVBoxLayout(board_box)
             for grp, items in por_grupo.items():

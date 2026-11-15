@@ -20,12 +20,11 @@ __all__ = ["EthernetManager", "LinkManager", "BoardWorker", "BoardSimulator", "T
 
 
 class EthernetManager(LinkManager):
-    """Adapta a assinatura antiga (paths dos YAMLs) para o LinkManager
-    dirigido por registry. Deriva o config_dir do caminho do YAML da SIBA."""
+    """Adapta a assinatura antiga (caminho do YAML) para o LinkManager.
+    Deriva o config_dir do caminho do protocolo.yaml."""
 
-    def __init__(self, siba_yaml=None, same_yaml=None, handle_callback=None,
+    def __init__(self, protocol_yaml=None, handle_callback=None,
                  config_dir=None, **kwargs):
         if config_dir is None:
-            base = siba_yaml or same_yaml
-            config_dir = os.path.dirname(base) if base else "."
+            config_dir = os.path.dirname(protocol_yaml) if protocol_yaml else "."
         super().__init__(config_dir=config_dir, handle_callback=handle_callback, **kwargs)

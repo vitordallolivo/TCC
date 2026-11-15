@@ -129,7 +129,7 @@ class EstimationRunner:
         """Coeficientes da hélice (CT, CQ, J) -> helice_coeff.py --csv.
 
         Consome o CSV completo de telemetria; `thrust_col` (tração) é a força
-        escolhida, `torque_col` por padrão o estimado pela SAME. Sem csv_path,
+        escolhida, `torque_col` por padrão o estimado pelo observador. Sem csv_path,
         roda o modo simulação embutido do script."""
         args = []
         if csv_path: args += ["--csv", csv_path]

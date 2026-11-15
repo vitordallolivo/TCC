@@ -84,7 +84,7 @@ Ke = Ke_mec / p
 #   N_SUB    -> sub-passos da planta por frame (múltiplo de 3: são 3 conversões)
 #
 # ⚠️ TS_ADC tem de ser o mesmo OBS_TS do firmware: Γ = K·Ts carrega o passo
-# embutido (ver SAME/CLAUDE.md). O frame real do hardware sai de
+# embutido. O frame real do hardware sai de
 #     TS_ADC = (SMP + 11) * n_canais / ADCCLK
 # ex.: SMP = 28,5 / 3 canais / ADCCLK = 12 MHz -> 9,875 µs.
 TS_ADC   = 10e-6
@@ -96,7 +96,7 @@ ADC_MODEL = 1        # 1 = observador enxerga o ADC; 0 = sinais ideais (antigo)
 ADC_BITS  = 12
 ADC_VREF  = 3.3
 
-# Condicionamento — mesmos valores do SAME.yaml / HAL_prm.h
+# Condicionamento — mesmos valores do protocolo.yaml / HAL_prm.h
 K_VOLT   = 5.6 / 105.6       # V no pino por V de fase (divisor 100k/5k6)
 G_CURR   = 0.012755          # V no pino por A  (18,75 mV/A x 10/14,7, divisor 4k7/10k)
 V_HALL0  = 2.4866 * 10/14.7  # repouso do Hall no pino [V]
@@ -193,7 +193,7 @@ def run_sim_core(N, Ts, RPM_target, phase_mode, GBW, G_opamp,
     resultados são gravados na grade do ADC, que é a única que o firmware
     enxerga.
 
-    Com adc_model=1 o caminho de medição reproduz o hardware da SAME:
+    Com adc_model=1 o caminho de medição reproduz o hardware da placa:
       1. filtro antialiasing RC por FASE (+ polo do próprio Hall na corrente);
       2. condicionamento -> tensão no pino (divisor / ganho + repouso do Hall);
       3. amostragem sequencial DENTRO do frame: em modo dual simultâneo V_x e

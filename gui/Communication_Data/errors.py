@@ -1,14 +1,12 @@
 """errors.py — decodificação do `error_code` (bitfield) da telemetria.
 
-FONTE ÚNICA: a seção `error_bits` do `<placa>.yaml` — a MESMA que gera o enum C
-`<placa>_error_bit_t` (lib/SYS/Error_Codes.h, via Config/generate.py). O firmware
+FONTE ÚNICA: a seção `error_bits` do `protocolo.yaml`, a MESMA que gera o enum C
+de bits de erro (lib/SYS/Error_Codes.h, via Config/generate.py). O firmware
 agrega 1 bit por condição e envia o `uint32_t error_code` no TELEMETRY_LOG; aqui
-montamos, POR PLACA, a tabela bit→(mensagem pt-BR, grupo) a partir do mesmo yaml.
+montamos a tabela bit→(mensagem pt-BR, grupo) a partir do mesmo yaml.
 
-Cada placa registra sua tabela uma vez (register_error_bits/ensure_registered) e
-as funções de decode recebem o `protocol` para escolher a tabela certa — bits com
-o MESMO valor significam coisas diferentes entre placas (ex.: bit 0 é "bateria
-com carga baixa" na SIBA e "correntes das 3 fases não somam zero" na SAME).
+A tabela é registrada uma vez (register_error_bits/ensure_registered) sob um
+nome (`protocol`), que as funções de decode recebem.
 
 As mensagens são texto claro pro usuário (o que houve + o que fazer), em pt-BR —
 mantenha-as no yaml, não aqui.
@@ -20,7 +18,7 @@ _TABLES = {}
 
 def _extract_error_bits(cfg):
     """Extrai a lista `error_bits` de um cfg de placa (yaml já carregado),
-    lidando com a raiz aninhada sob a chave da placa (ex.: {'same': {...}})."""
+    lidando com a raiz aninhada sob uma chave (ex.: {'placa': {...}})."""
     if not isinstance(cfg, dict):
         return []
     if "error_bits" in cfg:

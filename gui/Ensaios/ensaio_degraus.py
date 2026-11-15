@@ -1,9 +1,9 @@
-"""Ensaio em degraus de throttle na SIBA, gravando toda a telemetria em CSV.
+"""Ensaio em degraus de throttle, gravando toda a telemetria em CSV.
 
 Uso (com a GUI FECHADA — ela segura a porta 5555 e manda o "pronto" sozinha):
-    .venv/bin/python Ensaios/ensaio_siba.py [degraus%] [s_por_degrau] [espera_arme_s]
-    .venv/bin/python Ensaios/ensaio_siba.py 20,25,30,35,40,30,20 6 15
-O CSV sai em Ensaios/ensaio_siba_<data>_<hora>.csv (uma linha por pacote de
+    .venv/bin/python Ensaios/ensaio_degraus.py [degraus%] [s_por_degrau] [espera_arme_s]
+    .venv/bin/python Ensaios/ensaio_degraus.py 20,25,30,35,40,30,20 6 15
+O CSV sai em Ensaios/ensaio_degraus_<data>_<hora>.csv (uma linha por pacote de
 telemetria, 10 Hz, + hora do PC, fase do ensaio e throttle comandado).
 
 Sequência: 3 s de linha de base (ESC desarmado) -> "pronto" (pré-carga 5 s +
@@ -19,8 +19,8 @@ from Communication_Data import codecs
 STEPS = [float(x) for x in (sys.argv[1] if len(sys.argv) > 1 else "20,25,30,35,40,30,20").split(",")]
 DWELL = float(sys.argv[2]) if len(sys.argv) > 2 else 6.0
 ARM_WAIT = float(sys.argv[3]) if len(sys.argv) > 3 else 15.0   # relés + arranque do ESC
-raw = yaml.safe_load(open(os.path.join(APP, 'Config', 'SIBA.yaml'))); en = raw['enums']
-lay = codecs.telemetry_layout(codecs.board_protocol_cfg(raw, 'SIBA'))
+raw = yaml.safe_load(open(os.path.join(APP, 'Config', 'protocolo.yaml'))); en = raw['enums']
+lay = codecs.telemetry_layout(codecs.board_protocol_cfg(raw, 'PLACA'))
 ix = lambda c, n: en[c].index(n)
 BOARD = ('169.254.97.200', 5000)
 def c_start(st): return struct.pack('<BBBfb', ix('func_type','FUNC_START'), ix('instruct_type','INSTR_WRITE'), ix('target_type','TARGET_DEFAULT'), 1.0, ix('status_type', st))
@@ -28,7 +28,7 @@ def c_esc(p):    return struct.pack('<BBBfb', ix('func_type','FUNC_ESC'), ix('in
 rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 rx.bind(('', 5555)); rx.settimeout(0.2)
 tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-fn = os.path.join(APP, 'Ensaios', time.strftime('ensaio_siba_%Y%m%d_%H%M%S.csv'))
+fn = os.path.join(APP, 'Ensaios', time.strftime('ensaio_degraus_%Y%m%d_%H%M%S.csv'))
 fh = open(fn, 'w', newline=''); w = csv.writer(fh)
 names = [f['name'] for f in lay]
 w.writerow(['pc_time_s', 't_s', 'fase', 'throttle_cmd_pct'] + names)

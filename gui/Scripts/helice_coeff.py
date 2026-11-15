@@ -53,7 +53,7 @@ def _run_csv(path, thrust_col, torque_col="torque_eletrico", rpm_col="rpm_same",
              v_fixed=None):
     header, cols = _read_telemetry_csv(path)
 
-    # rpm_same (estimado SAME) por padrão; cai em 'rpm' (SIBA) se faltar/vazio.
+    # rpm_same (estimado pelo observador) por padrão; cai em 'rpm' se faltar/vazio.
     if rpm_col not in cols or np.all(~np.isfinite(cols.get(rpm_col, np.array([np.nan])))):
         if "rpm" in cols:
             print(f"[hélice] '{rpm_col}' ausente/vazio — usando 'rpm'.")
@@ -156,8 +156,8 @@ if __name__ == "__main__":
     _ap = argparse.ArgumentParser(description="Coeficientes da hélice (CT, CQ, J) a partir do CSV de telemetria")
     _ap.add_argument("--csv", default=None, help="CSV completo exportado pela GUI")
     _ap.add_argument("--thrust-col", default=None, help="Coluna da TRAÇÃO (força escolhida, ex.: load_cell_0)")
-    _ap.add_argument("--torque-col", default="torque_eletrico", help="Coluna do torque (padrão: estimado pela SAME)")
-    _ap.add_argument("--rpm-col", default="rpm_same", help="Coluna de RPM (padrão: estimado pela SAME)")
+    _ap.add_argument("--torque-col", default="torque_eletrico", help="Coluna do torque (padrão: estimado pelo observador)")
+    _ap.add_argument("--rpm-col", default="rpm_same", help="Coluna de RPM (padrão: estimado pelo observador)")
     _ap.add_argument("--v-col", default="air_speed", help="Coluna da velocidade do ar")
     _ap.add_argument("--v-fixed", type=float, default=None,
                      help="Velocidade do ar FIXA p/ todos os pontos (ignora --v-col)")

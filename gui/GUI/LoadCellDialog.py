@@ -6,8 +6,8 @@ Como o HX711 é um sensor bruto, a calibração é linear (y = ganho·x + offset
 - **Ganho:** o usuário informa o peso/momento conhecido aplicado; o ganho é
   `peso / medição_média`.
 
-Ambos APLICAM os comandos reais na placa (`siba set <cell> offset|linear <v>`),
-reaproveitando o parser/So envio de CMD do TinyTerminal. As leituras ao vivo vêm
+Ambos APLICAM os comandos reais na placa (`set <cell> offset|linear <v>`),
+pela mesma gramática do TinyTerminal e do placa.py (comandos.py). As leituras ao vivo vêm
 dos buffers de telemetria da GUI (`get_recent_average`).
 """
 from PySide6.QtCore import Qt, QTimer
@@ -137,17 +137,17 @@ class LoadCellDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def _send(self, action, value):
-        """Envia `siba set <sensor> <action> <value>` via o caminho do terminal."""
+        """Envia `set <sensor> <action> <value>` via o terminal."""
         sensor = self._current_sensor()
         if sensor is None:
             self._warn("Selecione um sensor com leitura ao vivo.")
             return False
-        # Garante que o link SIBA existe para o TX acontecer.
-        if "SIBA" not in self.gui.eth.workers:
-            self.gui.eth.start_link("SIBA")
-        parts = ["siba", "set", sensor, action, f"{value:.6f}"]
+        # Garante que o link existe para o TX acontecer.
+        if "PLACA" not in self.gui.eth.workers:
+            self.gui.eth.start_link("PLACA")
         try:
-            self.gui.terminal._handle_hardware_command(parts)
+            if not self.gui.terminal.enviar_comando(f"set {sensor} {action} {value:.6f}"):
+                return False
         except Exception as e:
             self._warn(f"Falha ao enviar comando: {e}")
             return False

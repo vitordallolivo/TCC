@@ -12,7 +12,7 @@ UDP: escuta CMD na 5000, envia telemetria (116 B, 10 Hz) em broadcast para a 555
 
 - Pinagem: `boards/wch/siba_board/siba_board.dts` (manda sobre qualquer doc).
 - Protocolo, defaults de sensor, bits de erro, limites `SM_*`:
-  `../gui/Config/SIBA.yaml` → `generate.py` (gera também
+  `../gui/Config/protocolo.yaml` → `generate.py` (gera também
   `lib/SYS/Security_prm.h`). Acrescentar só no FIM das listas.
 - Módulos para bissecção: `lib/OS/HAL_prm.h` (`HAL_DISABLE_*`).
   Hoje: ADC **ligado** (fases), RPM por TIM3 **desligado** (`HAL_DISABLE_RPM`),
@@ -38,7 +38,7 @@ UDP: escuta CMD na 5000, envia telemetria (116 B, 10 Hz) em broadcast para a 555
 - **O que conta é o lote caber no intervalo do DMA** (o observador só "escuta"
   o motor); o Ts só entra nas equações.
 - Calibração de offset das correntes no boot (2 s + 4096 quadros, ESC parado).
-  Critérios (SIBA.yaml): desvio ≤ `SM_CAL_STD_MAX_MV` (20 mV; ruído real 9–10)
+  Critérios (protocolo.yaml): desvio ≤ `SM_CAL_STD_MAX_MV` (20 mV; ruído real 9–10)
   e média entre `SM_CAL_MEAN_MIN/MAX_MV` (1,2–2,2 V) — sem isso, com cabo
   solto, aceitava fundo de escala como zero. Offsets ajustáveis por
   CMD (`FUNC_SENSOR`, alvos `TARGET_PHASE_*`, ação OFFSET).
@@ -84,7 +84,7 @@ descarta os da EEPROM, senão o Γ/Ts velho venceria.
 
 ## Estado da bancada (14/11/2026)
 
-- Ensaios: `../gui/Ensaios/ensaio_siba.py` (degraus de throttle +
+- Ensaios: `../gui/Ensaios/ensaio_degraus.py` (degraus de throttle +
   CSV). Relés, ESC, V_b, V_c e correntes ok.
 - V_a (PC2) estava sem ligação elétrica em 14/11 (lia ~13 mV copiando o V_c,
   resíduo do capacitor de amostragem = pino em alta impedância); o autor
@@ -97,7 +97,7 @@ descarta os da EEPROM, senão o Γ/Ts velho venceria.
   estimado com a 15x6E = 1,13–1,23 × (APC J=0 + perdas), crescendo com rpm².
   Os CSVs anteriores a 15/11 10:23 têm `i_a..i_c` na ligação antiga.
 - Calibração de boot: desvio máx. 20 mV e média do repouso em 1,2–2,2 V
-  (`security_limits` do SIBA.yaml); passou no boot de 15/11.
+  (`security_limits` do protocolo.yaml); passou no boot de 15/11.
 - `rpm_same` deriva (±1000) com motor parado: zerar a saída quando |ê| < limiar.
 
 ## native_sim

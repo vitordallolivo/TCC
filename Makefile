@@ -14,7 +14,7 @@ help:
 	@echo "    make clean           — limpa os builds do firmware"
 	@echo ""
 	@echo "  Protocolo e aplicação:"
-	@echo "    make protocolo       — gera os headers C a partir de gui/Config/SIBA.yaml"
+	@echo "    make protocolo       — gera os headers C a partir de gui/Config/protocolo.yaml"
 	@echo "    make gui             — abre a aplicação de supervisão"
 	@echo ""
 	@echo "  Documentos:"

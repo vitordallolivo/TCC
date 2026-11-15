@@ -10,25 +10,23 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QGroupBox,
 from Communication_Data import motor_config as mc
 
 
-class SAMEConfigDialog(QDialog):
+class MotorConfigDialog(QDialog):
     """Motor → Criar: edita/salva um perfil de motor (Config/motors/*.yaml) e
-    aplica no hardware SAME. Parâmetros físicos + observador (SMO, ganhos Γ) +
+    aplica no hardware. Parâmetros físicos + observador (SMO, ganhos Γ) +
     amostragem. Ke/Kt são CALCULADOS do Kv comercial (com conversão Δ→Y)."""
 
     def __init__(self, prefs, config_dir, ethernet_mgr, parent=None,
-                 target_boards=("SAME",)):
+                 target_boards=("PLACA",)):
         super().__init__(parent)
         # Placas que recebem os parâmetros: as do modo atual que têm o
-        # observador (SIBA absorveu a SAME). Cada uma com os enums do SEU yaml.
-        self.target_boards = tuple(target_boards) or ("SAME",)
+        # observador. Cada uma com os enums do SEU yaml.
+        self.target_boards = tuple(target_boards) or ("PLACA",)
         self.setWindowTitle(f"Configuração / Criar Motor ({'+'.join(self.target_boards)})")
         self.resize(440, 720)
 
         self.prefs = prefs
         self.config_dir = config_dir
         self.ethernet = ethernet_mgr
-        self.same_yaml = self._load_yaml(os.path.join(config_dir, "SAME.yaml"))
-        self.enums = self.same_yaml.get('enums', {})
 
         self.inputs = {}   # key -> QDoubleSpinBox
         self.combos = {}   # key -> QComboBox
@@ -109,7 +107,7 @@ class SAMEConfigDialog(QDialog):
         main.addWidget(ga)
 
         # --- Grupo 4: Condições de validade do observador ---
-        # Estas relações são do projeto (SAME/CLAUDE.md), e violá-las não gera
+        # Estas relações são do projeto do observador, e violá-las não gera
         # erro nenhum em runtime: gera estimativa errada em silêncio. Melhor
         # dizer aqui, antes de aplicar no hardware.
         gc = QGroupBox("Condições do observador")
@@ -176,16 +174,16 @@ class SAMEConfigDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def load_current_values(self):
-        """Pré-preenche do user_prefs (same_config), do motor do SAME.yaml ou,
-        na falta dos dois, dos valores da bancada (mc.MOTOR_DEFAULTS)."""
-        saved = self.prefs.get("same_config", {})
+        """Pré-preenche do user_prefs (motor_config; lê o nome antigo
+        same_config se ainda for o que está salvo), do último motor carregado
+        de Config/motors/ ou, na falta dos dois, dos valores da bancada
+        (mc.MOTOR_DEFAULTS)."""
+        saved = self.prefs.get("motor_config") or self.prefs.pop("same_config", {})
         if not saved:
-            motores = self.same_yaml.get('motors', {}) or {}
+            files = mc.list_motor_files(self.config_dir)
             name = self.prefs.get("last_motor_name")
-            if name not in motores and motores:
-                name = list(motores.keys())[0]
-            if motores.get(name):
-                saved = mc.params_from_motor_dict(motores.get(name))
+            if name in files:
+                saved = mc.load_motor_file(files[name])
         # Sem nada salvo, abre com o motor da bancada em vez de tudo zerado:
         # zero em R, L ou Ts não é ponto de partida, é formulário inválido.
         if not saved:
@@ -235,7 +233,7 @@ class SAMEConfigDialog(QDialog):
         de CMDs do 'Carregar' (motor_config.build_motor_cmds), com os enums do
         yaml de cada placa. Alvo que a placa não tem é pulado."""
         params = self._params()
-        self.prefs["same_config"] = params
+        self.prefs["motor_config"] = params
 
         for board in self.target_boards:
             cfg = self._load_yaml(os.path.join(self.config_dir, f"{board}.yaml"))
