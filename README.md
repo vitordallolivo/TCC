@@ -3,7 +3,6 @@
 # Bancada de Medição para Sistemas Propulsivos Elétricos com BLDC
 
 **Trabalho de Conclusão de Curso · Engenharia Elétrica · UDESC Joinville (2026)**
-Desenvolvido em parceria com a equipe **Albatroz Aerodesign**
 
 ![Zephyr RTOS](https://img.shields.io/badge/Zephyr_RTOS-4.4-7929d2?logo=zephyr&logoColor=white)
 ![RISC-V](https://img.shields.io/badge/MCU-CH32V307_(RISC--V)-283272)
