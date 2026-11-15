@@ -6,7 +6,7 @@
   p-dig/.style={pin, fill=cyan!30}, p-com/.style={pin, fill=green!30}, p-seg/.style={pin, fill=red!35}, p-res/.style={pin, fill=white, dashed},
   d/.style={inner sep=1pt}, d-nm/.style={d, text=gray, font=\fontsize{7}{8}\selectfont\itshape}, d-res/.style={d, text=gray}]
   \draw[rounded corners=3pt, very thick, fill=black!4] (-0.38,0.5) rectangle (9.0,-10.16);
-  \node[font=\fontsize{9}{10}\selectfont\bfseries] at (4.31,0.85) {SIBA};
+  \node[font=\fontsize{9}{10}\selectfont\bfseries] at (4.31,0.85) {Placa de medição};
   \node[draw, fill=white, minimum width=2.2cm, minimum height=0.7cm, font=\fontsize{5}{6}\selectfont] at (4.31,-9.5) {conector Ethernet};
   \node[draw, fill=white, minimum width=1.7cm, minimum height=1.1cm, font=\fontsize{5}{6}\selectfont, align=center] at (4.6,-2.4) {CH32V307VCT6};
   \node[p-pwr] at (0.00,0.00) {GND};
@@ -32,18 +32,18 @@
   \node[p-free] at (0.62,-2.52) {PC15};
   \node[p-free] at (0.00,-2.94) {PC0};
   \node[p-free] at (0.62,-2.94) {PC1};
-  \node[p-nm] at (0.00,-3.36) {PC2};
-  \node[d-nm, anchor=east] at (-0.50,-3.36) {Reserva (ADC2)};
-  \node[p-nm] at (0.62,-3.36) {PC3};
-  \node[d-nm, anchor=west] at (0.96,-3.36) {Tensão bateria (ADC2)};
-  \node[p-nm] at (0.00,-3.78) {PA0};
-  \node[d-nm, anchor=east] at (-0.50,-3.78) {Pitot (ADC1)};
-  \node[p-nm] at (0.62,-3.78) {PA1};
-  \node[d-nm, anchor=west] at (0.96,-3.78) {Termistor bateria (ADC1)};
+  \node[p-adc] at (0.00,-3.36) {PC2};
+  \node[d, anchor=east] at (-0.50,-3.36) {$v_a$ (ADC2)};
+  \node[p-adc] at (0.62,-3.36) {PC3};
+  \node[d, anchor=west] at (0.96,-3.36) {$v_b$ (ADC2)};
+  \node[p-adc] at (0.00,-3.78) {PA0};
+  \node[d, anchor=east] at (-0.50,-3.78) {$i_a$ (ADC1)};
+  \node[p-adc] at (0.62,-3.78) {PA1};
+  \node[d, anchor=west] at (0.96,-3.78) {$i_b$ (ADC1)};
   \node[p-res] at (0.00,-4.20) {PA2};
   \node[d-res, anchor=east] at (-0.50,-4.20) {Reserva \textit{flash}};
-  \node[p-nm] at (0.62,-4.20) {PA3};
-  \node[d-nm, anchor=west] at (0.96,-4.20) {Termistor motor (ADC1)};
+  \node[p-adc] at (0.62,-4.20) {PA3};
+  \node[d, anchor=west] at (0.96,-4.20) {$i_c$ (ADC1, calculada)};
   \node[p-free] at (0.00,-4.62) {PA4};
   \node[p-res] at (0.62,-4.62) {PA5};
   \node[d-res, anchor=west] at (0.96,-4.62) {Reserva \textit{flash}};
@@ -51,11 +51,10 @@
   \node[d-res, anchor=east] at (-0.50,-5.04) {Reserva \textit{flash}};
   \node[p-res] at (0.62,-5.04) {PA7};
   \node[d-res, anchor=west] at (0.96,-5.04) {Reserva \textit{flash}};
-  \node[p-nm] at (0.00,-5.46) {PC4};
-  \node[d-nm, anchor=east] at (-0.50,-5.46) {Corrente bateria (ADC2)};
+  \node[p-adc] at (0.00,-5.46) {PC4};
+  \node[d, anchor=east] at (-0.50,-5.46) {$v_c$ (ADC2)};
   \node[p-free] at (0.62,-5.46) {PC5};
-  \node[p-dig] at (0.00,-5.88) {PB0};
-  \node[d, anchor=east] at (-0.50,-5.88) {RPM (TIM3 CH3)};
+  \node[p-free] at (0.00,-5.88) {PB0};
   \node[p-free] at (0.62,-5.88) {PB1};
   \node[p-free] at (0.00,-6.30) {PB2};
   \node[p-dig] at (0.62,-6.30) {PE7};
@@ -145,8 +144,8 @@
   \node[p-pwr] at (8.62,-9.66) {GND};
   % legenda (centralizada sob a placa)
   \begin{scope}[local bounding box=leg, shift={(0,-10.75)}]
-    \node[p-nm, minimum width=0.4cm] (l0) at (0,0) {};
-    \node[d, right=2pt of l0] (t0) {ADC não montado};
+    \node[p-adc, minimum width=0.4cm] (l0) at (0,0) {};
+    \node[d, right=2pt of l0] (t0) {ADC (fases do motor)};
     \node[p-dig, minimum width=0.4cm, right=10pt of t0] (l1)  {};
     \node[d, right=2pt of l1] (t1) {E/S digital};
     \node[p-seg, minimum width=0.4cm, right=10pt of t1] (l2)  {};

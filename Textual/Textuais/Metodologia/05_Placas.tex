@@ -1,9 +1,9 @@
 \section{Padronização das Placas}
 \label{sec:padronizacao_placas}
-Esta seção estabelece as diretrizes de projeto e as restrições metodológicas adotadas para o desenvolvimento das placas de aquisição e controle (SIBA e SAME). Visando otimizar os custos de manufatura e garantir a modularidade do sistema, por conta disso irá se usar placas de fenolite manufaturadas a mão, bem como módulos, placas de desenvolvimento e conversores comerciais.
+Esta seção estabelece as diretrizes de projeto e as restrições metodológicas adotadas para o desenvolvimento da placa de medição. Visando otimizar os custos de manufatura e garantir a modularidade do sistema, por conta disso irá se usar placas de fenolite manufaturadas a mão, bem como módulos, placas de desenvolvimento e conversores comerciais.
 
 Adotou-se o microcontrolador CH32V307VCT6 (WCH) como unidade de processamento
-das placas SIBA e SAME. A escolha fundamenta-se em quatro critérios principais.
+da placa de medição. A escolha fundamenta-se em quatro critérios principais.
 Primeiro, o conversor analógico-digital com taxa de até 1 Msps
 atende à amostragem rápida de correntes e tensões exigida pela aquisição e pelo
 controle. Segundo, a ampla memória disponível acomoda o \textit{firmware} sobre
@@ -50,8 +50,8 @@ em três camadas lógicas, apresentadas na \autoref{fig:Metodologia_Diagrama_pla
 
 A camada base (\textit{Vcore - OS}) encapsula as rotinas nativas do
 \textit{Zephyr} e os periféricos do microcontrolador, apresentando uma
-arquitetura idêntica para a SIBA e a SAME e promovendo o reaproveitamento de
-código entre as duas placas. Ela é composta por cinco módulos, detalhados na
+arquitetura reaproveitável por outras placas da bancada e promovendo o
+reaproveitamento de código entre elas. Ela é composta por cinco módulos, detalhados na
 \autoref{fig:Metodologia_Vcore}:
 
 \begin{itemize}
@@ -59,7 +59,7 @@ código entre as duas placas. Ela é composta por cinco módulos, detalhados na
     \item \textbf{NCI (\textit{Network Core Interface}):} gerenciador do \textit{socket} UDP, responsável pela recepção e pela transmissão de pacotes com latência minimizada.
     \item \textbf{HAL (\textit{Hardware Abstraction Layer}):} interface direta com os periféricos do microcontrolador (como o ADC operando via DMA para leituras analógicas em \textit{background}), isolando os registradores físicos das camadas superiores.
     \item \textbf{CMD\_Core:} interpretador central que recebe os pacotes binários brutos entregues pelo NCI, valida as instruções e as encaminha ao OSSI para despacho.
-    \item \textbf{NVM (\textit{Non-Volatile Memory}):} guarda numa memória EEPROM externa, acessada por barramento I\textsuperscript{2}C, os coeficientes de calibração de cada sensor --- e, na SAME, também os parâmetros do observador. Na partida o módulo restaura o que está gravado; quando o operador confirma uma calibração pela aplicação de supervisão, o CMD\_Core manda gravá-la, de modo que ela sobrevive à desenergização da placa.
+    \item \textbf{NVM (\textit{Non-Volatile Memory}):} guarda numa memória EEPROM externa, acessada por barramento I\textsuperscript{2}C, os coeficientes de calibração de cada sensor e os parâmetros do observador. Na partida o módulo restaura o que está gravado; quando o operador confirma uma calibração pela aplicação de supervisão, o CMD\_Core manda gravá-la, de modo que ela sobrevive à desenergização da placa.
 \end{itemize}
 
 \begin{figure}[H]
@@ -87,10 +87,10 @@ código entre as duas placas. Ela é composta por cinco módulos, detalhados na
 \end{figure}
 
 Já a camada \textit{System} concentra os gerenciadores de domínio (bateria,
-hélice, segurança, telemetria, ou o observador SMO no caso da SAME), sem
+hélice, segurança, telemetria e o observador SMO), sem
 nenhuma \textit{thread} própria --- eles são chamados diretamente pela função
-de despacho do OSSI, conforme detalhado adiante para cada placa
-(\autoref{sec:siba} e \autoref{sec:same}). Por fim, a camada
+de despacho do OSSI, conforme detalhado adiante para a placa de medição
+(\autoref{sec:siba}). Por fim, a camada
 \textit{Application} opera isolada no \textit{User Space}, restrita ao
 barramento OSSI para qualquer interação com as camadas inferiores.
 
@@ -114,7 +114,7 @@ eles.
 
 \begin{figure}[H]
     \centering
-    \caption{Arquitetura de fila de trabalho única, comum às placas SIBA e SAME}
+    \caption{Arquitetura de fila de trabalho única da placa de medição}
     \label{fig:arquitetura_fila_unica}
     \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[

@@ -71,17 +71,14 @@
   \fill[red!70!black] ([xshift=-4mm]rpot.north) ++(0,0.42) circle (1.8pt);
 
   % ---------------- baixa tensão e rede (abaixo) ----------------
-  \node[bloco, minimum width=1.4cm] (siba) at (3.6,-3.4) {SIBA};
+  \node[bloco, minimum width=1.4cm] (siba) at (3.6,-3.4) {Placa de\\medição};
   \node[bloco, minimum width=1.4cm] (sw)   at (5.5,-3.4) {\textit{Switch}\\de rede};
-  \node[bloco, minimum width=1.4cm] (same) at (7.4,-3.4) {SAME};
-  \draw[thick] (b4.south) -- ++(0,-0.35) -| (same.north);
+  \draw[thick] (b4.south) -- ++(0,-0.35) -| (sw.north);
   \draw[fio] (b4.south) ++(0,-0.35) -| (siba.north);
   \draw[fio] (sw.north |- 0,-1.5) -- (sw.north);
-  \draw[fio] (same.north |- 0,-1.5) -- (same.north);
   \node[rot, anchor=north] at (6.5,-1.55) {5 V / GND};
   \draw[eth] (siba.east) -- (sw.west);
-  \draw[eth] (same.west) -- (sw.east);
-  \draw[dashed, gray] (aq1.west) -- ++(-2.9,0) node[rot, anchor=east, gray!70!black] {cabo de sinais para a SAME};
+  \draw[dashed, gray] (aq1.west) -- ++(-2.9,0) node[rot, anchor=east, gray!70!black] {cabo de sinais para a placa de medição};
 
   \node[bloco, fill=red!10] (eme) at (1.6,-3.4) {Botão de\\emergência};
   \node[bloco] (mod) at (9.95,-3.4) {Módulos\\de relé (5 V)};

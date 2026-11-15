@@ -177,7 +177,9 @@ security_limits:
   - { name: SM_RPM_MAX,        value: 60000.0, comment: "rpm mecânico plausível máximo" }
   - { name: SM_CAL_SETTLE_MS,  value: 2000.0,  comment: "espera antes de amostrar o offset [ms]: o SS49E deriva no aquecimento inicial" }
   - { name: SM_CAL_FRAMES,     value: 4096.0,  comment: "quadros acumulados para a média do offset (com o ESC parado)" }
-  - { name: SM_CAL_STD_MAX_MV, value: 8.0,     comment: "desvio-padrão máximo nas amostras de offset [mV no pino]; acima disso a calibração FALHA" }
+  - { name: SM_CAL_STD_MAX_MV, value: 20.0,    comment: "desvio-padrão máximo nas amostras de offset [mV no pino]; o ruído medido com o ESC parado é 9–10 mV (era 8 e reprovava sempre)" }
+  - { name: SM_CAL_MEAN_MIN_MV, value: 1200.0, comment: "média mínima do repouso do Hall no pino [mV] (esperado ~1670 mV); abaixo = cabo solto/curto" }
+  - { name: SM_CAL_MEAN_MAX_MV, value: 2200.0, comment: "média máxima do repouso do Hall no pino [mV]; acima = cabo solto (fundo de escala)" }
 
 # Defaults de calibração afim (y = linear*x + offset) + faixa válida/segurança
 # por sensor — fonte única, alimenta CMD_Core_prm.h (gerado, ver generate.py).

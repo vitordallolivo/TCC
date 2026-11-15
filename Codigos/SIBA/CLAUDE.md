@@ -38,9 +38,9 @@ UDP: escuta CMD na 5000, envia telemetria (116 B, 10 Hz) em broadcast para a 555
 - **O que conta é o lote caber no intervalo do DMA** (o observador só "escuta"
   o motor); o Ts só entra nas equações.
 - Calibração de offset das correntes no boot (2 s + 4096 quadros, ESC parado).
-  ⚠ Pendente: limite `SM_CAL_STD_MAX_MV` = 8 mV é menor que o ruído real
-  (9–10 mV) → reprova; e falta checar a média na faixa do Hall (1,2–2,2 V) —
-  com cabo solto aceitou fundo de escala como zero. Offsets ajustáveis por
+  Critérios (SIBA.yaml): desvio ≤ `SM_CAL_STD_MAX_MV` (20 mV; ruído real 9–10)
+  e média entre `SM_CAL_MEAN_MIN/MAX_MV` (1,2–2,2 V) — sem isso, com cabo
+  solto, aceitava fundo de escala como zero. Offsets ajustáveis por
   CMD (`FUNC_SENSOR`, alvos `TARGET_PHASE_*`, ação OFFSET).
 - Parâmetros do observador por CMD (`FUNC_SENSOR`, alvos 19–28, qualquer ação ≠
   RESET_DEFAULT grava `value`), salvos no NVM.
@@ -86,11 +86,19 @@ descarta os da EEPROM, senão o Γ/Ts velho venceria.
 
 - Ensaios: `../Aplicacao_Pi/Ensaios/ensaio_siba.py` (degraus de throttle +
   CSV). Relés, ESC, V_b, V_c e correntes ok.
-- **V_a morto**: com o motor girando o PC2 lê ~13 mV que copiam o V_c (resíduo
-  do capacitor de amostragem) → PC2 em alta impedância, sem ligação ao pino 8
-  do J1. Sem V_a, Clarke falha e `rpm_same` fica 0. Conferir solda/pino do PC2
-  (LQFP100 pino 17) ou trocar fios 7↔8 para isolar.
-- `rpm_same` deriva (−11 000) com motor parado: zerar a saída quando |ê| < limiar.
+- V_a (PC2) estava sem ligação elétrica em 14/11 (lia ~13 mV copiando o V_c,
+  resíduo do capacitor de amostragem = pino em alta impedância); o autor
+  consertou a solda em 15/11.
+- **Correntes casadas com as tensões** (`HAL_PH_I_SWAP_BC` + `HAL_PH_I_INVERT`
+  em `HAL_prm.h`, 15/11): a sequência das correntes girava ao contrário da das
+  tensões → Σv·i ≈ 0 e torque estimado ~25 % do esperado. Diagnóstico pelos
+  CSVs: ângulo corrente−tensão por amostra para todas as permutações/sinais;
+  a certa concentra o ângulo e dá Σv·i ≈ T·ω. Depois da correção, torque
+  estimado com a 15x6E = 1,13–1,23 × (APC J=0 + perdas), crescendo com rpm².
+  Os CSVs anteriores a 15/11 10:23 têm `i_a..i_c` na ligação antiga.
+- Calibração de boot: desvio máx. 20 mV e média do repouso em 1,2–2,2 V
+  (`security_limits` do SIBA.yaml); passou no boot de 15/11.
+- `rpm_same` deriva (±1000) com motor parado: zerar a saída quando |ê| < limiar.
 
 ## native_sim
 

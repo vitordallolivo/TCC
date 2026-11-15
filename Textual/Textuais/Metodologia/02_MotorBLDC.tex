@@ -283,8 +283,14 @@ montada no eixo e sem vento incidente ($J = 0$), o motor é levado por patamares
 de rotação crescente, até no máximo \num{10000} RPM, seguindo o fluxo da
 \autoref{fig:fluxo_ensaio_helice}. Em cada patamar, depois que a rotação
 estabiliza, registram-se a rotação, o torque eletromagnético e a
-densidade do ar, calculada pela \autoref{eq:densidade_calculo} a partir da
-pressão e da temperatura do ambiente.
+densidade do ar, calculada pela lei dos gases ideais a partir da pressão
+absoluta $P_{atm}$ e da temperatura absoluta $T$ do ambiente
+\cite{Moran2018}, com $R_{ar} = \SI{287,05}{\joule\per\kilo\gram\per\kelvin}$:
+
+\begin{equation}
+    \rho = \frac{P_{atm}}{R_{ar}\,T}
+    \label{eq:densidade_calculo}
+\end{equation}
 
 \begin{figure}[H]
     \centering

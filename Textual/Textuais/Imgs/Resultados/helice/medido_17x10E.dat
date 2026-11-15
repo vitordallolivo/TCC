@@ -1,6 +1,12 @@
-# Ensaio estático em bancada — preencher uma linha por patamar.
-# rpm: rotação do patamar | Te_Nm: torque médio (correntes medidas, ângulo do observador)
-# rho: densidade do ar do ensaio [kg/m3] (Eq. da densidade, P e T do ambiente)
-# O C_Q é calculado na própria figura, descontando as perdas a vazio B*w + tau_c.
-rpm Te_Nm rho
-nan nan nan
+# Ensaio estático em bancada, hélice APC 17x10E — 15/11/2026, bateria 6S.
+# Um patamar por degrau de acelerador, 10 s cada; descartados os 3 s iniciais (transitório).
+# rpm, Te_Nm: média da rotação e do torque eletromagnético estimados pelo observador embarcado
+#   (telemetria a 10 Hz, saídas com filtro de 2 Hz); rpm_err, Te_err: desvio-padrão no patamar.
+# rho: densidade do ar adotada (ISA, nível do mar). Degrau de 10 % omitido: o motor não girou.
+# Dados completos: ensaio_bancada_17x10E.csv
+# Te_Nm e Te_err já corrigidos pelo divisor de corrente montado (9,1 kΩ): os ensaios
+#   rodaram com o coeficiente de 10 kΩ (0,0784 A/mV); fator 0,0809/0,0784 = 1,0319.
+rpm rpm_err Te_Nm Te_err rho thr_pct n
+1334.6 1.1 0.08880 0.00045 1.225 20 70
+2307.8 2.0 0.19917 0.00062 1.225 30 71
+3010.2 2.7 0.31456 0.00080 1.225 40 69

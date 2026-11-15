@@ -38,7 +38,7 @@ desacelerações.
 
     \footnotetext{Carga da hélice $T_{carga}=k_Q\,\omega_m^2$, com
     $k_Q = C_Q\,\rho\,D^5/4\pi^2$ e $C_Q$ médio do fabricante entre
-    \num{1000} e \num{3000} RPM (\autoref{tab:apc_estatico}).}
+    \num{1000} e \num{3000} RPM \cite{apc_performance_data}.}
 
     Fonte: Autor (2026)
 \end{table}
@@ -453,103 +453,211 @@ menor que a amplitude da ondulação do acionamento em seis passos
 \subsection{Coeficiente de Torque das Hélices em Bancada}
 \label{sec:resultado_coef_aero_bancada}
 
-Foram ensaiadas duas hélices APC, 15x6E e 17x10E, na condição estática do
-procedimento da \autoref{sec:coef_aero_bancada}. A referência é a tabela de
-desempenho do fabricante na razão de avanço nula
-(\autoref{tab:apc_estatico}), com $C_Q$ obtido de $C_P$ pela
-\autoref{eq:cq_from_cp}. O torque aerodinâmico medido é o da
-\autoref{eq:torque_corrente_medida} descontadas as perdas a vazio, $B\,\omega + \tau_c$, levantadas na
-\autoref{sec:resultado_coef_mec}. A \autoref{fig:helice_torque} compara o
-torque com o do fabricante, e a \autoref{fig:helice_cq}, o coeficiente $C_Q$.
+As hélices APC 15x6E e 17x10E foram ensaiadas na condição estática do
+procedimento da \autoref{sec:coef_aero_bancada}, com bateria de seis células.
+O acelerador foi levado a três patamares, \SIlist{20;30;40}{\percent}, de
+\SI{10}{\second} cada; em cada patamar, descartados os \SI{3}{\second}
+iniciais de transitório, a rotação e o torque estimados pelo observador
+embarcado foram promediados. O torque da hélice é o estimado menos as perdas a
+vazio, $B\,\omega + \tau_c$ (\autoref{sec:resultado_coef_mec}), e $C_Q$ usa
+$\rho = \SI{1,225}{\kilo\gram\per\cubic\meter}$. O teórico é a tabela do
+fabricante na razão de avanço nula, com $C_Q$ obtido de $C_P$ pela
+\autoref{eq:cq_from_cp}. A \autoref{tab:helice_15x6E} e a
+\autoref{tab:helice_17x10E} dão os valores e o erro em relação ao teórico; a
+\autoref{fig:helice_torque} e a \autoref{fig:helice_cq} mostram as mesmas
+grandezas contra a rotação.
 
 \begin{table}[H]
     \centering
-    \caption{Torque e coeficiente $C_Q$ das hélices na condição estática ($J = 0$), segundo o fabricante}
-    \label{tab:apc_estatico}
-    \begin{tabular}{ccccc}
+    \caption{Torque e coeficiente $C_Q$ da hélice APC 15x6E na condição estática: teórico e bancada}
+    \label{tab:helice_15x6E}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{ccccccc}
         \toprule
-        & \multicolumn{2}{c}{\textbf{APC 15x6E}} & \multicolumn{2}{c}{\textbf{APC 17x10E}} \\
-        \cmidrule(lr){2-3}\cmidrule(lr){4-5}
-        \textbf{Rotação [RPM]} & \textbf{$Q$ [\si{\newton\meter}]} & \textbf{$C_Q$} &
-        \textbf{$Q$ [\si{\newton\meter}]} & \textbf{$C_Q$} \\
+        & & \multicolumn{2}{c}{\textbf{$Q$ [\si{\newton\meter}]}} & \multicolumn{2}{c}{\textbf{$C_Q$}} & \\
+        \cmidrule(lr){3-4}\cmidrule(lr){5-6}
+        \textbf{Acelerador} & \textbf{Rotação [RPM]} & \textbf{Teórico} & \textbf{Bancada} & \textbf{Teórico} & \textbf{Bancada} & \textbf{Erro} \\
         \midrule
-        \num{1000}  & \num{0,0120} & \num{0,00438} & \num{0,0302} & \num{0,00598} \\
-        \num{2000}  & \num{0,0429} & \num{0,00393} & \num{0,1112} & \num{0,00552} \\
-        \num{3000}  & \num{0,0920} & \num{0,00374} & \num{0,2413} & \num{0,00532} \\
-        \num{4000}  & \num{0,1587} & \num{0,00363} & \num{0,4209} & \num{0,00522} \\
-        \num{5000}  & \num{0,2437} & \num{0,00357} & \num{0,6510} & \num{0,00517} \\
-        \num{6000}  & \num{0,3473} & \num{0,00353} & \num{0,9337} & \num{0,00514} \\
-        \num{7000}  & \num{0,4705} & \num{0,00352} & \num{1,2718} & \num{0,00516} \\
-        \num{8000}  & \num{0,6141} & \num{0,00350} & \num{1,6689} & \num{0,00517} \\
-        \num{9000}  & \num{0,7797} & \num{0,00352} & \num{2,1303} & \num{0,00522} \\
-        \num{10000} & \num{0,9693} & \num{0,00355} & \num{2,6632} & \num{0,00528} \\
+        \SI{20}{\percent} & \num{1770} & \num{0,0358} & \num{0,0504} $\pm$ \num{0,0034} & \num{0,00418} & \num{0,00589} $\pm$ \num{0,00041} & \SI{+40,7}{\percent} \\
+        \SI{30}{\percent} & \num{3050} & \num{0,0953} & \num{0,1191} $\pm$ \num{0,0052} & \num{0,00375} & \num{0,00469} $\pm$ \num{0,00022} & \SI{+25,0}{\percent} \\
+        \SI{40}{\percent} & \num{3937} & \num{0,1545} & \num{0,1862} $\pm$ \num{0,0071} & \num{0,00365} & \num{0,00440} $\pm$ \num{0,00019} & \SI{+20,6}{\percent} \\
         \bottomrule
     \end{tabular}
 
     \vspace{2pt}
-    {\small Fonte: Adaptado de \citeonline{apc_performance_data}}
+    {\small Fonte: Autor (2026); teórico adaptado de \citeonline{apc_performance_data}}
 \end{table}
 
-% Pontos medidos: Textuais/Imgs/Resultados/helice/medido_<hélice>.dat
-% (rpm, torque pela Eq. de corrente medida, densidade). Perdas a vazio: B = 32,4e-6
-% N.m.s/rad e tau_c = 15,5e-3 N.m. D^5: 15" = 8,028e-3 m^5; 17" = 1,5011e-2 m^5.
+\begin{table}[H]
+    \centering
+    \caption{Torque e coeficiente $C_Q$ da hélice APC 17x10E na condição estática: teórico e bancada}
+    \label{tab:helice_17x10E}
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{ccccccc}
+        \toprule
+        & & \multicolumn{2}{c}{\textbf{$Q$ [\si{\newton\meter}]}} & \multicolumn{2}{c}{\textbf{$C_Q$}} & \\
+        \cmidrule(lr){3-4}\cmidrule(lr){5-6}
+        \textbf{Acelerador} & \textbf{Rotação [RPM]} & \textbf{Teórico} & \textbf{Bancada} & \textbf{Teórico} & \textbf{Bancada} & \textbf{Erro} \\
+        \midrule
+        \SI{20}{\percent} & \num{1335} & \num{0,0573} & \num{0,0688} $\pm$ \num{0,0037} & \num{0,00630} & \num{0,00756} $\pm$ \num{0,00043} & \SI{+20,0}{\percent} \\
+        \SI{30}{\percent} & \num{2308} & \num{0,1512} & \num{0,1758} $\pm$ \num{0,0066} & \num{0,00556} & \num{0,00646} $\pm$ \num{0,00027} & \SI{+16,3}{\percent} \\
+        \SI{40}{\percent} & \num{3010} & \num{0,2431} & \num{0,2888} $\pm$ \num{0,0099} & \num{0,00525} & \num{0,00624} $\pm$ \num{0,00025} & \SI{+18,8}{\percent} \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{2pt}
+    {\small Fonte: Autor (2026); teórico adaptado de \citeonline{apc_performance_data}}
+\end{table}
+
+% Pontos medidos: Textuais/Imgs/Resultados/helice/medido_<hélice>.dat (torque do
+% observador já corrigido para o divisor de 9,1 kOhm). Perdas: B = 32,4e-6 N.m.s/rad,
+% tau_c = 15,5e-3 N.m. D^5: 15" = 8,028e-3 m^5; 17" = 1,5011e-2 m^5.
 \pgfplotsset{
-    helice/.style={width=0.85\textwidth, height=6.5cm, grid=both,
-        grid style={dotted,gray!40}, xmin=0, xmax=10000, legend pos=north west,
-        legend style={font=\scriptsize}, tick label style={font=\small},
+    helice/.style={width=\linewidth, height=5.5cm, grid=both,
+        grid style={dotted,gray!40}, xmin=1000, xtick distance=1000, legend pos=north west,
+        legend style={font=\scriptsize}, tick label style={font=\scriptsize},
         label style={font=\small}, xlabel={Rotação [RPM]},
         scaled x ticks=false, xticklabel style={/pgf/number format/1000 sep={}}},
     tabhelice/.style={table/comment chars={\#}},
+    apcfaixa/.style={restrict x to domain=1000:4000},
+    barras/.style={error bars/.cd, x dir=both, x explicit, y dir=both, y explicit,
+        error bar style={line width=0.8pt}, error mark options={rotate=90, mark size=3pt, line width=0.8pt}},
 }
 
 \begin{figure}[H]
     \centering
-    \caption{Torque aerodinâmico das hélices na condição estática: fabricante e bancada}
+    \caption{Torque aerodinâmico das hélices na condição estática: teórico e bancada}
     \label{fig:helice_torque}
-    \begin{tikzpicture}
-        \begin{axis}[helice, ylabel={$Q$ [\si{\newton\meter}]}, ymin=0]
-            \addplot[thick, blue!65!black] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
-            \addlegendentry{15x6E --- APC}
-            \addplot[thick, red!65!black, dashed] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
-            \addlegendentry{17x10E --- APC}
-            \addplot[only marks, mark=*, blue!65!black, forget plot] table[tabhelice, x=rpm,
-                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)}]
+    \begin{subfigure}[t]{0.49\textwidth}
+        \centering
+        \begin{tikzpicture}
+        \begin{axis}[helice, xmax=4000, ylabel={$Q$ [\si{\newton\meter}]}, ymin=0]
+            \addplot[thick, blue!65!black, apcfaixa] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
+            \addlegendentry{APC (teórico)}
+            \addplot[only marks, mark=*, blue!65!black, barras] table[tabhelice, x=rpm,
+                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)},
+                x error=rpm_err, y error expr={sqrt(\thisrow{Te_err}^2 + (0.03*\thisrow{Te_Nm})^2 + (4.4e-6*\thisrow{rpm}*0.1047198)^2 + (2.4e-3)^2)}]
                 {Textuais/Imgs/Resultados/helice/medido_15x6E.dat};
-            \addplot[only marks, mark=square*, red!65!black, forget plot] table[tabhelice, x=rpm,
-                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)}]
-                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
-            \addlegendimage{only marks, mark=*, blue!65!black}\addlegendentry{15x6E --- bancada}
-            \addlegendimage{only marks, mark=square*, red!65!black}\addlegendentry{17x10E --- bancada}
+            \addlegendentry{bancada}
         \end{axis}
-    \end{tikzpicture}
+        \end{tikzpicture}
+        \caption{APC 15x6E}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.49\textwidth}
+        \centering
+        \begin{tikzpicture}
+        \begin{axis}[helice, xmax=4000, ylabel={$Q$ [\si{\newton\meter}]}, ymin=0]
+            \addplot[thick, red!65!black, apcfaixa] table[x=rpm, y=torque_Nm] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
+            \addlegendentry{APC (teórico)}
+            \addplot[only marks, mark=square*, red!65!black, barras] table[tabhelice, x=rpm,
+                y expr={\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)},
+                x error=rpm_err, y error expr={sqrt(\thisrow{Te_err}^2 + (0.03*\thisrow{Te_Nm})^2 + (4.4e-6*\thisrow{rpm}*0.1047198)^2 + (2.4e-3)^2)}]
+                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
+            \addlegendentry{bancada}
+        \end{axis}
+        \end{tikzpicture}
+        \caption{APC 17x10E}
+    \end{subfigure}
 
     Fonte: Autor (2026)
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \caption{Coeficiente de torque $C_Q$ das hélices na condição estática: fabricante e bancada}
+    \caption{Coeficiente de torque $C_Q$ das hélices na condição estática: teórico e bancada}
     \label{fig:helice_cq}
-    \begin{tikzpicture}
-        \begin{axis}[helice, ylabel={$C_Q$}, ymin=0.003, ymax=0.0065,
-                     legend pos=north east, yticklabel style={/pgf/number format/fixed,
-                     /pgf/number format/precision=4}]
-            \addplot[thick, blue!65!black] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
-            \addlegendentry{15x6E --- APC}
-            \addplot[thick, red!65!black, dashed] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
-            \addlegendentry{17x10E --- APC}
-            \addplot[only marks, mark=*, blue!65!black, forget plot] table[tabhelice, x=rpm,
-                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3))
-                        / (\thisrow{rho}*(\thisrow{rpm}/60)^2*8.0283e-3)}]
+    \begin{subfigure}[t]{0.49\textwidth}
+        \centering
+        \begin{tikzpicture}
+        \begin{axis}[helice, xmax=4000, ylabel={$C_Q$}, ymin=0.003, ymax=0.0068, legend pos=north east,
+                     yticklabel style={/pgf/number format/fixed, /pgf/number format/precision=4}]
+            \addplot[thick, blue!65!black, apcfaixa] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_15x6E_estatico.dat};
+            \addlegendentry{APC (teórico)}
+            \addplot[only marks, mark=*, blue!65!black, barras] table[tabhelice, x=rpm,
+                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)) / (\thisrow{rho}*(\thisrow{rpm}/60)^2*8.0283e-3)},
+                x error=rpm_err,
+                y error expr={sqrt(\thisrow{Te_err}^2 + (0.03*\thisrow{Te_Nm})^2 + (4.4e-6*\thisrow{rpm}*0.1047198)^2 + (2.4e-3)^2
+                        + (0.02*(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)))^2) / (\thisrow{rho}*(\thisrow{rpm}/60)^2*8.0283e-3)}]
                 {Textuais/Imgs/Resultados/helice/medido_15x6E.dat};
-            \addplot[only marks, mark=square*, red!65!black, forget plot] table[tabhelice, x=rpm,
-                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3))
-                        / (\thisrow{rho}*(\thisrow{rpm}/60)^2*1.50111e-2)}]
-                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
-            \addlegendimage{only marks, mark=*, blue!65!black}\addlegendentry{15x6E --- bancada}
-            \addlegendimage{only marks, mark=square*, red!65!black}\addlegendentry{17x10E --- bancada}
+            \addlegendentry{bancada}
         \end{axis}
-    \end{tikzpicture}
+        \end{tikzpicture}
+        \caption{APC 15x6E}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.49\textwidth}
+        \centering
+        \begin{tikzpicture}
+        \begin{axis}[helice, xmax=4000, ylabel={$C_Q$}, ymin=0.004, ymax=0.0085, legend pos=north east,
+                     yticklabel style={/pgf/number format/fixed, /pgf/number format/precision=4}]
+            \addplot[thick, red!65!black, apcfaixa] table[x=rpm, y=CQ] {Textuais/Imgs/Resultados/helice/apc_17x10E_estatico.dat};
+            \addlegendentry{APC (teórico)}
+            \addplot[only marks, mark=square*, red!65!black, barras] table[tabhelice, x=rpm,
+                y expr={(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)) / (\thisrow{rho}*(\thisrow{rpm}/60)^2*1.50111e-2)},
+                x error=rpm_err,
+                y error expr={sqrt(\thisrow{Te_err}^2 + (0.03*\thisrow{Te_Nm})^2 + (4.4e-6*\thisrow{rpm}*0.1047198)^2 + (2.4e-3)^2
+                        + (0.02*(\thisrow{Te_Nm} - (32.4e-6*\thisrow{rpm}*0.1047198 + 15.5e-3)))^2) / (\thisrow{rho}*(\thisrow{rpm}/60)^2*1.50111e-2)}]
+                {Textuais/Imgs/Resultados/helice/medido_17x10E.dat};
+            \addlegendentry{bancada}
+        \end{axis}
+        \end{tikzpicture}
+        \caption{APC 17x10E}
+    \end{subfigure}
+
+    Fonte: Autor (2026)
+\end{figure}
+
+O torque e o $C_Q$ de bancada seguem a forma das curvas teóricas: o torque
+cresce com a rotação e o $C_Q$ diminui levemente, nas duas hélices. Os valores,
+porém, ficam acima do teórico, de \SIrange{16}{20}{\percent} na 17x10E e de
+\SIrange{21}{41}{\percent} na 15x6E. Algumas considerações sobre essa
+diferença:
+
+\begin{itemize}
+    \item o teórico é resultado de simulação do fabricante, não de ensaio, e
+    tende a ser menos preciso em rotações baixas, onde o escoamento nas pás
+    tem número de Reynolds menor;
+    \item o erro maior está na rotação mais baixa da 15x6E, onde o torque da
+    hélice é pequeno e as perdas a vazio descontadas pesam mais; um erro de
+    poucos \si{\milli\newton\meter} nessas perdas muda muito o resultado;
+    \item o torque vem das correntes estimadas pelo observador, que na
+    simulação ficaram \SIrange{4}{12}{\percent} acima do real com a 17x10E
+    (\autoref{sec:autotuning});
+    \item os ensaios rodaram com o coeficiente do divisor de corrente de
+    \SI{10}{\kilo\ohm}; os valores foram corrigidos para o divisor montado, de
+    \SI{9,1}{\kilo\ohm} (fator \num{1,032});
+    \item a densidade do ar não foi medida no dia, e a bancada não tem medida
+    de torque independente no mesmo eixo, que separaria o erro da estimativa da
+    diferença real da hélice.
+\end{itemize}
+
+As barras de erro somam o desvio-padrão no patamar, a incerteza de $B$ e
+$\tau_c$, \SI{3}{\percent} no ganho dos sensores de corrente e, no $C_Q$,
+\SI{2}{\percent} na densidade do ar. A \autoref{fig:helice_gui} mostra os dois
+registros como aparecem na interface, a partir do degrau de \SI{20}{\percent},
+o primeiro que põe o motor em rotação. As tensões e correntes são amostras
+isoladas a \SI{10}{\hertz}, cada uma num instante qualquer do chaveamento, e
+não a forma de onda.
+
+\begin{figure}[H]
+    \centering
+    \caption{Registros dos ensaios das hélices exibidos na interface de usuário}
+    \label{fig:helice_gui}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.95\linewidth]{Textuais/Imgs/Resultados/helice/gui_ensaio_15x6E.png}
+        \caption{APC 15x6E}
+    \end{subfigure}
+
+    \vspace{0.3cm}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=0.95\linewidth]{Textuais/Imgs/Resultados/helice/gui_ensaio_17x10E.png}
+        \caption{APC 17x10E}
+    \end{subfigure}
 
     Fonte: Autor (2026)
 \end{figure}

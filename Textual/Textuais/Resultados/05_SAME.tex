@@ -1,10 +1,11 @@
-\section{SAME}
+\section{Placa de Medição}
 \label{sec:resultado_validacao_same}
+\label{sec:resultado_validacao_siba}
 
 \subsection{Calibração de Canal}
 \label{sec:resultado_calibracao_canal_same}
 
-Cada canal de medida da SAME converte a leitura do conversor
+Cada canal de medida da placa converte a leitura do conversor
 analógico-digital em grandeza física por uma reta: o valor medido é o produto
 da tensão presente no pino do conversor por um coeficiente de escala, somado a
 um deslocamento de zero. Os dois números saem do projeto da cadeia --- a
@@ -19,38 +20,49 @@ com o condutor passando uma única vez pelo furo do toróide,
 (\autoref{sec:resultado_sensor_corrente}). A saída do sensor repousa em
 \SI{2,5}{\volt} e chegaria a \SI{3,625}{\volt} em \SI{60}{\ampere}, acima dos
 \SI{3,3}{\volt} que o conversor aceita; por isso ela passa por um divisor de
-\SI{2,0}{\kilo\ohm} e \SI{18}{\kilo\ohm}, que atenua o sinal em
-\num{0,900}. A cadeia completa fica com \SI{16,875}{\milli\volt\per\ampere},
-o que corresponde a \SI{47,7}{\milli\ampere} por degrau do conversor. No
-caminho de tensão, o divisor de \SI{130}{\kilo\ohm} e \SI{7,5}{\kilo\ohm}
-atenua em \num{0,0545455} e estabelece fundo de escala de \SI{60,5}{\volt},
-o dobro da tensão de barramento, com folga para o sobressinal de comutação;
-o degrau resultante é de \SI{14,8}{\milli\volt}. A
-\autoref{tab:resultado_calibracao_canal_same} reúne os dois caminhos.
+\SI{4,7}{\kilo\ohm} e \SI{9,1}{\kilo\ohm}, que atenua o sinal em \num{0,659}. A
+cadeia completa fica com \SI{12,36}{\milli\volt\per\ampere}, o que corresponde
+a \SI{65,2}{\milli\ampere} por degrau do conversor. O repouso medido no pino,
+\SIrange{1,669}{1,678}{\volt}, é compatível com esse divisor
+(\SI{1,65}{\volt} previstos). No caminho de tensão, o
+divisor de \SI{100}{\kilo\ohm} e \SI{5,6}{\kilo\ohm} atenua em \num{0,0530} e
+estabelece fundo de escala de \SI{62,2}{\volt}, o dobro da tensão de
+barramento, com folga para o sobressinal de comutação; o degrau resultante é
+de \SI{15,2}{\milli\volt}. A \autoref{tab:resultado_calibracao_canal_same}
+reúne os seis canais.
 
 \begin{table}[H]
     \centering
-    \caption{Escala e resolução dos canais de medida da SAME}
+    \caption{Escala e resolução dos canais de medida da placa de medição}
     \label{tab:resultado_calibracao_canal_same}
-    \begin{tabular}{lcccc}
+    \footnotesize
+    \setlength{\tabcolsep}{3.5pt}
+    \begin{tabular}{lcc}
         \toprule
-        \textbf{Canal} & \textbf{Atenuação} & \textbf{Escala da cadeia} &
-        \textbf{Degrau do ADC} & \textbf{Faixa válida} \\
+        & \textbf{Corrente de fase} & \textbf{Tensão de fase} \\
         \midrule
-        Corrente --- fases $A$, $B$ e $C$ & \num{0,900} &
-        \SI{16,875}{\milli\volt\per\ampere} & \SI{47,7}{\milli\ampere} &
-        $\pm\SI{70}{\ampere}$ \\
-        Tensão --- fases $A$, $B$ e $C$ & \num{0,0545455} &
-        \SI{54,5}{\milli\volt\per\volt} & \SI{14,8}{\milli\volt} &
-        \SI{-1}{\volt} a \SI{65}{\volt} \\
+        Canais e pinos & $i_a$ PA0, $i_b$ PA1, $i_c$ PA3$^{a}$ (ADC1) & $v_a$ PC2, $v_b$ PC3, $v_c$ PC4 (ADC2) \\
+        Sensor & SS49E com núcleo toroidal & --- \\
+        Sensibilidade do sensor & \SI{18,75}{\milli\volt\per\ampere} & --- \\
+        Divisor ($R_1$ / $R_2$) & \SI{4,7}{\kilo\ohm} / \SI{9,1}{\kilo\ohm} & \SI{100}{\kilo\ohm} / \SI{5,6}{\kilo\ohm} \\
+        Atenuação $k$ & \num{0,659} & \num{0,0530} \\
+        Escala da cadeia & \SI{12,36}{\milli\volt\per\ampere} & \SI{53,0}{\milli\volt\per\volt} \\
+        Coeficiente no \textit{firmware} & \SI{0,0809}{\ampere\per\milli\volt} & \SI{0,018857}{\volt\per\milli\volt} \\
+        Zero no pino & \SI{1,65}{\volt} (levantado a cada partida) & \SI{0}{\volt} \\
+        Degrau do ADC (12 bits, \SI{0,806}{\milli\volt}) & \SI{65,2}{\milli\ampere} & \SI{15,2}{\milli\volt} \\
+        Faixa útil & $\pm\SI{60}{\ampere}$ & \SIrange{0}{62,2}{\volt} \\
+        Filtro (capacitor / corte) & \SI{2,7}{\nano\farad} / \SI{19,0}{\kilo\hertz} & \SI{1,5}{\nano\farad} / \SI{20}{\kilo\hertz} \\
+        Amostragem & \multicolumn{2}{c}{simultânea por fase, quadro de \SI{9,0}{\micro\second} (\SI{111}{\kilo\hertz})} \\
         \bottomrule
     \end{tabular}
 
     \vspace{2pt}
+    {\footnotesize $^{a}$ Convertida, mas não usada: $i_c = -(i_a + i_b)$.}
+
     {\small Fonte: Autor (2026)}
 \end{table}
 
-A faixa válida da tabela não é folga de projeto: é critério de diagnóstico.
+A faixa útil da tabela não é folga de projeto: é critério de diagnóstico.
 Leitura fora dela indica sensor saturado, cabo desconectado ou referência
 aberta, e a placa a trata como falha em vez de dado.
 
@@ -68,14 +80,16 @@ espúrio. Por isso o \textit{firmware} mede o repouso real a cada
 energização, com o ESC parado, e sobrescreve o valor de projeto antes de
 iniciar a aquisição.
 
-Cabe uma ressalva sobre o alcance dessa verificação. Nos ensaios com o motor
-girando (\autoref{sec:resultado_setup_scope}), as tensões de fase foram
-medidas diretamente pelas pontas do osciloscópio, sem passar pelo divisor da
-placa; as correntes, sim, vieram dos sensores da SAME. A cadeia de corrente
-foi, portanto, exercitada com o motor em operação, enquanto a de tensão
-permanece verificada apenas pelo projeto do divisor. As formas de onda reais
-de tensão e corrente adquiridas com o motor girando são as apresentadas na
-\autoref{fig:bancada_smo_alfabeta}.
+Nos ensaios com registro de osciloscópio
+(\autoref{sec:resultado_setup_scope}), as tensões de fase foram medidas pelas
+pontas do osciloscópio, sem passar pelo divisor da placa, e as correntes vieram
+dos sensores da placa; as formas de onda estão na
+\autoref{fig:bancada_smo_alfabeta}. Nos ensaios das hélices
+(\autoref{sec:resultado_coef_aero_bancada}), as duas cadeias foram exercitadas
+com o motor em operação: as tensões lidas pela placa chegaram à tensão do
+barramento da bateria de seis células, cerca de \SI{24}{\volt}, nas três fases,
+e as correntes em repouso ficaram a menos de \SI{0,1}{\ampere} do zero após o
+levantamento automático do deslocamento.
 
 \subsection{Sensor de Corrente}
 \label{sec:resultado_sensor_corrente}

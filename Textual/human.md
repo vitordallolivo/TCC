@@ -2541,3 +2541,48 @@ olhar. `Torque_rpm.png` antigo continua na pasta, sem uso.
   Erro médio 0,45 % (15x6E) e 0,32 % (17x10E), eram 0,17 % / 0,23 %. O maior
   desvio (~3 %) é o patamar logo após a desaceleração 5000→3000 rpm — está
   no texto e na nota da tabela.
+
+## 15/11/2026 — SIBA + SAME viram "placa de medição"; ensaios das hélices
+
+**Hélices (`sec:resultado_coef_aero_bancada`, 01_ModelagemSMO.tex):**
+- Pontos de bancada reais nos `medido_15x6E.dat` / `medido_17x10E.dat`
+  (observador embarcado, 20/30/40 % de acelerador, bateria 6S). CSVs
+  completos: `Imgs/Resultados/helice/ensaio_bancada_<hélice>.csv`.
+- Eixo até 4000 rpm (tabela da APC também cortada), barras de erro: desvio no
+  patamar + incerteza de B e τc + 3 % de ganho de corrente + 2 % de ρ (C_Q).
+- Texto diz de onde vem o dado (observador, não correntes medidas) e o desvio:
+  +16–34 % (15x6E) e +12–16 % (17x10E) acima da APC.
+- Nova `fig:helice_gui` (registros no estilo da GUI, a partir do degrau de 20 %).
+- **Testado e descartado (não está no texto):** ρ que fecharia a diferença =
+  1,38–1,64 kg/m³ (irreal); vento pequeno muda a APC em < 4 %.
+
+**Unificação (Cap. 1, 3 e 4):**
+- Objetivos: o 3 virou "integrar medição, acionamento e segurança na placa de
+  medição" (sem Pitot/células); o 4 fala só da placa de medição.
+- Planejamento: três frentes; `fig:fluxo_placa` substitui as figuras da SIBA e
+  da SAME (três trilhas: hardware, firmware, motor e observador).
+- Arquitetura de comunicação, bancada (`fig:diagrama_blocos` refeita do zero:
+  só potência, ESC, AQ1, placa, switch, PC), gabinete, pinagem (pinos
+  analógicos = fases): um bloco "placa de medição".
+- `07_SIBA` = seção "Placa de Medição"; `08_SAME` entra como subseções
+  (condicionamento das fases, observador embarcado — reescrito com a fila
+  própria da aquisição). Pinagem separada da SAME removida.
+- Valores corrigidos para a placa real: ADC 18 MHz (acima dos 14 MHz da folha
+  de dados — dito no texto), 41,5 + 12,5 ciclos, quadro 9,0 µs, divisor de
+  tensão 100k/5k6 (62,2 V, 15,2 mV/LSB, 20 kHz), corrente 4k7/10k (12,76 mV/A,
+  63,2 mA/LSB, 18,4 kHz). Calibração agora é salva na EEPROM (texto antigo
+  dizia que não).
+- Resultados: seção única "Placa de Medição"; espaço reservado da SIBA
+  removido; tabela de escala e resolução refeita por canal.
+- Seção "Instrumentação para Bancadas Propulsivas" fora do documento (a
+  equação da densidade foi para Metodologia/02_MotorBLDC.tex).
+- SIBA/SAME saíram da lista de siglas.
+
+**Para o autor conferir:**
+- O PCB da AQ1 (`asasasas.kicad_pcb`) mostra **9,1 kΩ** no divisor de corrente
+  (R6, R8, R19); o texto usa 10 kΩ, como combinado. Se o montado for 9,1 kΩ,
+  ganho e escala mudam ~3 %.
+- Ainda ficaram no texto: a subseção **Calibração do Tubo de Pitot** (dentro
+  da placa de medição) e a menção a **células de carga** na descrição da placa
+  e da bancada. Saíram dos objetivos; decidir se saem do resto.
+- Pinagem ainda mostra o pino do sensor de RPM (desligado no firmware).

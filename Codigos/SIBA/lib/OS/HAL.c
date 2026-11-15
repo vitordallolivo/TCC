@@ -472,6 +472,16 @@ static void hal_cal_finish(void)
 #endif
         float var = hal_cal_m2[k] / (float)hal_cal_n;
         float sd  = (var > 0.0f) ? sqrtf(var) : 0.0f;
+        /* Média fora da faixa do Hall em repouso = cabo solto/curto: com o
+         * cabo mal encaixado a média deu fundo de escala e foi aceita. */
+        if (hal_cal_mean[k] < SM_CAL_MEAN_MIN_MV || hal_cal_mean[k] > SM_CAL_MEAN_MAX_MV) {
+            LOG_ERR("Calibracao fase %d REPROVADA: repouso %.1f mV fora de "
+                    "[%.0f, %.0f] mV (cabo da AQ1? alimentacao do Hall?)",
+                    k, (double)hal_cal_mean[k], (double)SM_CAL_MEAN_MIN_MV,
+                    (double)SM_CAL_MEAN_MAX_MV);
+            ok = false;
+            continue;
+        }
         if (sd > SM_CAL_STD_MAX_MV) {
             LOG_ERR("Calibracao fase %d REPROVADA: desvio %.2f mV > %.2f mV "
                     "(ESC energizado? sensor sem alimentacao?)",
@@ -576,6 +586,14 @@ static void hal_ph_work_fn(struct k_work *w)
         }
 #if HAL_PH_I_C_DERIVED
         v[2] = -(v[0] + v[1]);    /* estrela sem neutro: i_a + i_b + i_c = 0 */
+#endif
+#if HAL_PH_I_SWAP_BC
+        {   /* sensor "b" está na fase C e o "c" na B (ver HAL_prm.h) */
+            float t = v[1]; v[1] = v[2]; v[2] = t;
+        }
+#endif
+#if HAL_PH_I_INVERT
+        v[0] = -v[0]; v[1] = -v[1]; v[2] = -v[2];   /* sentido dos Hall */
 #endif
         if (ready) {
             /* Clarke + SMO+PLL, um passo por quadro (Ts = OBS_TS_NS). */

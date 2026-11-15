@@ -1,4 +1,4 @@
-Este capítulo descreve os procedimentos e decisões de projeto adotados no desenvolvimento do sistema integrado de bancada para ensaios de conjuntos motopropulsores. A metodologia está organizada em quatro frentes de trabalho interdependentes: \textit{Computer-Aided Design} (CAD), o Sistema Integrado da Bancada Aerodinâmica (SIBA) , a Interface de Usuário ( ou PC) e o Sistema de Aquisição do Motor Elétrico (SAME).  Para fins de resultados mais pertinentes à equipe Albatroz Aerodesign, designou-se o motor Scorpion A-5025-310Kv e a Bateria Lipo 6S de 3300mAh 40C, mostra na \autoref{fig:motor_batata}.
+Este capítulo descreve os procedimentos e decisões de projeto adotados no desenvolvimento do sistema integrado de bancada para ensaios de conjuntos motopropulsores. A metodologia está organizada em três frentes de trabalho interdependentes: \textit{Computer-Aided Design} (CAD), a placa de medição e a Interface de Usuário (PC). A placa de medição concentra a aquisição dos sensores da bancada, o acionamento do motor, a segurança e a estimação de rotação e torque a partir das tensões e correntes de fase. Para fins de resultados mais pertinentes à equipe Albatroz Aerodesign, designou-se o motor Scorpion A-5025-310Kv e a bateria LiPo 6S de \SI{3300}{\milli\ampere\hour} 40C, mostrados na \autoref{fig:motor_batata}.
 
 \begin{figure}[H]
     \centering
@@ -15,11 +15,11 @@ deliberações e decisões mais críticas do desenvolvimento, resumidas na
 \autoref{fig:portao_metodologia}: Q1 é a etapa de decisão de projeto, onde
 são definidas as restrições e definições de projeto; Q2 é a etapa de
 validação individual de cada \textit{feature}; e Q3 é a finalização do
-projeto, marcando seu término. As quatro frentes de trabalho ---
-\textit{Computer-Aided Design} (CAD), SIBA, Interface de Usuário (PC) e
-SAME --- percorrem essas mesmas três janelas de forma independente, cada
-uma com seu próprio fluxo de passos, apresentados nas
-\autoref{fig:fluxo_cad} a \autoref{fig:fluxo_same}.
+projeto, marcando seu término. As três frentes de trabalho ---
+\textit{Computer-Aided Design} (CAD), placa de medição e Interface de
+Usuário (PC) --- percorrem essas mesmas três janelas de forma independente,
+cada uma com seu próprio fluxo de passos, apresentados nas
+\autoref{fig:fluxo_cad} a \autoref{fig:fluxo_interface}.
 
 \begin{figure}[H]
     \centering
@@ -93,58 +93,60 @@ uma com seu próprio fluxo de passos, apresentados nas
     Fonte: Autor (2026)
 \end{figure}
 
-A frente SIBA se desdobra em duas trilhas paralelas --- \textit{hardware}
-(PCB) e \textit{firmware} (código) ---, lado a lado na
-\autoref{fig:fluxo_siba}, convergindo para a validação completa que
-antecede a integração descrita na \autoref{sec:siba}.
+A frente da placa de medição se desdobra em três trilhas paralelas ---
+\textit{hardware} (PCB), \textit{firmware} (código) e modelagem do motor e do
+observador ---, lado a lado na \autoref{fig:fluxo_placa}, convergindo para a
+validação completa que antecede a integração descrita na \autoref{sec:siba}.
 
 \begin{figure}[H]
     \centering
-    \caption{Planejamento: SIBA}
-    \label{fig:fluxo_siba}
+    \caption{Planejamento: placa de medição}
+    \label{fig:fluxo_placa}
+    \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[
         font=\small,
-        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4.4cm, minimum height=0.9cm, text width=4.1cm},
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4.8cm, minimum height=0.9cm, text width=4.6cm, font=\footnotesize},
         small/.style={draw, rounded corners, fill=white, align=center, minimum width=2cm, minimum height=0.6cm, text width=1.9cm, font=\scriptsize},
         coltitle/.style={align=center, font=\bfseries},
-        arrow/.style={-{Latex}, thick}
+        arrow/.style={-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
     ]
-        % Faixas de fase (fundo), horizontais, cobrindo as duas colunas
-        \fill[green!45!black!25]  (-7.6,-0.7) rectangle (7.6,5.6);
-        \fill[orange!55!black!20] (-7.6,-3.4) rectangle (7.6,-0.7);
-        \fill[red!55!black!20]    (-7.6,-7)   rectangle (7.6,-3.4);
+        % Faixas de fase (fundo), horizontais, cobrindo as três colunas
+        \fill[green!45!black!25]  (-8.9,-0.7) rectangle (8.9,5.6);
+        \fill[orange!55!black!20] (-8.9,-3.4) rectangle (8.9,-0.7);
+        \fill[red!55!black!20]    (-8.9,-7)   rectangle (8.9,-3.4);
 
-        % Marcadores de transição de fase
-        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,5.6) {Q1};
-        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,-0.7) {Q2};
-        \node[draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt] at (-8.3,-3.4) {Q3};
+        \node[qmark] at (-9.6,5.6)  {Q1};
+        \node[qmark] at (-9.6,-0.7) {Q2};
+        \node[qmark] at (-9.6,-3.4) {Q3};
 
         % --- Coluna esquerda: Hardware (PCB) ---
-        \node[coltitle] at (-3.8,6) {\textit{Hardware} (PCB)};
-        \node[flowbox] (consid) at (-3.8,4.7) {Safety, Alimentação, ETH,\\Escolha de micro, Esquemáticos};
+        \node[coltitle] at (-6.0,6) {\textit{Hardware} (PCB)};
+        \node[flowbox] (consid) at (-6.0,5.0) {Segurança, alimentação,\\ETH e micro};
+        \node[flowbox] (cond)   at (-6.0,3.5) {Condicionamento\\das fases};
+        \node[flowbox] (readeq) at (-6.0,2.0) {Readequação\\dos componentes};
+        \node[flowbox] (restr)  at (-6.0,0.5) {Restrições físicas};
+        \node[small]   (esqpcb) at (-7.15,-1.6) {Esquemático};
+        \node[small]   (proto)  at (-4.85,-1.6) {Protótipo};
+        \node[flowbox] (valpcb) at (-6.0,-4.5) {Validação das placas};
 
-        \node[flowbox] (readeq) at (-3.8,2.4) {Readequação dos componentes\\conforme disponibilidade};
-        \node[flowbox] (restr)  at (-3.8,1.2) {Restrições físicas};
-        \node[small]   (esqpcb) at (-4.9,-1.6) {Esquemático};
-        \node[small]   (proto)  at (-2.7,-1.6) {Protótipo};
-        \node[flowbox] (valpcb) at (-3.8,-4.5) {Validação PCB};
-
-        \draw[arrow] (consid) -- (readeq);
+        \draw[arrow] (consid) -- (cond);
+        \draw[arrow] (cond) -- (readeq);
         \draw[arrow] (readeq) -- (restr);
         \draw[arrow] (restr) -- (esqpcb);
         \draw[arrow] (restr) -- (proto);
         \draw[arrow] (esqpcb) -- (valpcb);
         \draw[arrow] (proto) -- (valpcb);
-        \draw[-{Latex}, thick, dashed] (valpcb.west) to[bend right=35] node[left, font=\scriptsize, align=center]{se reprovado,\\refatora} (esqpcb.south west);
+        \draw[-{Latex}, thick, dashed] (valpcb.west) to[bend right=35] node[right, pos=0.5, font=\scriptsize, align=center]{se reprovado,\\refatora} (esqpcb.south west);
 
-        % --- Coluna direita: Firmware (Código) ---
-        \node[coltitle] at (3.8,6) {\textit{Firmware} (Código)};
-        \node[flowbox] (cod)    at (3.8,5.1)  {Código};
-        \node[flowbox] (dev)    at (3.8,3.9)  {Compra \textit{dev boards}};
-        \node[flowbox] (zephyr) at (3.8,2.7)  {Criação do projeto em Zephyr};
-        \node[flowbox] (amb)    at (3.8,1.5)  {Criação de ambiente de Teste};
-        \node[flowbox] (vcore)  at (3.8,-1.5) {Validação Vcore};
-        \node[flowbox] (valsys) at (3.8,-3.9) {Validação System\\e Application};
+        % --- Coluna central: Firmware (Código) ---
+        \node[coltitle] at (0,6) {\textit{Firmware} (Código)};
+        \node[flowbox] (cod)    at (0,5.1)  {Código};
+        \node[flowbox] (dev)    at (0,3.9)  {Compra \textit{dev boards}};
+        \node[flowbox] (zephyr) at (0,2.7)  {Criação do projeto em Zephyr};
+        \node[flowbox] (amb)    at (0,1.5)  {Criação de ambiente de teste};
+        \node[flowbox] (vcore)  at (0,-1.5) {Validação Vcore};
+        \node[flowbox] (valsys) at (0,-4.5) {Validação System\\e Application};
 
         \draw[arrow] (cod) -- (dev);
         \draw[arrow] (dev) -- (zephyr);
@@ -152,11 +154,29 @@ antecede a integração descrita na \autoref{sec:siba}.
         \draw[arrow] (amb) -- (vcore);
         \draw[arrow] (vcore) -- (valsys);
 
+        % --- Coluna direita: Motor e observador ---
+        \node[coltitle] at (6.0,6) {Motor e observador};
+        \node[flowbox] (bldc) at (6.0,5.1) {Motor BLDC};
+        \node[flowbox] (par)  at (6.0,3.9) {Parâmetros};
+        \node[flowbox] (sim)  at (6.0,2.7) {Simulações};
+        \node[flowbox] (obs)  at (6.0,1.5) {Observador};
+        \node[flowbox] (dbt)  at (6.0,-1.5) {Teste simples\\com \textit{dev board}};
+        \node[flowbox] (emb)  at (6.0,-4.5) {Observador embarcado\\na placa};
+
+        \draw[arrow] (bldc) -- (par);
+        \draw[arrow] (par) -- (sim);
+        \draw[arrow] ([xshift=-6mm]sim.south) -- ([xshift=-6mm]obs.north);
+        \draw[arrow] ([xshift=6mm]obs.north) -- ([xshift=6mm]sim.south);
+        \draw[arrow] (obs) -- (dbt);
+        \draw[arrow] (dbt) -- (emb);
+
         % Convergência
-        \node[flowbox, fill=black!85, text=white] (siba_ok) at (0,-6.2) {SIBA Completa};
-        \draw[arrow] (valpcb.south) |- (siba_ok.west);
-        \draw[arrow] (valsys.south) |- (siba_ok.east);
-    \end{tikzpicture}
+        \node[flowbox, fill=black!85, text=white] (placa_ok) at (0,-6.3) {Placa de medição completa};
+        \draw[arrow] (valpcb.south) |- (placa_ok.west);
+        \draw[arrow] (valsys) -- (placa_ok);
+        \draw[arrow] (emb.south) |- (placa_ok.east);
+    \end{tikzpicture}%
+    }
 
     Fonte: Autor (2026)
 \end{figure}
@@ -216,67 +236,7 @@ antecede a integração descrita na \autoref{sec:siba}.
     Fonte: Autor (2026)
 \end{figure}
 
-\begin{figure}[H]
-    \centering
-    \caption{Planejamento: SAME}
-    \label{fig:fluxo_same}
-    \begin{tikzpicture}[
-        font=\small,
-        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=3.6cm, minimum height=0.9cm, text width=3.3cm},
-        small/.style={draw, rounded corners, fill=white, align=center, minimum width=2.4cm, minimum height=0.9cm, text width=2.1cm},
-        wide/.style={draw, rounded corners, fill=white, align=center, minimum width=4.6cm, minimum height=0.9cm, text width=4.3cm},
-        arrow/.style={-{Latex}, thick},
-        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
-    ]
-        \fill[green!45!black!25]  (-6.2,1) rectangle (7.6,6.2);
-        \fill[orange!55!black!20] (-6.2,-1.7) rectangle (7.6,1);
-        \fill[red!55!black!20]    (-6.2,-5.2) rectangle (7.6,-1.7);
 
-        \node[qmark] at (-6.9,6.2) {Q1};
-        \draw[-{Triangle[length=2.5mm]}, thick] (-6.9,5.9) -- (-6.9,1.3);
-        \node[qmark] at (-6.9,1) {Q2};
-        \draw[-{Triangle[length=2.5mm]}, thick] (-6.9,0.7) -- (-6.9,-1.4);
-        \node[qmark] at (-6.9,-1.7) {Q3};
-
-        % Três trilhas de entrada (topo)
-        \node[flowbox] (cod)  at (-4.4,5.7) {Código};
-        \node[flowbox] (pcb)  at (0,5.7)    {PCB da SAME};
-        \node[flowbox] (bldc) at (5.8,5.7)  {BLDC};
-        \node[flowbox] (par)  at (5.8,4.5)  {Parâmetros};
-        \node[flowbox] (sim)  at (5.8,3.3)  {Simulações};
-        \node[small]   (obs)  at (2.7,3.3)  {Observador};
-        \node[flowbox] (teste) at (5.8,2.1) {Teste simples\\com \textit{dev board}};
-
-        \draw[arrow] (bldc) -- (par);
-        \draw[arrow] (par) -- (sim);
-        \draw[arrow] (sim) -- (obs);
-        \draw[arrow] (obs) -- (sim);
-        \draw[arrow] (sim) -- (teste);
-
-        % Convergência para a trilha única
-        \node[wide]  (alim)  at (0,1.9)    {Alimentação e\\condicionamentos};
-        \node[wide]  (restr) at (0,0.3)    {Restrições físicas};
-        \node[small] (esqsame) at (-1.1,-1.4) {Esquemático};
-        \node[small] (protosame) at (1.1,-1.4) {Protótipo};
-        \node[wide]  (valid) at (0,-3.5)   {Validações};
-
-        \draw[arrow] (cod) -- (alim);
-        \draw[arrow] (pcb) -- (alim);
-        \draw[arrow] (teste) |- (valid.east);
-        \draw[arrow] (alim) -- (restr);
-        \draw[arrow] (restr) -- (esqsame);
-        \draw[arrow] (restr) -- (protosame);
-        \draw[arrow] (esqsame) -- (valid);
-        \draw[arrow] (protosame) -- (valid);
-        \draw[-{Latex}, thick, dashed] (valid.west) to[bend right=35] node[left, font=\scriptsize, align=center]{se reprovado,\\refatora} (esqsame.south west);
-
-        \node[flowbox, fill=black!85, text=white] (same_ok) at (0,-4.8) {SAME Completa};
-        \draw[arrow] (valid) -- (same_ok);
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-As quatro frentes convergem para os testes completos do sistema integrado,
+As três frentes convergem para os testes completos do sistema integrado,
 marcando o encerramento da janela Q3 e o término do planejamento do
 trabalho.

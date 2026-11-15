@@ -10,6 +10,8 @@
 #define SM_RPM_MAX         60000.0f  /* rpm mecânico plausível máximo */
 #define SM_CAL_SETTLE_MS   2000.0f  /* espera antes de amostrar o offset [ms]: o SS49E deriva no aquecimento inicial */
 #define SM_CAL_FRAMES      4096.0f  /* quadros acumulados para a média do offset (com o ESC parado) */
-#define SM_CAL_STD_MAX_MV  8.0f  /* desvio-padrão máximo nas amostras de offset [mV no pino]; acima disso a calibração FALHA */
+#define SM_CAL_STD_MAX_MV  20.0f  /* desvio-padrão máximo nas amostras de offset [mV no pino]; o ruído medido com o ESC parado é 9–10 mV (era 8 e reprovava sempre) */
+#define SM_CAL_MEAN_MIN_MV 1200.0f  /* média mínima do repouso do Hall no pino [mV] (esperado ~1670 mV); abaixo = cabo solto/curto */
+#define SM_CAL_MEAN_MAX_MV 2200.0f  /* média máxima do repouso do Hall no pino [mV]; acima = cabo solto (fundo de escala) */
 
 #endif /* SECURITY_PRM_H */

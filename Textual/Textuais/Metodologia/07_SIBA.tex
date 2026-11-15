@@ -1,10 +1,16 @@
-\section{SIBA - Sistema Integrado da Bancada Aerodinâmica}
+\section{Placa de Medição}
 \label{sec:siba}
-O SIBA atua como o nó central de aquisição da bancada, sendo responsável pela interface com os sensores aerodinâmicos, gestão da energia e coordenação da rede de dados. Sua metodologia de desenvolvimento foi dividida em infraestrutura de \textit{hardware} e lógica de controle embarcada.
+\label{sec:placa_medicao}
+A placa de medição é o nó central da bancada: lê as células de carga, mede as
+tensões e correntes de fase do motor e, a partir delas, estima rotação e torque
+com o observador; aciona o controlador eletrônico de velocidade (ESC) e os
+relés de potência; concentra as verificações de segurança; e coordena a rede de
+dados com a interface. Seu desenvolvimento foi dividido em infraestrutura de
+\textit{hardware} e lógica embarcada.
 
 \subsection{\textit{Hardware}}
 
-A SIBA usa o microcontrolador CH32V307VCT6
+A placa usa o microcontrolador CH32V307VCT6
 (\autoref{sec:padronizacao_placas}) na forma de uma placa de desenvolvimento
 comercial, soldada sobre uma placa perfurada que recebe os conectores dos
 sensores, dos relés e da alimentação. A \autoref{fig:pinagem_siba} mostra a
@@ -12,18 +18,19 @@ pinagem adotada, desenhada na posição real dos dois conectores da placa de
 desenvolvimento, que é a referência usada na montagem. As doze linhas das
 seis células de carga ocupam a Porta E, que não tem função analógica; os
 pinos analógicos das Portas A e C ficam para os dois conversores, em modo
-dual simultâneo.
+dual simultâneo, e recebem as três correntes e as três tensões de fase vindas
+da placa de condicionamento (\autoref{sec:same}).
 
-Nesta versão da placa, os circuitos analógicos --- tubo de Pitot,
-termistores e medição de tensão e corrente da bateria --- não foram
-montados, por limitação de tempo de montagem. Os pinos permanecem
-reservados (tracejados na figura), e o \textit{firmware} desliga a leitura
-analógica junto com as verificações de segurança que dependem dela, de modo
-que nenhum alarme é disparado sobre uma grandeza que não está sendo medida.
+Os circuitos analógicos previstos para esses pinos --- tubo de Pitot,
+termistores e medição de tensão e corrente da bateria --- não foram montados
+nesta versão, por limitação de tempo de montagem. Seus pinos foram
+reaproveitados pela medição das fases, e o \textit{firmware} desliga as
+verificações de segurança que dependiam dessas grandezas, de modo que nenhum
+alarme é disparado sobre algo que não está sendo medido.
 
 \begin{figure}[H]
     \centering
-    \caption{Pinagem da SIBA na placa de desenvolvimento do CH32V307VCT6}
+    \caption{Pinagem da placa de medição na placa de desenvolvimento do CH32V307VCT6}
     \label{fig:pinagem_siba}
     \resizebox{\textwidth}{!}{\input{Textuais/Metodologia/Figuras/pinagem_siba}}
 
@@ -52,7 +59,7 @@ ADC = V/q
 \end{equation}
 
 Combinando os três, a leitura cresce com o quadrado da velocidade. Por isso o
-Pitot é o único sensor da SIBA que não usa o modelo afim da
+Pitot é o único sensor da placa que não usa o modelo afim da
 \autoref{sec:padronizacao_placas}: a velocidade cresce com a raiz da pressão
 diferencial, e o \textit{firmware} embarca a \eqref{eq:pitot_lei}, aplicada
 sobre a tensão no pino do conversor.
@@ -71,7 +78,7 @@ enquanto $q$ acompanha o conversor.
 \subsection{\textit{Firmware}}
 
 A \autoref{fig:blocos_siba} situa as camadas da \autoref{sec:padronizacao_placas}
-dentro do \textit{firmware} da SIBA. A passagem de \textit{System} para
+dentro do \textit{firmware} da placa. A passagem de \textit{System} para
 \textit{Vcore - OS} é sempre mediada pelo OSSI, cujo mecanismo de fila de
 trabalho única já foi detalhado na \autoref{fig:arquitetura_fila_unica}. O
 \textit{shell} de diagnóstico (\texttt{Test\_Shell.c}) é a única exceção a
@@ -81,7 +88,7 @@ serializar e desserializar um comando que nunca sai da placa.
 
 \begin{figure}[H]
     \centering
-    \caption{Camadas do \textit{firmware} da SIBA e módulos de cada uma}
+    \caption{Camadas do \textit{firmware} da placa de medição e módulos de cada uma}
     \label{fig:blocos_siba}
     \begin{tikzpicture}[
         font=\small,
@@ -97,10 +104,11 @@ serializar e desserializar um comando que nunca sai da placa.
 
         \node[layer, fill=black!10] (sys) at (0,2.1) {};
         \node[title] at (sys.north)  [yshift=-0.3cm] {System};
-        \node[mod] (bat)  at (-3.2,1.8) {\textit{Battery}\\\textit{Manager}};
-        \node[mod] (prop) at (-1.05,1.8) {\textit{Propeller}\\\textit{Manager}};
-        \node[mod] (sec)  at (1.05,1.8) {\textit{Security}\\\textit{Manager}};
-        \node[mod] (log)  at (3.2,1.8) {\textit{Log}\\\textit{Manager}};
+        \node[mod] (bat)  at (-4.3,1.8) {\textit{Battery}\\\textit{Manager}};
+        \node[mod] (prop) at (-2.15,1.8) {\textit{Propeller}\\\textit{Manager}};
+        \node[mod] (obs)  at (0,1.8) {\textit{Observer}\\\textit{Manager}};
+        \node[mod] (sec)  at (2.15,1.8) {\textit{Security}\\\textit{Manager}};
+        \node[mod] (log)  at (4.3,1.8) {\textit{Log}\\\textit{Manager}};
 
         \node[layer, fill=black!15] (os) at (0,-0.15) {};
         \node[title] at (os.north)  [yshift=-0.3cm] {Vcore - OS};
@@ -124,7 +132,8 @@ trabalho única do OSSI (\autoref{sec:padronizacao_placas}), nunca ao mesmo
 tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição desses gerenciadores:
 
 \begin{itemize}
-    \item \textbf{\textit{Propeller Manager}:} Gerencia os parâmetros da hélice, como a medição de RPM (utilizando o modo \textit{Input Capture} --- captura por temporizador --- dos temporizadores em \textit{hardware} puro) e o cálculo de tração via célula de carga.
+    \item \textbf{\textit{Propeller Manager}:} Gerencia os parâmetros da hélice: o acelerador solicitado ao ESC, limitado conforme a corrente, e o cálculo de tração via célula de carga.
+    \item \textbf{\textit{Observer Manager}:} Executa o observador por modos deslizantes com o PLL (\autoref{sec:same_firmware}), estimando rotação e torque a partir das tensões e correntes de fase.
     \item \textbf{\textit{Battery Manager}:} Realiza o monitoramento da interface de alimentação, processando dados de tensão e corrente para estimativa de potência de entrada.
     \item \textbf{\textit{Security Manager}:} Monitora continuamente os limites de operação (como sobrecorrente ou temperaturas críticas), garantindo o desligamento ou limitação de potência em situações de risco.
     \item \textbf{\textit{Log Manager}:} Responsável pela telemetria do sistema. Emprega a técnica de agregação de dados (\textit{batching}) para empacotar respostas de comandos e leituras de sensores em um único vetor, otimizando o uso da banda de rede ao enviar os dados de volta para a estação de controle.
@@ -145,7 +154,8 @@ tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição 
         \node[ger] at (-3.8,1.55) {\textit{Propeller}\\\textit{Manager}};
         \node[ger] at (0,1.55)    {\textit{Battery}\\\textit{Manager}};
         \node[ger] at (3.8,1.55)  {\textit{Security}\\\textit{Manager}};
-        \node[ger] at (0,0.45)    {\textit{Log Manager}};
+        \node[ger] at (-1.9,0.45) {\textit{Observer Manager}};
+        \node[ger] at (1.9,0.45)  {\textit{Log Manager}};
         \node[camada, fill=magenta!12, minimum height=1.1cm] (os) at (0,-1.6) {\textit{Vcore - OS}: OSSI (interface entre o sistema operacional e o \textit{System})};
         \draw[<->, very thick] (sys.north) -- node[right, font=\footnotesize]{requisições da aplicação} (app.south);
         \draw[<->, very thick] (os.north) -- (sm.south);
@@ -156,17 +166,18 @@ tempo. A Figura \ref{fig:Metodologia_SystemManager_Siba} detalha a composição 
 
 Aplicando o padrão de fila de trabalho única descrito na
 \autoref{sec:padronizacao_placas} (\autoref{fig:arquitetura_fila_unica}), a
-SIBA implementa apenas três \textit{threads} que de fato bloqueiam esperando
-\textit{hardware} ou rede --- a aquisição do ADC, o \textit{bit-banging} das
-células de carga e a recepção UDP ---, todas com prioridade Zephyr numérica
-mais baixa (menos precedência) que a fila de trabalho \texttt{siba\_wq}. A
+placa implementa apenas duas \textit{threads} que de fato bloqueiam esperando
+\textit{hardware} ou rede --- a leitura das células de carga e a recepção
+UDP ---, ambas com prioridade Zephyr numérica mais baixa (menos precedência)
+que a fila de trabalho única do OSSI. A aquisição das fases tem fila
+própria, tratada na \autoref{sec:same_firmware}. A
 \autoref{fig:sequencia_siba} resume os dois caminhos que convergem nessa fila
 --- um sensor lido virando telemetria, e um comando recebido virando ação ---
 deixando explícito que os dois nunca rodam ao mesmo tempo.
 
 \begin{figure}[H]
     \centering
-    \caption{Sequência de processamento de um sensor e de um comando na SIBA}
+    \caption{Sequência de processamento de um sensor e de um comando na placa de medição}
     \label{fig:sequencia_siba}
     \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[
@@ -177,7 +188,7 @@ deixando explícito que os dois nunca rodam ao mesmo tempo.
     ]
         \node[actor] (hal) at (0,0)    {HAL};
         \node[actor] (q)   at (2.3,0)  {Fila};
-        \node[actor] (wq)  at (4.6,0)  {\texttt{siba\_wq}\\\scriptsize(fila única)};
+        \node[actor] (wq)  at (4.6,0)  {Fila única\\\scriptsize(OSSI)};
         \node[actor] (cmd) at (6.9,0)  {CMD\_Core};
         \node[actor] (mg)  at (9.2,0)  {Gerenciadores};
         \node[actor] (nci) at (11.5,0) {NCI};

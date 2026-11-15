@@ -17,6 +17,20 @@
 #ifndef HAL_PH_I_C_DERIVED
 #define HAL_PH_I_C_DERIVED    1
 #endif
+
+/* Casamento correntes × tensões, aplicado depois de derivar i_c e antes do
+ * observador e da telemetria. Levantado nos ensaios de 15/11/2026: com a
+ * ligação direta a sequência das correntes girava ao contrário da das
+ * tensões — potência elétrica Σv·i ≈ 0 W e torque estimado ~25 % do
+ * esperado. Com troca B↔C e sinal invertido, Σv·i = 39 ± 3 W a 2930 rpm
+ * (hélice 15x6E + perdas ≈ 37 W) e a corrente atrasa a tensão 15–27°.
+ * Mexeu nos sensores Hall ou na AQ1: refazer essa checagem nos CSVs. */
+#ifndef HAL_PH_I_SWAP_BC
+#define HAL_PH_I_SWAP_BC      1   /* sensor "b" na fase C, "c" na fase B */
+#endif
+#ifndef HAL_PH_I_INVERT
+#define HAL_PH_I_INVERT       1   /* Hall no sentido oposto ao do firmware */
+#endif
 // #define HAL_DISABLE_HX711
 
 /* HX711 lido por polling, sem espera bloqueante: a cada volta lê só as

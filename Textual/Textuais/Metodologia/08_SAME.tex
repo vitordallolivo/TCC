@@ -1,36 +1,24 @@
-\section{SAME - Sistema de Aquisição do Motor Elétrico}
+\subsection{Placa de Condicionamento das Fases}
 \label{sec:same}
 
-O Sistema de Aquisição do Motor Elétrico (SAME) mede as tensões e correntes de
-fase do motor e executa embarcado o Observador por Modos Deslizantes (SMO).
-
-A cadeia de medição foi dividida em dois caminhos independentes --- corrente e
-tensão de fase ---, cada um projetado para entregar ao conversor
-analógico-digital (ADC) do CH32V307 um sinal na faixa de entrada do periférico,
-preservando a coerência de fase entre os dois caminhos exigida pelo observador
-(\autoref{sec:same_condicionamento}). Os dois caminhos ficam numa placa de
+As tensões e correntes de fase do motor, de onde o observador por modos
+deslizantes (SMO) estima rotação e torque, passam por uma placa de
 condicionamento própria, a AQ1, por onde passam as três fases do motor; o
-roteamento dela está na \autoref{fig:pcb_same}. As seis saídas da AQ1 chegam
-à placa de desenvolvimento do microcontrolador, montada sobre placa
-perfurada como na SIBA, com a pinagem da \autoref{fig:pinagem_same}: o
-primeiro conversor lê as três correntes e o segundo as três tensões,
-pareados por fase, de modo que a corrente e a tensão de uma mesma fase são
-amostradas no mesmo instante.
+roteamento dela está na \autoref{fig:pcb_same}. A cadeia de medição foi
+dividida em dois caminhos independentes --- corrente e tensão de fase ---,
+cada um projetado para entregar ao conversor analógico-digital (ADC) do
+CH32V307 um sinal na faixa de entrada do periférico, preservando a coerência
+de fase entre os dois caminhos exigida pelo observador
+(\autoref{sec:same_condicionamento}). As seis saídas da AQ1 chegam aos pinos
+analógicos da placa de medição (\autoref{fig:pinagem_siba}): o primeiro
+conversor lê as correntes e o segundo as tensões, pareados por fase, de modo
+que a corrente e a tensão de uma mesma fase são amostradas no mesmo instante.
 
 \begin{figure}[H]
     \centering
-    \caption{Roteamento da placa de condicionamento AQ1 da SAME}
+    \caption{Roteamento da placa de condicionamento AQ1}
     \label{fig:pcb_same}
     \includegraphics[width=0.85\textwidth]{Textuais/Imgs/Metodologia/placa aq1 SAME.png}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \caption{Pinagem da SAME na placa de desenvolvimento do CH32V307VCT6}
-    \label{fig:pinagem_same}
-    \resizebox{\textwidth}{!}{\input{Textuais/Metodologia/Figuras/pinagem_same}}
 
     Fonte: Autor (2026)
 \end{figure}
@@ -53,17 +41,19 @@ observador é a fundamental elétrica e as raias de chaveamento do ESC, em
 \SI{16}{\kilo\hertz}.
 
 A \autoref{fig:adc_clock_quadro} mostra como essa taxa é obtida. O
-\textit{clock} do conversor é limitado a \SI{14}{\mega\hertz}
-(\autoref{tab:adc_specs}) e deriva do barramento de periféricos por um
-divisor que admite apenas as razões \num{2}, \num{4}, \num{6} e \num{8}. Com o
-barramento a \SI{144}{\mega\hertz}, o menor valor possível seria
-\SI{18}{\mega\hertz}, acima do limite; reduzindo o barramento à metade
-(\SI{72}{\mega\hertz}) e dividindo por \num{6}, o conversor opera a
-\SI{12}{\mega\hertz}. Cada canal gasta \num{28,5} ciclos de amostragem e
-\num{11} de conversão, e o quadro com as três fases soma \num{118,5} ciclos,
-ou \SI{9,875}{\micro\second}. A taxa de quadro é de \SI{101}{\kilo\hertz}
-(banda útil de \SI{50}{\kilo\hertz}), e é ela que define o período $T_s$ do
-observador.
+\textit{clock} do conversor deriva do barramento de periféricos por um divisor
+que admite apenas as razões \num{2}, \num{4}, \num{6} e \num{8}. Com o
+barramento a \SI{144}{\mega\hertz} e o maior divisor, o conversor opera a
+\SI{18}{\mega\hertz}, acima dos \SI{14}{\mega\hertz} da folha de dados
+(\autoref{tab:adc_specs}). Reduzir o barramento à metade traria o conversor para
+dentro do limite, mas alteraria também a base de tempo da porta serial usada no
+diagnóstico, e por isso não foi adotado. Cada canal gasta \num{41,5} ciclos de
+amostragem e \num{12,5} de conversão, e o quadro com as três fases soma
+\num{162} ciclos, ou \SI{9,0}{\micro\second}. A taxa de quadro é de
+\SI{111}{\kilo\hertz} (banda útil de \SI{55}{\kilo\hertz}), e é ela que define
+o período $T_s$ do observador. O valor foi conferido na placa em funcionamento:
+os lotes de \num{256} quadros chegam a cada \SI{2304}{\micro\second}, com o
+relógio da placa coincidindo com o do computador.
 
 \begin{figure}[H]
     \centering
@@ -75,14 +65,14 @@ observador.
         conv/.style={draw, fill=orange!35, minimum height=0.55cm, inner sep=0pt}]
         % cadeia de clock
         \node[blk] (sys) at (0,0) {Sistema\\\SI{144}{\mega\hertz}};
-        \node[blk] (apb) at (3.6,0) {Barramento de\\periféricos \SI{72}{\mega\hertz}};
-        \node[blk] (adc) at (7.6,0) {\textit{Clock} do ADC\\\SI{12}{\mega\hertz}};
+        \node[blk] (apb) at (3.6,0) {Barramento de\\periféricos \SI{144}{\mega\hertz}};
+        \node[blk] (adc) at (7.6,0) {\textit{Clock} do ADC\\\SI{18}{\mega\hertz}};
         \node[blk] (con) at (11.2,0) {ADC1 + ADC2\\(dual)};
-        \draw[->, thick] (sys) -- node[above, font=\scriptsize] {$\div 2$} (apb);
-        \draw[->, thick] (apb) -- node[above, font=\scriptsize] {$\div 6$} (adc);
+        \draw[->, thick] (sys) -- node[above, font=\scriptsize] {$\div 1$} (apb);
+        \draw[->, thick] (apb) -- node[above, font=\scriptsize] {$\div 8$} (adc);
         \draw[->, thick] (adc) -- (con);
-        % temporização do quadro (39,5 ciclos por fase -> 3,6 cm)
-        \def\ua{2.597}\def\ub{1.003}
+        % temporização do quadro (54 ciclos por fase -> 3,6 cm)
+        \def\ua{2.767}\def\ub{0.833}
         \foreach \k/\i/\v in {0/a/a,1/b/b,2/c/c} {
             \pgfmathsetmacro{\xo}{\k*3.6}
             \node[amo, minimum width=\ua cm, anchor=west] at (\xo,-2.0) {$i_\i$};
@@ -93,11 +83,11 @@ observador.
         \node[anchor=east, font=\scriptsize] at (-0.1,-2.0) {ADC1};
         \node[anchor=east, font=\scriptsize] at (-0.1,-2.75) {ADC2};
         \draw[decorate, decoration={brace, mirror, amplitude=5pt}] (0,-3.15) -- (10.8,-3.15)
-            node[midway, below=6pt, font=\scriptsize] {quadro: \num{118,5} ciclos $=\SI{9,875}{\micro\second}=T_s$ \quad ($f_s\approx\SI{101}{\kilo\hertz}$)};
+            node[midway, below=6pt, font=\scriptsize] {quadro: \num{162} ciclos $=\SI{9,0}{\micro\second}=T_s$ \quad ($f_s\approx\SI{111}{\kilo\hertz}$)};
         \draw[decorate, decoration={brace, amplitude=4pt}] (0,-1.6) -- (\ua,-1.6)
-            node[midway, above=4pt, font=\scriptsize] {amostragem: \num{28,5} ciclos};
+            node[midway, above=4pt, font=\scriptsize] {amostragem: \num{41,5} ciclos};
         \draw[decorate, decoration={brace, amplitude=4pt}] (\ua,-1.6) -- (3.6,-1.6)
-            node[midway, above=14pt, font=\scriptsize] {conversão: \num{11}};
+            node[midway, above=14pt, font=\scriptsize] {conversão: \num{12,5}};
     \end{tikzpicture}
 
     Fonte: Autor (2026)
@@ -124,8 +114,9 @@ Não-linearidade integral & $E_L$ & -- & -- & ±4 & LSB \\
 \end{tabular}
 \end{table}
 
-Os \num{28,5} ciclos de amostragem são o maior valor tabelado que mantém o
-quadro em \SI{10}{\micro\second}. Esse tempo também limita a impedância da
+Os \num{41,5} ciclos de amostragem foram escolhidos para que o processamento
+de cada lote, que executa um passo do observador por quadro, termine antes da
+chegada do lote seguinte. Esse tempo também limita a impedância da
 fonte ligada ao conversor, para que o erro de amostragem fique abaixo de
 $1/4$ LSB \cite{ch32v307_datasheet}:
 
@@ -136,7 +127,7 @@ R_{AIN} < \frac{t_s}{f_{ADC} \cdot C_{ADC} \cdot \ln(2^{N+2})} - R_{ADC},
 
 \noindent com $N = 12$~bits, $C_{ADC} = \SI{8}{\pico\farad}$ e
 $R_{ADC} \approx \SI{0,8}{\kilo\ohm}$, o que dá
-$R_{AIN} < \SI{25,2}{\kilo\ohm}$ para \num{28,5} ciclos. O erro de
+$R_{AIN} < \SI{28,9}{\kilo\ohm}$ para \num{41,5} ciclos a \SI{18}{\mega\hertz}. O erro de
 \textit{offset} é removido na calibração; a não-linearidade, de até
 ±4~LSB, é limitação do próprio conversor.
 
@@ -154,8 +145,8 @@ filtro \textit{antialiasing} da aquisição.
     \label{fig:cond_tensao}
     \begin{circuitikz}[american, scale=1.0, transform shape]
         \draw (0,0) node[left] {$V_{fase}$} to[short, o-] (0.8,0);
-        \draw (0.8,0) to[R, l=$R_1$, a=\SI{130}{\kilo\ohm}] (3.6,0);
-        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{7,5}{\kilo\ohm}] (3.6,-2.4);
+        \draw (0.8,0) to[R, l=$R_1$, a=\SI{100}{\kilo\ohm}] (3.6,0);
+        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{5,6}{\kilo\ohm}] (3.6,-2.4);
         \draw (3.6,-2.4) node[ground]{};
         \draw (3.6,0) -- (5.6,0);
         \draw (5.6,0) to[C, l_=$C$] (5.6,-2.4);
@@ -181,20 +172,21 @@ f_c = \frac{1}{2\pi \left(R_1 \parallel R_2\right) C}
 \end{equation}
 
 \noindent
-Com $R_1 = \SI{130}{\kilo\ohm}$ e $R_2 = \SI{7,5}{\kilo\ohm}$ resulta
-$k = 0{,}0545$, o que coloca o fundo de escala da medição em \SI{60,5}{\volt} ---
+Com $R_1 = \SI{100}{\kilo\ohm}$ e $R_2 = \SI{5,6}{\kilo\ohm}$ resulta
+$k = 0{,}0530$, o que coloca o fundo de escala da medição em \SI{62,2}{\volt} ---
 pouco mais do dobro da tensão de barramento, folga adotada para o sobressinal de
-comutação --- e a resolução em \SI{14,8}{\milli\volt} por LSB.
+comutação --- e a resolução em \SI{15,2}{\milli\volt} por LSB. Com
+$C = \SI{1,5}{\nano\farad}$, a frequência de corte fica em \SI{20}{\kilo\hertz}.
 
-A resistência equivalente do divisor é de \SI{7,09}{\kilo\ohm}, abaixo do limite
-de \SI{25,2}{\kilo\ohm} que a \autoref{eq:rain_max} impõe ao tempo de
-amostragem adotado, de \num{28,5} ciclos.
+A resistência equivalente do divisor é de \SI{5,30}{\kilo\ohm}, abaixo do limite
+de \SI{28,9}{\kilo\ohm} que a \autoref{eq:rain_max} impõe ao tempo de
+amostragem adotado, de \num{41,5} ciclos.
 
 Fixadas as resistências, o capacitor é o único grau de liberdade que resta, e
 seu valor decorre da frequência de corte adotada.
 
-O divisor consome \SI{218}{\micro\ampere} com o
-barramento em \SI{30}{\volt}, dissipando \SI{6,2}{\milli\watt} em $R_1$.
+O divisor consome \SI{284}{\micro\ampere} com o
+barramento em \SI{30}{\volt}, dissipando \SI{8,1}{\milli\watt} em $R_1$.
 
 Como não há amplificador isolando o divisor do conversor, a corrente que
 recarrega o capacitor de amostragem do ADC atravessa a resistência equivalente
@@ -203,8 +195,8 @@ proporcional ao sinal, é absorvido na calibração.
 
 \begin{equation}
 \varepsilon_{ganho} = \left(R_1 \parallel R_2\right) f_S\,C_{ADC}
-= \SI{7,09}{\kilo\ohm} \times \SI{101}{\kilo\hertz} \times \SI{8}{\pico\farad}
-= \SI{0,57}{\percent}
+= \SI{5,30}{\kilo\ohm} \times \SI{111}{\kilo\hertz} \times \SI{8}{\pico\farad}
+= \SI{0,47}{\percent}
 \label{eq:cond_ganho}
 \end{equation}
 
@@ -461,8 +453,8 @@ conversão e ao mesmo tempo estabelece o filtro \textit{antialiasing}.
     \label{fig:cond_corrente}
     \begin{circuitikz}[american, scale=1.0, transform shape]
         \draw (0,0) node[left] {$V_{out}$} to[short, o-] (0.8,0);
-        \draw (0.8,0) to[R, l=$R_1$, a=\SI{2,0}{\kilo\ohm}] (3.6,0);
-        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{18}{\kilo\ohm}] (3.6,-2.4);
+        \draw (0.8,0) to[R, l=$R_1$, a=\SI{4,7}{\kilo\ohm}] (3.6,0);
+        \draw (3.6,0) to[R, l_=$R_2$, a^=\SI{9,1}{\kilo\ohm}] (3.6,-2.4);
         \draw (3.6,-2.4) node[ground]{};
         \draw (3.6,0) -- (5.6,0);
         \draw (5.6,0) to[C, l_=$C$] (5.6,-2.4);
@@ -473,92 +465,52 @@ conversão e ao mesmo tempo estabelece o filtro \textit{antialiasing}.
     Fonte: Autor (2026)
 \end{figure}
 
-Com $R_1 = \SI{2,0}{\kilo\ohm}$ e $R_2 = \SI{18}{\kilo\ohm}$, $k = 0{,}900$:
-a faixa de $\pm\SI{60}{\ampere}$ ocupa de \SI{1,225}{\volt} a
-\SI{3,250}{\volt}, com corrente nula em \SI{2,238}{\volt}. A frequência de
-corte é a mesma do caminho de tensão, para que o atraso do filtro seja igual
-nos dois ramos. A carga imposta ao sensor, \SI{181}{\micro\ampere} em fundo de
-escala, fica abaixo da corrente de saída mínima de \SI{1}{\milli\ampere}, e o
-erro de ganho da \autoref{eq:cond_ganho} cai para \SI{0,15}{\percent},
-absorvido na calibração.
+Com $R_1 = \SI{4,7}{\kilo\ohm}$ e $R_2 = \SI{9,1}{\kilo\ohm}$, $k = 0{,}659$:
+a faixa de $\pm\SI{60}{\ampere}$ ocupa de \SI{0,91}{\volt} a
+\SI{2,39}{\volt}, com corrente nula em \SI{1,65}{\volt}. Com
+$C = \SI{2,7}{\nano\farad}$, a frequência de corte fica em
+\SI{19,0}{\kilo\hertz}, próxima dos \SI{20}{\kilo\hertz} do caminho de
+tensão, para que o atraso do filtro seja praticamente igual nos dois ramos. A
+carga imposta ao sensor, \SI{263}{\micro\ampere} em fundo de escala, fica
+abaixo da corrente de saída mínima de \SI{1}{\milli\ampere}, e o erro de ganho
+da \autoref{eq:cond_ganho} cai para \SI{0,28}{\percent}, absorvido na
+calibração.
 
-O ganho da cadeia é de \SI{16,88}{\milli\volt\per\ampere}, ou
-\SI{47,7}{\milli\ampere} por LSB. O \textit{offset} é medido a corrente nula
-no início de cada ensaio.
+Com a sensibilidade de \SI{18,75}{\milli\volt\per\ampere} do conjunto, o
+ganho da cadeia é de \SI{12,36}{\milli\volt\per\ampere}, ou
+\SI{65,2}{\milli\ampere} por LSB. O \textit{offset} é levantado
+automaticamente a corrente nula sempre que a placa é ligada
+(\autoref{sec:same_firmware}).
 
 
-\subsection{Arquitetura de \textit{Firmware} do Observador}
+\subsection{Observador Embarcado}
 \label{sec:same_firmware}
 
-A SAME segue as mesmas três camadas lógicas da SIBA
-(\autoref{sec:padronizacao_placas}), com os módulos de cada uma resumidos na
-\autoref{fig:blocos_same}: a camada \textit{Vcore - OS} (OSSI, NCI, HAL,
-CMD\_Core) é idêntica entre as duas placas, com a mesma fila de trabalho
-única do OSSI mediando a passagem para a camada \textit{System}
-(\autoref{fig:arquitetura_fila_unica}); essa camada \textit{System} se
-reduz a dois gerenciadores de domínio --- o \textit{Observer Manager}
-(SMO + PLL) e o \textit{Log Manager} (telemetria) --- já que a SAME não
-gerencia bateria, hélice ou segurança; e a camada \textit{Application} não
-expõe \textit{shell} de diagnóstico via UART como a SIBA --- todo ajuste de
-parâmetro é feito exclusivamente pelo protocolo de rede. Diferente da SIBA
-(\autoref{fig:blocos_siba}), porém, o HAL aqui chama o \textit{Observer
-Manager} diretamente a cada conversão do ADC, sem passar pelo OSSI --- motivo
-detalhado a seguir e ilustrado na \autoref{fig:sequencia_same}.
+O observador roda dentro do \textit{firmware} da placa de medição, como o
+\textit{Observer Manager} da camada \textit{System}
+(\autoref{fig:blocos_siba}). O que o diferencia dos demais gerenciadores é o
+caminho dos dados: o observador \textbf{não} passa pela fila de trabalho única
+do OSSI (\autoref{fig:arquitetura_fila_unica}). Essa escolha decorre da
+natureza do SMO como um observador discretizado no tempo
+(\autoref{sec:param_smo}): cada atualização de seu estado pressupõe amostras
+igualmente espaçadas de $T_s$, e o que importa não é cada passo caber em
+$T_s$, mas cada lote de amostras ser processado antes da chegada do próximo.
+Na fila compartilhada com o despacho de comandos, a escrita na memória não
+volátil e o envio de telemetria, essa garantia se perderia.
+
+A aquisição é feita em lotes: o controlador de acesso direto à memória (DMA)
+enche metade de um \textit{buffer} enquanto o processador trata a outra
+metade. A cada lote completo, a interrupção do DMA apenas copia o lote e
+acorda uma fila de trabalho dedicada à aquisição, de prioridade maior que a
+leitura das células de carga e que a fila do OSSI, mas menor que a da rede. Essa
+fila converte cada quadro em grandezas físicas, aplica a transformada de
+Clarke e executa um passo do SMO e do PLL por quadro, como resume a
+\autoref{fig:sequencia_same}. Só o resultado, de tempos em tempos, é entregue
+ao OSSI para virar telemetria.
 
 \begin{figure}[H]
     \centering
-    \caption{Camadas do \textit{firmware} da SAME e módulos de cada uma}
-    \label{fig:blocos_same}
-    \begin{tikzpicture}[
-        font=\small,
-        layer/.style={draw, rounded corners, minimum width=11.2cm, minimum height=1.7cm},
-        mod/.style={draw, rounded corners, align=center, minimum height=0.7cm, minimum width=1.9cm, fill=white},
-        title/.style={font=\bfseries\small},
-        arrow/.style={-{Latex}, thick}
-    ]
-        \node[layer, fill=black!5]  (app) at (0,4.15) {};
-        \node[title] at (app.north)  [yshift=-0.3cm] {Application};
-        \node[mod] (main) at (0,3.85) {\texttt{main.c}};
-
-        \node[layer, fill=black!10] (sys) at (0,2.1) {};
-        \node[title] at (sys.north)  [yshift=-0.3cm] {System};
-        \node[mod] (obs) at (-1.6,1.8) {\textit{Observer}\\\textit{Manager}};
-        \node[mod] (log) at (1.6,1.8)  {\textit{Log}\\\textit{Manager}};
-
-        \node[layer, fill=black!15] (os) at (0,-0.15) {};
-        \node[title] at (os.north)  [yshift=-0.3cm] {Vcore - OS};
-        \node[mod] (ossi) at (-4.3,-0.45) {OSSI};
-        \node[mod] (nci)  at (-2.15,-0.45) {NCI};
-        \node[mod] (hal)  at (0,-0.45) {HAL};
-        \node[mod] (cmd)  at (2.15,-0.45) {CMD\_Core};
-        \node[mod] (nvm)  at (4.3,-0.45) {NVM};
-
-        \draw[arrow] (app.south) -- (sys.north);
-        \draw[arrow] (sys.south) -- (os.north) node[midway, right]{via OSSI};
-    \end{tikzpicture}
-
-    Fonte: Autor (2026)
-\end{figure}
-
-Diferente da SIBA, a SAME concentra toda a sua fonte de dados em um único
-evento --- a conversão simultânea dos dois ADCs --- e por isso seu
-\textit{firmware} emprega apenas duas \textit{threads} bloqueantes (a
-aquisição dos ADCs e a recepção de rede), além da fila de trabalho
-\texttt{same\_wq} comum ao padrão descrito na
-\autoref{sec:padronizacao_placas}. A diferença metodológica mais relevante
-frente a esse padrão genérico (\autoref{fig:arquitetura_fila_unica}) é que o
-passo do observador \textbf{não} é delegado à fila de trabalho: ele executa
-diretamente dentro da \textit{thread} de aquisição (HAL), imediatamente após
-cada conversão dos ADCs, como resume a \autoref{fig:sequencia_same}. Essa
-escolha decorre da natureza do SMO como um observador discretizado no tempo
-(\autoref{sec:param_smo}): cada atualização de seu estado interno pressupõe
-um intervalo de amostragem $T_s$ constante, que ficaria comprometido se o
-passo tivesse que esperar sua vez numa fila compartilhada com o despacho de
-comandos e o envio de telemetria.
-
-\begin{figure}[H]
-    \centering
-    \caption{Sequência de processamento da SAME, da aquisição à telemetria}
+    \caption{Sequência de processamento do observador, da aquisição à telemetria}
     \label{fig:sequencia_same}
     \resizebox{\textwidth}{!}{%
     \begin{tikzpicture}[
@@ -567,55 +519,52 @@ comandos e o envio de telemetria.
         lifeline/.style={dashed, gray},
         msg/.style={-{Latex}, thick}
     ]
-        \node[actor] (hal) at (0,0)   {HAL};
-        \node[actor] (obs) at (2.3,0) {Observador};
-        \node[actor] (wq)  at (4.6,0) {\texttt{same\_wq}\\\scriptsize(fila única)};
-        \node[actor] (nci) at (6.9,0) {NCI};
-        \node[actor] (pc)  at (9.2,0) {PC};
+        \node[actor] (dma) at (0,0)    {DMA\\\scriptsize(interrupção)};
+        \node[actor] (obs) at (2.5,0)  {Fila da\\aquisição};
+        \node[actor] (wq)  at (5.0,0)  {Fila única\\\scriptsize(OSSI)};
+        \node[actor] (nci) at (7.5,0)  {NCI};
+        \node[actor] (pc)  at (10.0,0) {PC};
 
-        \foreach \n in {hal,obs,wq,nci,pc}
+        \foreach \n in {dma,obs,wq,nci,pc}
             \draw[lifeline] (\n.south) -- ++(0,-9.4);
 
-        \draw[msg] (0,-1.0)  -- (2.3,-1.0) node[midway, above]{Clarke + passo SMO/PLL};
-        \draw[msg] (2.3,-2.0) -- (4.6,-2.0) node[midway, above]{publica (decimado)};
-        \node[gray] at (4.6,-2.9) {\textit{temporizador 100 ms}};
-        \draw[msg] (4.6,-3.8) -- (6.9,-3.8) node[midway, above]{\texttt{TELEMETRY\_LOG}};
-        \draw[msg] (6.9,-4.8) -- (9.2,-4.8) node[midway, above]{UDP 4445};
+        \draw[msg] (0,-1.0)  -- (2.5,-1.0) node[midway, above]{lote de 256 quadros};
+        \node[gray, align=center] at (2.5,-1.9) {\textit{Clarke + SMO/PLL}\\\textit{por quadro}};
+        \draw[msg] (2.5,-2.9) -- (5.0,-2.9) node[midway, above]{publica (10 Hz)};
+        \node[gray] at (5.0,-3.7) {\textit{temporizador 100 ms}};
+        \draw[msg] (5.0,-4.5) -- (7.5,-4.5) node[midway, above]{\texttt{TELEMETRY\_LOG}};
+        \draw[msg] (7.5,-5.5) -- (10.0,-5.5) node[midway, above]{UDP};
 
-        \draw[msg] (9.2,-6.2) -- (6.9,-6.2) node[midway, above]{UDP 4444, \texttt{CMD}};
-        \draw[msg] (6.9,-7.2) -- (4.6,-7.2) node[midway, above]{\textit{dispatch}};
-        \draw[msg] (4.6,-8.2) -- (2.3,-8.2) node[midway, above]{marca reconfig pendente};
-        \draw[msg] (0,-9.0) -- (2.3,-9.0) node[midway, above]{aplica reconfig};
+        \draw[msg] (10.0,-6.7) -- (7.5,-6.7) node[midway, above]{UDP, \texttt{CMD}};
+        \draw[msg] (7.5,-7.6) -- (5.0,-7.6) node[midway, above]{\textit{dispatch}};
+        \draw[msg] (5.0,-8.4) -- (2.5,-8.4) node[midway, above]{marca reconfig pendente};
+        \node[gray] at (2.5,-9.1) {\textit{aplica no próximo lote}};
     \end{tikzpicture}%
     }
 
     Fonte: Autor (2026)
 \end{figure}
 
-O resultado de cada passo (rotação, torque e as demais grandezas da
-telemetria) só é publicado ao \texttt{same\_wq} de tempos em tempos --- não a
-cada amostra --- para não sobrecarregar a fila; diferente da SIBA, aqui não
-há gerenciador de domínio a acionar, o \texttt{same\_wq} apenas copia o valor
-para o pacote de telemetria e, a cada 100~ms, um temporizador aciona sua
-transmissão pelo NCI. Um comando de rede que altera um parâmetro do
-observador (ganho, resistência, indutância) percorre o caminho inverso, mas
-não modifica o estado interno diretamente ao ser recebido: ele apenas marca
-um sinalizador de
-reconfiguração pendente. É a própria \textit{thread} de aquisição, no topo de
-cada iteração, que verifica esse
-sinalizador e, havendo alteração pendente, recalcula as constantes de
-discretização e \textbf{zera todo o estado interno} do observador (correntes e
-BEMF estimadas, integrador do PLL). Zerar o estado evita que o observador
-continue acumulando, junto de constantes novas, um regime transitório
-calculado com as constantes antigas --- o que produziria um transitório
-artificial na estimativa, passível de ser confundido com um evento real do
-motor.
+Um comando de rede que altera um parâmetro do observador (ganho, resistência,
+indutância) percorre o caminho inverso, mas não modifica o estado interno
+diretamente ao ser recebido: ele apenas marca um sinalizador de
+reconfiguração pendente. É a própria fila da aquisição, entre um lote e o
+seguinte, que verifica esse sinalizador e, havendo alteração pendente,
+recalcula as constantes de discretização e \textbf{zera todo o estado interno}
+do observador (correntes e BEMF estimadas, integrador do PLL). Zerar o estado
+evita que o observador continue acumulando, junto de constantes novas, um
+regime transitório calculado com as constantes antigas --- o que produziria um
+transitório artificial na estimativa, passível de ser confundido com um evento
+real do motor. Antes de liberar o observador, a placa levanta o zero dos
+sensores de corrente com o motor parado, logo após ligar, e recusa o resultado
+se a média ou o ruído medidos estiverem fora do esperado para o sensor em
+repouso.
 
-O comando (\texttt{CMD}) da SAME segue o mesmo formato genérico da
+O comando (\texttt{CMD}) segue o mesmo formato genérico da
 \autoref{fig:yaml_example_config}, ajustando calibração das grandezas
 elétricas, parâmetros físicos do motor (pares de polos, resistência,
 indutância, $K_v$) e os três ganhos do observador na forma invariante ao
 passo $\Gamma_{s1}$, $\Gamma_{s2}$, $\Gamma_t$ (\autoref{sec:param_smo}). O
-pacote de telemetria devolve as seis grandezas elétricas medidas, suas
-componentes $\alpha\beta$ e as três saídas do observador --- rotação, torque
-eletromagnético e torque na hélice --- a 10~Hz.
+pacote de telemetria devolve as seis grandezas elétricas medidas e as três
+saídas do observador --- rotação, torque eletromagnético e torque na hélice
+--- a 10~Hz, junto com os tempos de processamento de cada lote.

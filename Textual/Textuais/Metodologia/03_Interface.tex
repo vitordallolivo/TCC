@@ -1,6 +1,6 @@
 \section{Interface de Usuário e de Comunicação}
 
-A comunicação do sistema é realizada via rede Ethernet estruturada com o auxílio de um \textit{switch}, conforme ilustrado na \autoref{fig:arquitetura_hardware}. A padronização do método de transmissão baseia-se no uso de endereçamento IP estático para as placas de aquisição e controle, o que simplifica a identificação dos dispositivos na rede e a integração com a interface. O protocolo adotado para a troca de pacotes é o UDP (\textit{User Datagram Protocol}), escolhido por sua baixa latência e menor sobrecarga de cabeçalho, características fundamentais para o monitoramento de telemetria em tempo real.
+A comunicação do sistema é realizada via rede Ethernet estruturada com o auxílio de um \textit{switch}, conforme ilustrado na \autoref{fig:arquitetura_hardware}. A padronização do método de transmissão baseia-se no uso de endereçamento IP estático para a placa de medição, o que simplifica a identificação do dispositivo na rede e a integração com a interface. O protocolo adotado para a troca de pacotes é o UDP (\textit{User Datagram Protocol}), escolhido por sua baixa latência e menor sobrecarga de cabeçalho, características fundamentais para o monitoramento de telemetria em tempo real.
 
 \begin{figure}[htbp]
     \centering
@@ -18,25 +18,17 @@ A comunicação do sistema é realizada via rede Ethernet estruturada com o aux�
     ]
 
         % ==========================================
-        % LADO ESQUERDO: SIBA e SAME
+        % LADO ESQUERDO: PLACA DE MEDIÇÃO
         % ==========================================
-        \node[box, text width=4cm, minimum height=2.8cm] (siba) {
-            \textbf{SIBA}\\[0.3cm]
-            Monitoramento\\da Bancada e\\Bateria
-        };
-
-        \node[box, text width=4cm, minimum height=2.8cm, below=0.5cm of siba] (same) {
-            \textbf{SAME}\\[0.3cm]
-            Monitoramento\\do motor
+        \node[box, text width=4cm, minimum height=4cm] (placa) {
+            \textbf{Placa de medição}\\[0.3cm]
+            Monitoramento\\do motor\\e segurança
         };
 
         % ==========================================
         % CENTRO: SWITCH DE REDE
         % ==========================================
-        % Pega o ponto central entre SIBA e SAME para alinhar o Switch
-        \path (siba) -- (same) coordinate[midway] (midLeft);
-
-        \node[box, right=3cm of midLeft, minimum height=6.1cm, minimum width=1.0cm] (switch) {
+        \node[box, right=3cm of placa, minimum height=6.1cm, minimum width=1.0cm] (switch) {
             \rotatebox{90}{\textbf{SWITCH DE REDE}}
         };
 
@@ -60,11 +52,8 @@ A comunicação do sistema é realizada via rede Ethernet estruturada com o aux�
         % ==========================================
         % CONEXÕES (SETAS)
         % ==========================================
-        % Seta SIBA <-> Switch (alinhada com o meio da SIBA)
-        \draw[arrow] (siba.east) -- (switch.west |- siba.east);
-
-        % Seta SAME <-> Switch (alinhada com o meio da SAME)
-        \draw[arrow] (same.east) -- (switch.west |- same.east);
+        % Seta placa <-> Switch
+        \draw[arrow] (placa.east) -- (switch.west |- placa.east);
 
         % Seta Switch <-> Computador (alinhada com o meio do Switch)
         \draw[arrow] (switch.east) -- (pc.west |- switch.east);
@@ -104,7 +93,7 @@ detalhadas a seguir.
 
 A camada de \textbf{Transporte} define um contrato único de \textit{thread} de
 entrada/saída, implementado de forma distinta para cada protocolo (UDP
-estruturado na SIBA/SAME, Telnet + UDP na bancada simplificada usada para os
+estruturado na placa de medição, Telnet + UDP na bancada simplificada usada para os
 ensaios mecânicos --- \autoref{sec:atrito_viscoso}); a de \textbf{Domínio}
 concentra funções puras --- sem rede, sem \textit{thread}, sem estado global ---
 que traduzem \textit{bytes} e arquivos YAML em valores com significado físico
@@ -132,11 +121,11 @@ sob ensaio; \textbf{Estimativas} agrupa os três procedimentos de ajuste
 descritos ao longo deste capítulo (ganhos do SMO, \autoref{sec:param_smo};
 coeficiente da hélice; e os ensaios mecânicos da bancada simplificada,
 \autoref{sec:atrito_viscoso}); \textbf{Bateria} e \textbf{Células de Carga}
-concentram o monitoramento e a calibração desses sensores da SIBA; e
+concentram o monitoramento e a calibração desses sensores da placa de medição; e
 \textbf{Opções} reúne as telas de diagnóstico (configuração de sensores,
 gerenciador de placas, painel de erros). Um combo à parte, fora da barra de
-menus, seleciona o modo de operação  que decide quais placas se conectam e quais
-gráficos ficam visíveis na tela principal.
+menus, seleciona o modo de operação, que decide quais gráficos ficam visíveis
+na tela principal.
 
 \begin{figure}[H]
     \centering
@@ -186,12 +175,11 @@ quanto para inspecionar, em hexadecimal, o pacote exato de cada comando antes
 de enviá-lo. Ao digitar um comando, a \autoref{fig:tinyterminal_fluxo}
 resume como o texto é interpretado: as palavras digitadas são usadas para
 procurar um método Python correspondente, do mais específico ao mais
-genérico (por exemplo, \texttt{siba mock start} procura primeiro
-\texttt{\_cmd\_siba\_mock\_start}, depois \texttt{\_cmd\_siba\_mock}, depois
-\texttt{\_cmd\_siba}); se nenhum método for encontrado e o comando começar
-por \texttt{siba} ou \texttt{same}, o terminal monta o \texttt{CMD} binário na
-hora, traduzindo os nomes digitados para os índices dos \textit{enums} do
-YAML daquela placa.
+genérico (um comando de três palavras procura primeiro o método com as três,
+depois o com as duas primeiras e, por fim, o com a primeira); se nenhum método for encontrado e o comando começar
+pelo nome da placa, o terminal monta o \texttt{CMD} binário na hora,
+traduzindo os nomes digitados para os índices dos \textit{enums} do YAML
+da placa.
 
 \begin{figure}[H]
     \centering
@@ -213,7 +201,7 @@ YAML daquela placa.
         \draw[arrow] (in) -- (split);
         \draw[arrow] (split) -- (try);
         \draw[arrow] (try) -- node[above, sloped, font=\tiny]{achou} (run);
-        \draw[arrow] (try) -- node[below, sloped, font=\tiny]{não achou, raiz siba/same} (parse);
+        \draw[arrow] (try) -- node[below, sloped, font=\tiny]{não achou, nome da placa} (parse);
         \draw[arrow] (parse) -- (send);
     \end{tikzpicture}%
     }
@@ -298,10 +286,10 @@ diálogos da aplicação.
 
 Para que essa parametrização interativa e o monitoramento operem com alta confiabilidade, mitigando erros de interpretação de dados entre diferentes plataformas, o sistema adota uma estratégia de padronização baseada na linguagem de serialização YAML (\textit{YAML Ain't Markup Language}). A implementação utiliza arquivos de descrição que definem as estruturas fundamentais de telemetria (\textit{logs}), comandos (\textit{CMD}) e configurações da interface.
 
-A configuração do projeto fica em cinco arquivos YAML, e a
-\autoref{fig:yaml_example_config} mostra quem usa cada um. Os arquivos das
-placas, \textit{SIBA.yaml} e \textit{SAME.yaml}, descrevem o protocolo e são
-usados em dois momentos: na compilação, o \textit{script} \textit{generate.py}
+A configuração do projeto fica em arquivos YAML, e a
+\autoref{fig:yaml_example_config} mostra quem usa cada um. O arquivo de
+protocolo da placa de medição descreve comandos, telemetria, sensores e
+limites, e é usado em dois momentos: na compilação, o \textit{script} \textit{generate.py}
 gera a partir deles os cabeçalhos C do \textit{firmware}; na execução, o
 \textit{TinyTerminal} os lê para converter um comando de texto no mesmo
 pacote binário. Como o \textit{firmware} e a interface partem do mesmo arquivo,
@@ -309,9 +297,9 @@ os dois lados interpretam os pacotes da mesma forma. Os demais arquivos são só
 da interface: \textit{commands.yaml} define os comandos do
 \textit{TinyTerminal}, \textit{plots.yaml} associa as variáveis de telemetria
 aos gráficos e \textit{user\_prefs.yaml} guarda as preferências da janela
-principal. Os diálogos de calibração e estimação também gravam no
-\textit{SAME.yaml} os parâmetros obtidos (motor, hélice e ganhos do
-observador), que assim ficam disponíveis na sessão seguinte.
+principal. Os diálogos de calibração e estimação gravam os parâmetros
+obtidos (motor, hélice e ganhos do observador) em perfis YAML, que assim ficam
+disponíveis na sessão seguinte.
 
 O pacote de telemetria (\texttt{TELEMETRY\_LOG}) enviado em sentido inverso
 segue a mesma lógica de geração, com campos específicos por placa.
@@ -327,23 +315,21 @@ segue a mesma lógica de geração, com campos específicos por placa.
         le/.style={->, thick},
         lg/.style={<->, thick, densely dashed}]
         % arquivos (centro)
-        \node[arq] (same) at (0,4)   {SAME.yaml};
-        \node[arq] (siba) at (0,2.9) {SIBA.yaml};
+        \node[arq] (same) at (0,4)   {perfis (motor, hélice)};
+        \node[arq] (siba) at (0,2.9) {protocolo da placa};
         \node[arq] (cmds) at (0,1.8) {commands.yaml};
         \node[arq] (plot) at (0,0.7) {plots.yaml};
         \node[arq] (pref) at (0,-0.4){user\_prefs.yaml};
         % compilação (esquerda)
         \node[uso] (gen) at (-5.2,3.45) {\textit{generate.py}\\{\footnotesize gera os cabeçalhos C}};
-        \node[uso, fill=black!5] (fw) at (-5.2,1.2) {\textit{Firmware} SIBA e SAME};
-        \draw[le] (same.west) -- (gen.east |- 0,3.65);
-        \draw[le] (siba.west) -- (gen.east |- 0,3.25);
+        \node[uso, fill=black!5] (fw) at (-5.2,1.2) {\textit{Firmware} da placa\\de medição};
+        \draw[le] (siba.west) -- (gen.east |- siba.west);
         \draw[le] (gen) -- (fw);
         % execução (direita)
         \node[uso] (dial) at (5.6,4.6) {Diálogos de calibração\\e estimação};
         \node[uso] (tiny) at (5.6,2.5) {\textit{TinyTerminal}\\{\footnotesize texto $\to$ CMD binário}};
         \node[uso] (main) at (5.6,0.3) {Janela principal\\{\footnotesize gráficos e preferências}};
         \draw[lg] (same.east) -- (dial.west);
-        \draw[le] (same.east) -- ([yshift=3mm]tiny.west);
         \draw[le] (siba.east) -- (tiny.west);
         \draw[le] (cmds.east) -- ([yshift=-3mm]tiny.west);
         \draw[le] (plot.east) -- ([yshift=2mm]main.west);
@@ -369,17 +355,15 @@ A calibração de um sensor usa o mesmo caminho de tradução do
 um valor (ganho, deslocamento de zero ou limite de segurança) na tela de
 configuração de sensores, e esse valor é traduzido no mesmo formato de
 comando usado em todo o resto do sistema, enviado pela rede até a placa
-correspondente, que aplica o ajuste ao canal do sensor indicado. A
+de medição, que aplica o ajuste ao canal do sensor indicado. A
 \autoref{fig:seq_calibracao} resume essa sequência completa, da edição na
 tela até a confirmação. Não existe uma mensagem de confirmação separada: a
 mudança só é percebida no próximo pacote de telemetria, quando a leitura
 daquele canal passa a refletir o novo valor (por exemplo, uma célula de
-carga recém-tarada passa a ler próximo de zero). Esses ajustes não são
-salvos de forma permanente --- ficam apenas na memória da placa enquanto
-ela estiver ligada --- de modo que, ao desligar e religar, os valores
-voltam ao padrão gravado no arquivo de configuração da placa
-(\autoref{fig:yaml_example_config}), e a calibração feita pela interface
-precisa ser refeita a cada nova conexão.
+carga recém-tarada passa a ler próximo de zero). A placa grava esses
+ajustes, junto com os parâmetros do observador, numa memória não volátil
+(EEPROM): ao ser religada, restaura os valores salvos em vez de voltar ao
+padrão do arquivo de configuração (\autoref{fig:yaml_example_config}).
 
 \begin{figure}[H]
     \centering
