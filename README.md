@@ -1,6 +1,6 @@
 <div align="center">
 
-# Bancada de Medição para Sistemas Propulsivos Elétricos com BLDC
+# DESENVOLVIMENTO DE SISTEMA DE AQUISIÇÃO COM ESTIMAÇÃO POR MODO DESLIZANTE PARA BANCADA DE PROPULSÃO COM MOTOR BLDC
 
 **Trabalho de Conclusão de Curso · Engenharia Elétrica · UDESC Joinville (2026)**
 
