@@ -1,11 +1,13 @@
-# SIBA — contexto para Claude Code
+# firmware — contexto para Claude Code
 
 Contexto comum (protocolo, rede, plano de ação): [`../CLAUDE.md`](../CLAUDE.md).
 Descrição completa (sensores, shell, protocolo, pinagem): [`README.md`](README.md).
 
-Firmware Zephyr 4.4.0 da bancada (CH32V307, RISC-V 144 MHz). Mede 6 HX711 e,
-desde 14/11/2026, **as fases do motor pela AQ1 com o observador SMO+PLL que
-era da SAME** (a SAME queimou). **Aciona o ESC** e os relés.
+Firmware Zephyr 4.4.0 da placa de medição (CH32V307, RISC-V 144 MHz). Mede
+as fases do motor pela AQ1 com o observador SMO+PLL e até 6 HX711. **Aciona o
+ESC** e os relés. Por dentro ainda usa o prefixo `SIBA` (`siba_wq`,
+`siba_board`, `CONFIG_SIBA_*`, `rpm_same`): **não renomear sem pedido**.
+Comandos pelo PC: `../gui/placa.py` (mesma gramática do TinyTerminal).
 UDP: escuta CMD na 5000, envia telemetria (116 B, 10 Hz) em broadcast para a 5555.
 
 ## Fontes de verdade
