@@ -1,27 +1,25 @@
-%% Extraído de docs/TCC_documento/Textuais/Metodologia/03_Interface.tex (figura: arquivos YAML)
-\begin{tikzpicture}[font=\small, >=Latex,
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/03_Interface.tex (linhas 313-348)
+    \begin{tikzpicture}[font=\small, >=Latex,
         arq/.style={draw, fill=yellow!15, rounded corners=2pt, minimum width=3.0cm, minimum height=0.75cm, font=\small\itshape},
         uso/.style={draw, thick, rounded corners, align=center, minimum width=4.4cm, minimum height=1.2cm, fill=white},
         le/.style={->, thick},
         lg/.style={<->, thick, densely dashed}]
         % arquivos (centro)
-        \node[arq] (same) at (0,4)   {SAME.yaml};
-        \node[arq] (siba) at (0,2.9) {SIBA.yaml};
+        \node[arq] (same) at (0,4)   {perfis (motor, hélice)};
+        \node[arq] (siba) at (0,2.9) {protocolo da placa};
         \node[arq] (cmds) at (0,1.8) {commands.yaml};
         \node[arq] (plot) at (0,0.7) {plots.yaml};
         \node[arq] (pref) at (0,-0.4){user\_prefs.yaml};
         % compilação (esquerda)
         \node[uso] (gen) at (-5.2,3.45) {\textit{generate.py}\\{\footnotesize gera os cabeçalhos C}};
-        \node[uso, fill=black!5] (fw) at (-5.2,1.2) {\textit{Firmware} SIBA e SAME};
-        \draw[le] (same.west) -- (gen.east |- 0,3.65);
-        \draw[le] (siba.west) -- (gen.east |- 0,3.25);
+        \node[uso, fill=black!5] (fw) at (-5.2,1.2) {\textit{Firmware} da placa\\de medição};
+        \draw[le] (siba.west) -- (gen.east |- siba.west);
         \draw[le] (gen) -- (fw);
         % execução (direita)
         \node[uso] (dial) at (5.6,4.6) {Diálogos de calibração\\e estimação};
         \node[uso] (tiny) at (5.6,2.5) {\textit{TinyTerminal}\\{\footnotesize texto $\to$ CMD binário}};
         \node[uso] (main) at (5.6,0.3) {Janela principal\\{\footnotesize gráficos e preferências}};
         \draw[lg] (same.east) -- (dial.west);
-        \draw[le] (same.east) -- ([yshift=3mm]tiny.west);
         \draw[le] (siba.east) -- (tiny.west);
         \draw[le] (cmds.east) -- ([yshift=-3mm]tiny.west);
         \draw[le] (plot.east) -- ([yshift=2mm]main.west);
@@ -36,4 +34,4 @@
         % legenda
         \draw[le] (-2.2,-1.6) -- ++(0.8,0) node[right, font=\footnotesize] {lê};
         \draw[lg] (0.2,-1.6) -- ++(0.8,0) node[right, font=\footnotesize] {lê e grava};
-    \end{tikzpicture}
+    \end{tikzpicture}%

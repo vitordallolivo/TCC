@@ -1,5 +1,5 @@
-%% Extraído de docs/TCC_documento/Textuais/Metodologia/03_Interface.tex (figura: Arquitetura de Comunicação)
-\begin{tikzpicture}[
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/03_Interface.tex (linhas 10-62)
+    \begin{tikzpicture}[
         node distance=1.5cm and 2cm,
         font=\sffamily,
         % Estilos das caixas principais
@@ -11,25 +11,17 @@
     ]
 
         % ==========================================
-        % LADO ESQUERDO: SIBA e SAME
+        % LADO ESQUERDO: PLACA DE MEDIÇÃO
         % ==========================================
-        \node[box, text width=4cm, minimum height=2.8cm] (siba) {
-            \textbf{SIBA}\\[0.3cm]
-            Monitoramento\\da Bancada e\\Bateria
-        };
-
-        \node[box, text width=4cm, minimum height=2.8cm, below=0.5cm of siba] (same) {
-            \textbf{SAME}\\[0.3cm]
-            Monitoramento\\do motor
+        \node[box, text width=4cm, minimum height=4cm] (placa) {
+            \textbf{Placa de medição}\\[0.3cm]
+            Monitoramento\\do motor\\e segurança
         };
 
         % ==========================================
         % CENTRO: SWITCH DE REDE
         % ==========================================
-        % Pega o ponto central entre SIBA e SAME para alinhar o Switch
-        \path (siba) -- (same) coordinate[midway] (midLeft);
-
-        \node[box, right=3cm of midLeft, minimum height=6.1cm, minimum width=1.0cm] (switch) {
+        \node[box, right=3cm of placa, minimum height=6.1cm, minimum width=1.0cm] (switch) {
             \rotatebox{90}{\textbf{SWITCH DE REDE}}
         };
 
@@ -53,11 +45,8 @@
         % ==========================================
         % CONEXÕES (SETAS)
         % ==========================================
-        % Seta SIBA <-> Switch (alinhada com o meio da SIBA)
-        \draw[arrow] (siba.east) -- (switch.west |- siba.east);
-
-        % Seta SAME <-> Switch (alinhada com o meio da SAME)
-        \draw[arrow] (same.east) -- (switch.west |- same.east);
+        % Seta placa <-> Switch
+        \draw[arrow] (placa.east) -- (switch.west |- placa.east);
 
         % Seta Switch <-> Computador (alinhada com o meio do Switch)
         \draw[arrow] (switch.east) -- (pc.west |- switch.east);

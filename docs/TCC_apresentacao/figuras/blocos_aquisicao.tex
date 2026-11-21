@@ -1,0 +1,33 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/06_Bancada.tex (linhas 27-58)
+    \begin{circuitikz}[american, font=\small,
+        blk/.style={draw, thick, rounded corners=2pt, align=center, minimum height=1.3cm, minimum width=2.0cm},
+        sig/.style={-{Latex}, thick},
+        ctl/.style={-{Latex}, thick, dashed}]
+        % --- caminho de potência ---
+        \draw (0,0) to[battery1, l=$V_{bateria}$, invert] (0,2.4);
+        \node[ground] at (0,0) {};
+        \draw (0,2.4) -- (1,2.4);
+        \draw (1,2.4) to[cute open switch, l=Relé de pré-carga] (3.4,2.4)
+              to[R, l=\SI{100}{\ohm}] (5.8,2.4);
+        \draw (1,2.4) -- (1,3.9) to[cute open switch, l=Relé de potência] (5.8,3.9) -- (5.8,2.4);
+        \node[blk] (esc) at (7.8,1.75) {ESC};
+        \draw (5.8,2.4) -- (esc.west |- 0,2.4);
+        \draw (0,0) -- (7.2,0) -- (7.2,1.1);
+        \node[blk, minimum width=2.4cm] (aq1) at (11.2,1.75) {Condicionamento\\das fases (AQ1)};
+        \node[draw, thick, circle, minimum size=1.4cm] (bldc) at (14.6,1.75) {BLDC};
+        \foreach \y/\f in {0.4/a, 0/b, -0.4/c} {
+            \draw ([yshift=\y cm]esc.east) -- ([yshift=\y cm]aq1.west);
+            \draw ([yshift=\y cm]aq1.east) -- ([yshift=\y cm]bldc.west);
+        }
+        \node[font=\scriptsize] at (9.5,2.4) {$a, b, c$};
+        % --- medição, comando e rede ---
+        \node[blk, minimum width=2.6cm, fill=black!5] (placa) at (11.2,-1.9) {Placa de\\medição};
+        \node[blk] (sw) at (14.6,-1.9) {\textit{Switch}\\de rede};
+        \node[blk] (pc) at (17.6,-1.9) {Computador\\(supervisão)};
+        \draw[sig] (aq1.south) -- node[right, font=\scriptsize, align=left] {$v_a, v_b, v_c$\\$i_a, i_b$} (placa.north);
+        \draw[sig] (placa.west) -| node[pos=0.25, above, font=\scriptsize] {PWM} (8.4,1.1);
+        \draw[ctl] ([yshift=-3mm]placa.west) -| node[pos=0.2, below, font=\scriptsize] {comando dos relés} (3.4,1.9);
+        \draw[ctl] (3.4,1.9) -- (3.4,2.15);
+        \draw[{Latex}-{Latex}, thick] (placa.east) -- node[above, font=\scriptsize] {ETH} (sw.west);
+        \draw[{Latex}-{Latex}, thick] (sw.east) -- node[above, font=\scriptsize] {ETH} (pc.west);
+    \end{circuitikz}%

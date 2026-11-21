@@ -1,0 +1,30 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/07_SIBA.tex (linhas 242-270)
+    \begin{tikzpicture}[
+        font=\small,
+        layer/.style={draw, thick, rounded corners=3pt, minimum width=11.6cm},
+        mod/.style={draw, rounded corners=2pt, align=center, minimum height=0.8cm, minimum width=1.9cm, fill=white},
+        title/.style={font=\bfseries\small},
+        arrow/.style={-{Latex}, thick}
+    ]
+        \node[layer, fill=blue!15, minimum height=1.0cm] (app) at (0,4.3) {\textbf{Application}};
+
+        \node[layer, fill=red!12, minimum height=2.4cm] (sys) at (0,1.85) {};
+        \node[title] at (sys.north) [yshift=-0.3cm] {System};
+        \node[draw, rounded corners=2pt, fill=yellow!20, minimum width=11.0cm, minimum height=1.55cm] at (0,1.6) {};
+        \node[mod] at (-4.4,1.6)  {\textit{Battery}\\\textit{Manager}};
+        \node[mod] at (-2.2,1.6)  {\textit{Propeller}\\\textit{Manager}};
+        \node[mod] at (0,1.6)     {\textit{Observer}\\\textit{Manager}};
+        \node[mod] at (2.2,1.6)   {\textit{Security}\\\textit{Manager}};
+        \node[mod] at (4.4,1.6)   {\textit{Log}\\\textit{Manager}};
+
+        \node[layer, fill=magenta!12, minimum height=1.7cm] (os) at (0,-0.85) {};
+        \node[title] at (os.north) [yshift=-0.3cm] {Vcore - OS};
+        \node[mod] at (-4.4,-1.1) {OSSI};
+        \node[mod] at (-2.2,-1.1) {NCI};
+        \node[mod] at (0,-1.1)    {HAL};
+        \node[mod] at (2.2,-1.1)  {CMD\_Core};
+        \node[mod] at (4.4,-1.1)  {NVM};
+
+        \draw[arrow] (app.south) -- (sys.north);
+        \draw[arrow] (sys.south) -- (os.north) node[midway, right]{via OSSI};
+    \end{tikzpicture}

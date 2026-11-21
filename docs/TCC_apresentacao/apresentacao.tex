@@ -5,8 +5,7 @@
 %%
 %% Figuras PNG/JPG: ../TCC_documento/Textuais/Imgs (sem cópia).
 %% Diagramas TikZ: figuras/*.tex, extraídos dos .tex do TCC.
-%% Slides com a etiqueta "RESULTADO ILUSTRATIVO" trazem conteúdo
-%% provisório: substituir pelos dados reais antes da defesa.
+%% Fonte de verdade: ../TCC_documento. Regras: ../abnt.md.
 %%=====================================================================
 \documentclass[aspectratio=169,11pt]{beamer}
 
@@ -17,7 +16,9 @@
 \usepackage{amsmath,amssymb,bm}
 \usepackage{booktabs}
 \usepackage{siunitx}
-\sisetup{output-decimal-marker={,}}
+\sisetup{output-decimal-marker={,}, retain-explicit-plus,
+         separate-uncertainty=true}
+\DeclareSIUnit{\gauss}{G}
 \usepackage{adjustbox}
 
 % --- mesmo ambiente TikZ do TCC (PacotesBasicos.tex) ---
@@ -43,26 +44,32 @@
 
 \usetheme[semtrilha]{UDESC}
 
-\graphicspath{{../TCC_documento/Textuais/Imgs/}{./}}
+\graphicspath{{../TCC_documento/Textuais/Imgs/}{../TCC_documento/}{./}}
 
-% diagrama TikZ ajustado ao espaço: \tikzfig{largura}{altura}{nome}
+% dados das figuras pgfplots (os mesmos .dat do TCC)
+\newcommand{\dadoshelice}{../TCC_documento/Textuais/Imgs/Resultados/helice}
+
+% diagrama TikZ ajustado ao espaço, sobre fundo branco:
+%   \tikzfig{largura}{altura}{nome}
 \newcommand{\tikzfig}[3]{%
-  \begin{adjustbox}{max width=#1\linewidth, max totalheight=#2\textheight}
+  \begin{adjustbox}{max width=#1\linewidth, max totalheight=#2\textheight,
+                    margin=6pt, bgcolor=white}
     \input{figuras/#3}
   \end{adjustbox}}
 
-% marca de conteúdo provisório (resultado ilustrativo)
-\newcommand{\ilustrativo}{%
-  \begin{tikzpicture}[remember picture, overlay]
-    \node[anchor=north east, fill=udescvermelhoB, text=white,
-          font=\tiny\bfseries, inner sep=3pt, rounded corners=2pt]
-      at ([xshift=-0.6cm, yshift=-0.45cm]current page.north east)
-      {RESULTADO ILUSTRATIVO};
-  \end{tikzpicture}}
+% gráfico pgfplots ou tabela sobre fundo branco, escalado para ocupar o slide:
+%   \begin{fundobranco}[fração da largura]...\end{fundobranco}
+\newenvironment{fundobranco}[1][0.95]
+  {\adjustbox{width=#1\textwidth, max totalheight=0.74\textheight,
+              margin=6pt, bgcolor=white}\bgroup}
+  {\egroup}
+
+\usepackage{subcaption}
 
 %%---------------------------------------------------------------------
-\title{Bancada de Medição para Sistemas Propulsivos Elétricos com Motor BLDC}
-\subtitulo{Trabalho de Conclusão de Curso\\Engenharia Elétrica}
+\title{Desenvolvimento de Sistema de Aquisição com Estimação por Modo
+       Deslizante para Bancada de Propulsão com Motor BLDC}
+\subtitulo{Trabalho de Conclusão de Curso\\Engenharia Elétrica, UDESC/CCT}
 \author{Vitor Dall'Olivo Gonçalves}
 \orientador{Prof.\textsuperscript{a} Ana Teruko Yokomizo Watanabe}
 \coorientador{Aureo Guilherme Dobrikopf}
@@ -73,7 +80,7 @@
 \capaudesc
 
 \input{secoes/01_introducao}
-\input{secoes/02_planejamento}
+\input{secoes/02_fundamentacao}
 \input{secoes/03_metodologia}
 \input{secoes/04_resultados}
 \input{secoes/05_conclusao}

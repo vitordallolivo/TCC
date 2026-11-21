@@ -1,0 +1,48 @@
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/00_Introducao.tex (linhas 188-234)
+    \begin{tikzpicture}[
+        font=\small,
+        flowbox/.style={draw, rounded corners, fill=white, align=center, minimum width=4cm, minimum height=0.9cm, text width=3.7cm},
+        halfbox/.style={draw, rounded corners, fill=white, align=center, minimum width=2.5cm, minimum height=0.9cm, text width=2.2cm},
+        arrow/.style={-{Latex}, thick},
+        barrow/.style={{Latex}-{Latex}, thick},
+        qmark/.style={draw, diamond, fill=black!85, text=white, font=\bfseries\tiny, align=center, minimum width=0.9cm, minimum height=0.6cm, inner sep=0pt}
+    ]
+        \fill[green!45!black!25]  (-5.6,2)    rectangle (5.6,5.4);
+        \fill[orange!55!black!20] (-5.6,-1.7) rectangle (5.6,2);
+        \fill[red!55!black!20]    (-5.6,-6.3) rectangle (5.6,-1.7);
+
+        \node[qmark] at (-6.3,5.4) {Q1};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.3,5.1) -- (-6.3,2.3);
+        \node[qmark] at (-6.3,2) {Q2};
+        \draw[-{Triangle[length=2.5mm]}, thick] (-6.3,1.7) -- (-6.3,-1.4);
+        \node[qmark] at (-6.3,-1.7) {Q3};
+
+        \node[flowbox] (pc) at (0,4.9)   {PC/\textit{Python}};
+        \node[halfbox] (cfg) at (-4.3,3.6) {Arquivos de\\configuração};
+        \node[halfbox] (gui) at (4.3,3.6)  {GUI};
+        \node[halfbox] (qt)  at (4.3,2.4)  {\textit{Qt Designer}};
+        \node[flowbox] (yaml) at (0,2.4)   {Arquivos \textit{yaml}};
+
+        \draw[arrow] (pc) -- (cfg);
+        \draw[arrow] (pc) -- (gui);
+        \draw[arrow] (gui) -- (qt);
+        \draw[arrow] (cfg) -- (yaml);
+        \draw[arrow] (gui) -- (yaml);
+
+        \node[flowbox] (tiny) at (0,0.9)  {\textit{TinyTerminal}};
+        \node[halfbox] (teste) at (-4.3,0.9) {Teste dos parâmetros\\e comunicação};
+        \node[halfbox] (fb) at (4.3,0.9)   {Feedback Membros};
+
+        \draw[arrow] (yaml) -- (tiny);
+        \draw[barrow] (tiny) -- (teste);
+        \draw[arrow] (tiny) -- (fb);
+
+        % Q3: funcionalidades já implementadas na interface
+        \node[flowbox, text width=7.5cm, minimum width=8cm] (feat) at (0,-2.7) {Configuração de sensores, calibração de\\células de carga, \textit{scripts} de estimação\\(SMO, hélice) e registro em CSV};
+
+        \draw[arrow] (teste.south) -- ++(0,-0.7) -| (feat.north);
+        \draw[arrow] (fb.south) -- ++(0,-0.7) -| (feat.north);
+
+        \node[flowbox, fill=black!85, text=white] (gui_ok) at (0,-4.6) {Interface Funcional};
+        \draw[arrow] (feat) -- (gui_ok);
+    \end{tikzpicture}

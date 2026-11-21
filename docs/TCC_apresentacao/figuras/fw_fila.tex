@@ -1,26 +1,32 @@
-%% Extraído de docs/TCC_documento/Textuais/Metodologia/05_Placas.tex (figura: fila de trabalho)
-\begin{tikzpicture}[
-        node distance=0.9cm and 1cm,
-        font=\small,
-        box/.style={draw, rounded corners, align=center, minimum height=0.9cm, minimum width=2.2cm},
-        arrow/.style={-{Latex}, thick}
+%% Extraído de docs/TCC_documento/Textuais/Metodologia/07_SIBA.tex (linhas 166-196)
+    \begin{tikzpicture}[
+        font=\small, >={Latex},
+        box/.style={draw, rounded corners, align=center, minimum height=1.1cm, text width=2.8cm, fill=white},
+        src/.style={box, fill=black!6},
+        ossi/.style={box, fill=yellow!20, thick, text width=2.6cm, minimum height=4.4cm},
+        arrow/.style={->, thick},
+        rot/.style={font=\scriptsize, fill=white, inner sep=1pt}
     ]
-        \node[box] (hw) {Periférico\\(ADC, HX711, \dots)};
-        \node[box, right=of hw] (thr) {\textit{Thread}\\bloqueante};
-        \node[box, right=of thr] (msgq) {Fila de dados\\(\texttt{k\_msgq})};
-        \node[box, right=of msgq] (wq) {Fila de trabalho\\única (\texttt{k\_work\_q})};
-        \node[box, above right=0.5cm and 1cm of wq] (mgrs) {Gerenciadores\\de domínio};
-        \node[box, below right=0.5cm and 1cm of wq] (nci) {NCI\\(rede UDP)};
-        \node[box, right=of nci] (pc) {Aplicação\\de PC};
-        \node[box, below=of msgq] (cmdq) {Fila de\\comandos};
+        % fontes de evento e primeiro tratamento
+        \node[src] (adc) at (0,1.8)   {Conversor\\(ADC + DMA)};
+        \node[box] (acq) at (4.4,1.8) {Fila de aquisição\\{\footnotesize Clarke, SMO e PLL}};
+        \node[src] (tmr) at (0,0)     {Temporizador\\(\SI{10}{\hertz})};
+        \node[box] (rx)  at (4.4,-1.8) {Recepção (NCI)\\{\footnotesize interpretação (CMD\_Core)}};
+        % OSSI
+        \node[ossi] (wq) at (8.6,0) {\textbf{OSSI}\\[2pt]fila de\\trabalho única};
+        \node[src] (net) at (8.6,-3.9) {Rede\\(UDP)};
+        % gerenciadores e envio
+        \node[box] (mgr) at (12.8,1.2) {Gerenciadores\\de domínio};
+        \node[box] (tx)  at (12.8,-1.2) {\textit{Log Manager}\\{\footnotesize envio UDP (NCI)}};
+        \node[src] (pc)  at (17.0,-1.2) {Aplicação\\de supervisão};
 
-        \draw[arrow] (hw) -- (thr);
-        \draw[arrow] (thr) -- (msgq);
-        \draw[arrow] (msgq) -- (wq);
-        \draw[arrow] (wq) -- (mgrs);
-        \draw[arrow] (wq) -- (nci);
-        \draw[arrow] (nci) -- (pc);
-        \draw[arrow] (pc) -- (nci);
-        \draw[arrow] (nci) |- (cmdq);
-        \draw[arrow] (cmdq) -- (wq);
-    \end{tikzpicture}
+        \draw[arrow] (adc) -- (acq);
+        \draw[arrow] (acq.east) -- node[rot, above] {resultados} (acq.east -| wq.west);
+        \draw[arrow] (tmr.east) -- node[rot, above, pos=0.25] {telemetria} (tmr.east -| wq.west);
+        \draw[arrow] (rx.east) -- node[rot, above] {comando} (rx.east -| wq.west);
+        \draw[arrow] (net.west) -| (rx.south);
+        \draw[arrow] (mgr.west -| wq.east) -- (mgr.west);
+        \draw[arrow] (tx.west -| wq.east) -- (tx.west);
+        \draw[arrow] (tx) -- (pc);
+        \draw[arrow, dashed] (pc.south) |- node[rot, pos=0.75, above] {comandos} (net.east);
+    \end{tikzpicture}%

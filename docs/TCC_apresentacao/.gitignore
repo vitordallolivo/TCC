@@ -6,3 +6,5 @@
 *.toc
 *.vrb
 !apresentacao.pdf
+ensaio_voz/*.mp4
+!roteiro.pdf

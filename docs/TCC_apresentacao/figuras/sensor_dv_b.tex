@@ -1,0 +1,33 @@
+%% Extraído de docs/TCC_documento/Textuais/Resultados/001_SensorCorrente.tex (linhas 77-108)
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=0.85\textwidth, height=6.5cm,
+            xlabel={$B$ [G]}, ylabel={$\Delta V$ [\si{\milli\volt}]},
+            xmin=0, xmax=540, ymin=0, ymax=760,
+            grid=both, grid style={dotted,gray!40},
+            legend style={at={(0.5,0)}, anchor=north, yshift=-1.1cm, legend columns=3, font=\scriptsize, inner sep=2pt},
+            tick label style={font=\small}, label style={font=\small},
+        ]
+            \addplot[dotted, black, very thick, domain=0:540] {1.4*x};
+            \addlegendentry{Típico de catálogo (\SI[per-mode=symbol]{1,40}{\milli\volt\per\gauss})}
+            \addplot[only marks, mark=triangle*, mark size=2pt, green!55!black]
+                coordinates {
+                    (0.00,-0.945)(2.47,3.105)(16.12,18.655)(23.86,29.255)
+                    (31.19,38.855)(39.21,48.555)(45.57,55.355)
+                    (48.26,58.255)(63.29,76.055)(78.16,93.855)};
+            \addlegendentry{$N=1$: \SI[per-mode=symbol]{1,209}{\milli\volt\per\gauss}}
+            \addplot[only marks, mark=square*, mark size=2pt, red!65!black]
+                coordinates {
+                    (0.00,-1.232)(6.26,10.168)(22.02,32.868)(38.45,56.568)
+                    (65.49,95.568)(103.07,150.368)(129.86,190.368)
+                    (156.40,229.468)(171.53,251.368)(188.16,275.768)
+                    (250.42,366.868)(314.85,461.168)(330.48,484.368)};
+            \addlegendentry{$N=4$: \SI[per-mode=symbol]{1,465}{\milli\volt\per\gauss}}
+            \addplot[only marks, mark=*, mark size=1.8pt, blue!65!black]
+                coordinates {
+                    (0.00,0.801)(71.94,95.601)(126.76,168.901)(187.78,250.201)
+                    (249.80,333.401)(370.73,493.701)(411.66,548.231)
+                    (516.47,690.001)};
+            \addlegendentry{$N=8$: \SI[per-mode=symbol]{1,334}{\milli\volt\per\gauss}}
+        \end{axis}
+    \end{tikzpicture}

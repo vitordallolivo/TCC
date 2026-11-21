@@ -1,26 +1,53 @@
 %%=====================================================================
-%% CONCLUSÃO
-%% Redigida assumindo a validação integrada concluída com sucesso;
-%% revisar quando os resultados ilustrativos forem substituídos.
+%% CONCLUSÃO (TCC, cap. 5)
 %%=====================================================================
+\secaoudesc{Conclusão}
 
-\begin{frame}{Conclusão}
-  \begin{itemize}
-    \item Bancada integrada e operacional
-    \item Torque e rotação sem sensor mecânico
-    \item Grandezas elétricas e aerodinâmicas no mesmo registro
-    \item Procedimento repetível para novos conjuntos
-  \end{itemize}
-
-  \destaque{Escolha de motor e hélice apoiada em ensaio próprio.}
+\begin{frame}{Objetivos atingidos}
+  \small
+  \begin{tabular}{p{0.32\linewidth}p{0.6\linewidth}}
+    \toprule
+    \textbf{Objetivo} & \textbf{Resultado} \\
+    \midrule
+    Medição do motor & Tensões e correntes de fase amostradas aos pares;
+      sensor caracterizado e canais calibrados \\
+    Modelo e observador & R, L, perdas e $K_e$ identificados; SMO + PLL com
+      erro de rotação abaixo de \SI{0,1}{\percent} nos registros \\
+    Medição, acionamento e segurança & Observador embarcado; ESC, relés com
+      pré-carga e emergência na placa; hélices de \SIrange{-3}{+9}{\percent}
+      da curva do fabricante \\
+    Rede Ethernet & Comandos e telemetria por UDP a \SI{10}{\hertz}, protocolo
+      em arquivo único \\
+    Supervisório & Monitora, comanda, calibra, ajusta o observador e registra
+      em CSV \\
+    \bottomrule
+  \end{tabular}
 \end{frame}
 
-\begin{frame}{Trabalhos futuros}
-  \begin{itemize}
-    \item Dinamômetro para torque de referência
-    \item Curva SOC $\times$ OCV da bateria
-    \item Efeito da temperatura da bateria na tração
-    \item Observador em enfraquecimento de campo
-    \item Bancada com 6 graus de liberdade
-  \end{itemize}
+\begin{frame}{Contribuições e trabalhos futuros}
+  \begin{columns}[t]
+    \begin{column}{0.5\textwidth}
+      \textbf{Contribuições}
+      \begin{itemize}
+        \small
+        \item Placa de baixo custo com observador embarcado, sem sensor no
+              eixo
+        \item Lógica dos ensaios no computador: muda o ensaio sem regravar
+              o \textit{firmware}
+        \item Ajuste automático dos ganhos, reaplicável a outros conjuntos
+        \item Indutância identificada com o motor em rotação
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Trabalhos futuros}
+      \begin{itemize}
+        \small
+        \item Dinamômetro para torque de referência no eixo
+        \item Células de carga, tubo de Pitot e túnel de vento
+        \item Observador em enfraquecimento de campo
+        \item Bateria: curva SOC $\times$ OCV e efeito da temperatura
+        \item Bancada física com 6 graus de liberdade
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}

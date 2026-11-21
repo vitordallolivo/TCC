@@ -1,84 +1,56 @@
 %%=====================================================================
-%% INTRODUÇÃO: contexto, problema, conjugado da hélice, objetivos
+%% SUMÁRIO E INTRODUÇÃO: contexto, problema, objetivos (TCC, cap. 1)
 %%=====================================================================
+\begin{frame}{Sumário}
+  \begin{enumerate}
+    \setlength{\itemsep}{0.6em}
+    \item Introdução
+    \item Fundamentação teórica
+    \item Metodologia
+    \item Resultados e discussão
+    \item Conclusão
+  \end{enumerate}
+\end{frame}
+
+\secaoudesc{Introdução}
+
 \begin{frame}{Albatroz Aerodesign}
   \begin{columns}[c]
     \begin{column}{0.42\textwidth}
       \begin{itemize}
         \item Competição SAE Brasil Aerodesign
-        \item Motor BLDC obrigatório
-        \item Propulsão define a carga útil
+        \item Desde 2022, só motores elétricos sem escovas (BLDC)
+        \item O conjunto motopropulsor define a carga útil
       \end{itemize}
     \end{column}
     \begin{column}{0.58\textwidth}
       \centering
       \includegraphics[width=\linewidth]{Introducao/DSCN3474.JPG}
-      \fonte[Equipe Albatroz; SAE Brasil (2024)]
+      \fonte[Equipe Albatroz (2025)]
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Ensaios descentralizados}
-  \begin{columns}[c]
-    \begin{column}{0.4\textwidth}
-      \centering
-      \includegraphics[height=0.5\textheight]{Metodologia/Motor_batata.jpeg}\\[0.3em]
-      {\small Motor e bateria}
-    \end{column}
-    \begin{column}{0.6\textwidth}
-      \centering
-      \includegraphics[height=0.5\textheight]{Introducao/BancadaDesempenho.png}\\[0.3em]
-      {\small Bancada atual}
-    \end{column}
-  \end{columns}
-  \destaque{Sem medida direta de rotação e torque: só estimativas.}
-  \fonte[Autor; Souza e Veber (2023); Costa (2021)]
-\end{frame}
-
-\begin{frame}{Conjugado da hélice}
-  \[ Q = C_Q\,\rho\,n^2 D^5 \]
-  \begin{columns}[c]
-    \begin{column}{0.5\textwidth}
-      \centering
-      \includegraphics[height=0.5\textheight]{Revisao/Selig_propeller_data_ct.png}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \centering
-      \includegraphics[height=0.5\textheight]{Revisao/Selig_propeller_data_cp.png}
-    \end{column}
-  \end{columns}
-  \fonte[McCrink e Gregory (2015); McCormick (1995)]
-\end{frame}
-
-\begin{frame}{Torque define o envelope}
-  \begin{columns}[c]
-    \begin{column}{0.36\textwidth}
-      Hélices de referência
-      \begin{itemize}
-        \item APC 15x6E
-        \item APC 17x10E
-      \end{itemize}
-      \vspace{0.5em}
-      Simuladas com o catálogo e ensaiadas em bancada
-    \end{column}
-    \begin{column}{0.64\textwidth}
-      \centering
-      \tikzfig{1}{0.7}{helice_ponto_op}
-      \fonte[Autor; APC Propellers (2026); Brandt et al.\ (2015)]
-    \end{column}
-  \end{columns}
+\begin{frame}{Problema: ensaios fragmentados}
+  \centering
+  \includegraphics[height=0.6\textheight]{Introducao/BancadaDesempenho.png}
+  \fonte[Souza e Veber (2023)]
 \end{frame}
 
 \begin{frame}{Objetivos}
-  \destaque{Desenvolver um sistema integrado de aquisição de dados,
-            adaptando a bancada de ensaios motopropulsores da equipe.}
+  \textbf{Geral:} desenvolver um sistema de aquisição de dados para ensaios de
+  conjuntos motopropulsores com motores BLDC.
 
   \vspace{0.6em}
-  \begin{itemize}
-    \item Sistema de medição do motor BLDC
-    \item Modelo do motor e observador de estados
-    \item Medição aerodinâmica da hélice
-    \item Rede Ethernet entre os nós e o supervisório
-    \item Software de supervisão em Python
-  \end{itemize}
+  \textbf{Específicos:}
+  \begin{enumerate}
+    \small
+    \item Projetar e implementar o sistema de medição do motor (tensão e
+          corrente de fase)
+    \item Modelar o motor e projetar o observador por modos deslizantes
+          (FEM, rotação e torque)
+    \item Integrar medição, acionamento e segurança na placa de medição
+    \item Interligar placa e supervisório por rede Ethernet (UDP)
+    \item Desenvolver o \textit{software} de supervisão em Python
+  \end{enumerate}
 \end{frame}
