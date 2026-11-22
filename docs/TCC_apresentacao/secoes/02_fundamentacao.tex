@@ -16,12 +16,44 @@
       \[ J\,\frac{d\omega_m}{dt} = T_e - B\,\omega_m - T_L \]
       \begin{itemize}
         \small
-        \item Transformada de Clarke: $abc \rightarrow \alpha\beta$
         \item A força contraeletromotriz (FEM) carrega a rotação e o ângulo
       \end{itemize}
     \end{column}
   \end{columns}
-  \fonte[Autor (2026); Krishnan (2017); Clarke (1943)]
+  \fonte[Autor (2026); Krishnan (2017)]
+\end{frame}
+
+\begin{frame}{Transformadas de Clarke e Park}
+  \begin{columns}[c]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \tikzfig{1}{0.7}{clarke_park}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \small
+      Clarke: $abc \rightarrow \alpha\beta$ (estacionário)
+      \[
+        \begin{bmatrix} x_\alpha \\ x_\beta \end{bmatrix}
+        = \frac{2}{3}
+        \begin{bmatrix} 1 & -\frac{1}{2} & -\frac{1}{2} \\[2pt]
+        0 & \frac{\sqrt{3}}{2} & -\frac{\sqrt{3}}{2} \end{bmatrix}
+        \begin{bmatrix} x_a \\ x_b \\ x_c \end{bmatrix}
+      \]
+      Park: $\alpha\beta \rightarrow dq$ (gira com o rotor)
+      \[
+        \begin{bmatrix} x_d \\ x_q \end{bmatrix}
+        =
+        \begin{bmatrix} \cos\theta_e & \sin\theta_e \\
+        -\sin\theta_e & \cos\theta_e \end{bmatrix}
+        \begin{bmatrix} x_\alpha \\ x_\beta \end{bmatrix}
+      \]
+      \begin{itemize}
+        \item $i_a + i_b + i_c = 0$: bastam duas correntes medidas
+        \item Observador em $\alpha\beta$; torque pela projeção em $dq$
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \fonte[Autor (2026); Clarke (1943); Park (1929)]
 \end{frame}
 
 \begin{frame}{Conjugado da hélice}

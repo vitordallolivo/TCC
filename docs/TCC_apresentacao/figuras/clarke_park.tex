@@ -1,0 +1,32 @@
+%% Extraído de docs/TCC_documento/Textuais/Revisao/00_MotorBLDC.tex (linhas 319-349)
+    \begin{tikzpicture}[scale=1.25, >=Stealth]
+        \def\th{40}
+        % eixos abc
+        \foreach \ang/\nome in {0/a, 120/b, 240/c}
+            \draw[->, gray, dashed] (0,0) -- (\ang:2.9) node[pos=1.08, gray] {$\nome$};
+        % eixos alfa-beta (Clarke)
+        \draw[->, thick, black] (-0.6,0) -- (3.4,0) node[right] {$\alpha$};
+        \draw[->, thick, black] (0,-0.6) -- (0,3.0) node[above] {$\beta$};
+        % eixos dq (Park)
+        \draw[->, very thick, blue!70!black] (0,0) -- (\th:3.2) node[pos=1.06] {$d$};
+        \draw[->, very thick, blue!70!black] (0,0) -- (\th+90:2.7) node[pos=1.08] {$q$};
+        % angulo theta_e
+        \draw[->, blue!70!black] (0:0.9) arc (0:\th:0.9);
+        \node[blue!70!black, font=\small, anchor=west] at (14:1.0) {$\theta_e = \omega_e t + \varphi_0$};
+        % rotacao do referencial dq
+        \draw[->, blue!70!black] (\th-25:3.0) arc (\th-25:\th-5:3.0)
+            node[midway, right, font=\small] {$\omega_e$};
+        % vetor corrente
+        \coordinate (I) at (\th+25:2.3);
+        \draw[->, ultra thick, red!70!black] (0,0) -- (I) node[above right=-2pt] {$\vec{i}$};
+        % projecoes em d e q
+        \draw[densely dotted, red!70!black] (I) -- ($(0,0)!(I)!(\th:3)$) coordinate (Id);
+        \draw[densely dotted, red!70!black] (I) -- ($(0,0)!(I)!(\th+90:3)$) coordinate (Iq);
+        \fill[red!70!black] (Id) circle (1.3pt) node[below right=-1pt, font=\small] {$i_d$};
+        \fill[red!70!black] (Iq) circle (1.3pt) node[below left=-1pt, font=\small] {$i_q$};
+        % projecoes em alfa e beta
+        \draw[densely dotted, gray] (I) -- (I |- 0,0);
+        \draw[densely dotted, gray] (I) -- (0,0 |- I);
+        \node[below, font=\small, gray] at (I |- 0,0) {$i_\alpha$};
+        \node[left, font=\small, gray] at (0,0 |- I) {$i_\beta$};
+    \end{tikzpicture}
