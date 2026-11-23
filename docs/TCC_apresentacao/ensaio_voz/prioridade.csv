@@ -1,0 +1,62 @@
+pagina;prioridade;slide
+1;10;Capa
+2;4;Sumário
+4;8;Albatroz Aerodesign
+5;10;Problema: ensaios fragmentados
+6;10;Objetivos
+8;9;Modelo do motor BLDC
+9;5;Transformadas de Clarke e Park
+10;8;Conjugado da hélice
+11;7;Ponto de operação
+12;9;Observador por modos deslizantes (SMO)
+14;6;Planejamento
+15;3;Planejamento: CAD
+16;4;Planejamento: placa de medição
+17;3;Planejamento: interface de usuário
+18;8;Arquitetura do sistema de aquisição
+19;8;Cadeia de aquisição
+20;6;Gabinete: potência e segurança
+21;6;Placa de medição: camadas do firmware
+22;7;Escolha do sensor de corrente
+23;6;Sensor Hall com núcleo toroidal
+24;5;Ensaio de caracterização do conjunto núcleo–sensor
+25;5;Placa de condicionamento das fases (AQ1)
+26;9;Observador embarcado
+27;7;Aplicação de supervisão
+28;4;Aplicação de supervisão: calibração dos sensores
+29;5;Protocolo em arquivo único
+30;8;Identificação dos parâmetros do motor
+31;7;Ajuste automático dos ganhos do observador
+32;9;Ensaio do coeficiente de torque da hélice
+34;7;Parâmetros elétricos do motor
+35;3;Sensor de corrente: montagem do ensaio
+36;5;Sensor de corrente: tensão de saída $\times$ corrente
+37;6;Sensor de corrente: curva $\Delta$V $\times$ B
+38;7;Simulação: desempenho do PLL
+39;5;Ajuste automático: convergência da otimização
+40;5;Ajuste automático: ganhos obtidos por hélice
+41;4;Ajuste automático: sensibilidade da função-custo a cada ganho
+42;8;Simulação: rotação e torque, hélice APC 15x6E
+43;5;Simulação: rotação e torque, hélice APC 17x10E
+44;4;Simulação: correntes e FEM nos eixos $\alpha\beta$
+45;8;Simulação: identificação do coeficiente $k_Q$ por patamar
+46;7;Ensaio em laboratório com osciloscópio
+47;7;Laboratório: perdas a vazio
+48;9;Laboratório: observador nos registros do osciloscópio
+49;7;Sistema de aquisição montado
+50;6;Ensaio na interface: hélice APC 15x6E
+51;3;Ensaio na interface: hélice APC 17x10E
+52;8;1º ensaio: coeficiente de torque das hélices
+53;7;1º ensaio: torque das hélices
+54;8;Perdas a vazio: 1º e 2º ensaio
+55;10;2º ensaio: coeficiente de torque das hélices
+56;6;2º ensaio: hélice APC 15x6E
+57;6;2º ensaio: hélice APC 17x10E
+58;8;Discussão: o que mudou entre os ensaios
+59;7;Discussão: interpretação do 2º ensaio
+60;5;Discussão: indutância, corrente e montagem
+61;4;Discussão: memória do microcontrolador
+62;7;Limitações
+64;10;Objetivos atingidos
+65;8;Contribuições e trabalhos futuros
+68;10;Obrigado

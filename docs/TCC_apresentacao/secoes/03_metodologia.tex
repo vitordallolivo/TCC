@@ -93,7 +93,8 @@
   \tikzfig{1}{0.66}{smo_hibrido}
   \begin{itemize}
     \small
-    \item SMO estima a FEM; PLL extrai ângulo e rotação
+    \item PLL: o ângulo inicial do rotor não é necessariamente zero
+    \item Reconstrução analítica da FEM: remove a trepidação do chaveamento
     \item Torque: correntes \emph{medidas} projetadas no ângulo estimado
   \end{itemize}
   \fonte[Adaptado de Utkin (1992); Kaf et al.\ (2024)]
@@ -102,6 +103,12 @@
 \begin{frame}{Aplicação de supervisão}
   \centering
   \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{Metodologia/gui tela principal.png}
+  \fonte
+\end{frame}
+
+\begin{frame}{Aplicação de supervisão: calibração dos sensores}
+  \centering
+  \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{Metodologia/gui ganho e offset.png}
   \fonte
 \end{frame}
 

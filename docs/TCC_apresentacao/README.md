@@ -24,13 +24,26 @@ secoes/04_resultados.tex
 secoes/05_conclusao.tex
 secoes/06_referencias.tex
 roteiro.tex               # texto falado, slide a slide (gera roteiro.pdf)
-ensaio_voz/               # ensaio com voz sintética (Piper) e tempos medidos
+ensaio_voz/ensaio.py      # vídeo com voz sintética (Piper), tempo medido por slide
+ensaio_voz/graficos.py    # gera tempos_prioridade.pdf
+ensaio_voz/prioridade.csv # prioridade de cada slide, de 0 a 10 (editar à mão)
+ensaio_voz/tempos_*.json  # tempos medidos (calmo = voz Faber; edresson = 23/11/2026)
 apresentacao.pdf          # versão compilada
+tempos_prioridade.pdf     # tempo de fala por slide e tabela de prioridade
 ```
 
 ## Conteúdo
 
 O conteúdo segue o texto final do TCC (`../TCC_documento`), que é a fonte de
 verdade, e as regras levantadas em `../abnt.md`. Uma figura por slide; as
-frases de ligação ficam no `roteiro.tex`, não nos slides. Medida com voz
-sintética em ritmo calmo: cerca de 26 minutos.
+frases de ligação ficam no `roteiro.tex`, não nos slides. Cada bloco do
+roteiro introduz o conceito antes de chegar ao resultado.
+
+Medida com voz sintética (voz pt-BR edresson, 23/11/2026): cerca de 29,5
+minutos, acima dos 20 da defesa. `tempos_prioridade.pdf` mostra onde estão os
+slides mais longos e a prioridade de cada um, para guiar os cortes.
+
+```bash
+python -I ensaio_voz/ensaio.py roteiro.tex apresentacao.pdf saida/ 1.15 voz.onnx
+python -I ensaio_voz/graficos.py saida/tempos.json ensaio_voz/prioridade.csv roteiro.tex tempos_prioridade.pdf
+```

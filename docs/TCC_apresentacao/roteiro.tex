@@ -26,10 +26,12 @@
 {\Large\textbf{Roteiro da apresentação}}
 
 Um bloco por slide; o número entre colchetes é a página do PDF da
-apresentação. Tempos medidos lendo em ritmo calmo: cerca de 22 minutos no total.
+apresentação. Tempos medidos com voz sintética (\texttt{ensaio\_voz}): cerca de 29,5
+minutos no total. Tempo e prioridade de cada slide em
+\texttt{tempos\_prioridade.pdf}.
 
 
-\parte{Abertura e Introdução}{1}{6}{2 min}
+\parte{Abertura e Introdução}{1}{6}{2,7 min}
 
 \slide{1}{Capa}
 
@@ -67,12 +69,12 @@ BLDC.
 
 \slide{5}{Problema: ensaios fragmentados}
 
-Esta é a bancada de desempenho que a equipe usa. Nela cada grandeza é medida
-de forma separada. Para saber a rotação do motor, por exemplo, é preciso um
-medidor externo, à parte da medição de tração. E o torque não é medido de
-jeito nenhum, mesmo sendo uma das variáveis que mais influenciam a escolha do
-motor. Hoje esse valor vem do catálogo, que foi levantado em condições
-diferentes das da equipe.
+Para escolher esse conjunto, a equipe faz ensaios de desempenho numa bancada
+como esta. Nela cada grandeza é medida de forma separada. Para saber a
+rotação do motor, por exemplo, é preciso um medidor externo, à parte da
+medição de tração. E o torque não é medido de jeito nenhum, mesmo sendo uma
+das variáveis que mais influenciam a escolha do motor. Hoje esse valor vem do
+catálogo, que foi levantado em condições diferentes das da equipe.
 
 \avanca
 
@@ -89,7 +91,7 @@ desenvolver o programa de supervisão.
 
 \avanca
 
-\parte{Fundamentação teórica}{7}{12}{2,7 min}
+\parte{Fundamentação teórica}{7}{12}{3,6 min}
 
 \slide{7}{Fundamentação teórica}
 
@@ -97,59 +99,64 @@ desenvolver o programa de supervisão.
 
 \slide{8}{Modelo do motor BLDC}
 
-Cada fase do motor é modelada como uma resistência, uma indutância e uma força
-contraeletromotriz, a FEM, ligadas em estrela. Como é um motor BLDC,
-considera-se que a FEM tem forma trapezoidal e amplitude proporcional à
-rotação, então ela carrega a rotação e a posição do rotor. O torque vem dessa
-FEM junto com a corrente, e o eixo é modelado com a inércia, o atrito e a
-carga. Estimando a FEM a partir da tensão e da corrente, chega-se à rotação e
-ao torque sem nenhum sensor no eixo.
+Para estimar o que acontece no eixo sem medir o eixo, primeiro é preciso
+descrever o motor por equações, ou seja, modelá-lo. O modelo é dividido em
+duas partes, uma elétrica e uma mecânica.
+
+Na parte elétrica, o motor é modelado como uma resistência, uma indutância e
+uma força contraeletromotriz, a FEM, em cada fase, ligadas em estrela. A FEM
+é a tensão que o próprio motor gera ao girar. Como é um motor BLDC,
+considera-se que ela tem forma trapezoidal e amplitude proporcional à
+rotação, então ela carrega a rotação e a posição do rotor. Na parte mecânica,
+o torque elétrico vem dessa FEM junto com a corrente, e o eixo é modelado com
+a inércia, o atrito e a carga.
 
 \avanca
 
 \slide{9}{Transformadas de Clarke e Park}
 
-Para estimar, as grandezas das três fases são levadas para dois eixos. A
-transformada de Clarke passa as três fases para dois eixos fixos, alfa e beta,
-sem perder informação, porque a soma das três correntes é nula. Por isso
-bastam duas correntes medidas. A transformada de Park gira esses eixos junto
-com o rotor, e nesse referencial as grandezas ficam praticamente constantes. O
-observador trabalha em alfa e beta, e o torque sai da projeção das correntes
-medidas no ângulo do rotor.
+A fim de reduzir o número de equações e o acoplamento entre elas, as
+grandezas das três fases são levadas para dois eixos. A transformada de
+Clarke passa as três fases para dois eixos fixos, alfa e beta. A
+transformada de Park gira esses eixos junto com o rotor, e nesse referencial
+as grandezas ficam praticamente constantes. O observador trabalha em alfa e
+beta, e o torque sai da projeção das correntes medidas no ângulo do rotor.
 
 \avanca
 
 \slide{10}{Conjugado da hélice}
 
-Como a carga no eixo é uma hélice, ela é modelada com um torque parabólico,
-que cresce com o quadrado da rotação e é ponderado por um coeficiente de
-torque. Esse coeficiente depende da relação entre a velocidade do ar e a
-rotação da hélice, a chamada razão de avanço, e por isso os fabricantes o
-informam em curvas como esta. Na bancada parada, sem vento, a razão de avanço
-é zero, que é a condição de decolagem.
+A carga no eixo do motor é a hélice, que também precisa de um modelo. Ela é
+modelada com um torque parabólico, que cresce com o quadrado da rotação e é
+ponderado por um coeficiente de torque, próprio de cada hélice. Esse
+coeficiente depende da razão de avanço, que é a relação entre a velocidade do
+ar e a rotação vezes o diâmetro da hélice.
 
 \avanca
 
 \slide{11}{Ponto de operação}
 
-O motor e a hélice se acomodam no ponto em que as duas curvas de torque se
-cruzam. É esse cruzamento que define a rotação, a corrente e a tração do
-conjunto, e o torque é justamente o que a equipe não media. As hélices usadas
-no trabalho são a APC 15x6E e a 17x10E.
+O ponto de operação do motor e da hélice depende da combinação dos dois, isto
+é, a rotação máxima do conjunto é definida pelo cruzamento dos envelopes de
+torque do motor e da hélice. É esse cruzamento que define a rotação, a
+corrente e a tração do conjunto, e o torque é justamente o que a equipe não
+media. As hélices usadas no trabalho são a APC 15x6E e a 17x10E.
 
 \avanca
 
 \slide{12}{Observador por modos deslizantes (SMO)}
 
-Para estimar a FEM foi usado um observador por modos deslizantes. Ele roda um
-modelo das correntes do motor em paralelo com o motor real e compara as duas.
-Um termo chaveado empurra essa diferença para zero, e o sinal desse
-chaveamento, depois de filtrado, é a própria FEM. Dela saem a rotação e o
-ângulo do rotor.
+A fim de estimar a rotação e o torque a partir da tensão e da corrente,
+definiu-se o observador por modos deslizantes, por ser o mais empregado
+comercialmente em motores BLDC. Como todo observador, ele roda um modelo das
+variáveis em conjunto com o motor real e compara os dois. No modo deslizante
+existe um termo chaveado, que empurra esse erro para zero. Esse sinal de
+chaveamento, depois de filtrado, é justamente a FEM, e dessa estimativa saem o
+ângulo e a rotação do motor.
 
 \avanca
 
-\parte{Metodologia}{13}{31}{6,5 min}
+\parte{Metodologia}{13}{32}{10,2 min}
 
 \slide{13}{Metodologia}
 
@@ -196,39 +203,52 @@ interface funcionando.
 
 \slide{18}{Arquitetura do sistema de aquisição}
 
-O sistema tem duas partes. A placa de medição, que mede, roda o observador e
-cuida da segurança. E o computador, com a interface, os gráficos, o registro
-em CSV e um terminal de comandos. As duas conversam pela rede, com o
-computador mandando comandos e a placa devolvendo os dados dez vezes por
-segundo.
+Com o planejamento definido, o sistema foi dividido em duas partes. A placa
+de medição, que mede, roda o observador e cuida da segurança. E o computador,
+com a interface, os gráficos, o registro em CSV e um terminal de comandos. As
+duas conversam pela rede, com o computador mandando comandos e a placa
+devolvendo os dados dez vezes por segundo.
 
 \avanca
 
 \slide{19}{Cadeia de aquisição}
 
-Este é o caminho completo da energia e dos sinais. A bateria alimenta o
-controlador do motor através dos relés, a placa de condicionamento fica ligada
-às fases do motor, a placa de medição recebe esses sinais e manda tudo para o
-computador pela rede.
+Para ensaiar o conjunto, definiu-se que o sistema precisa ligar e desligar a
+bateria com segurança, medir as fases do motor, comandar o controlador e
+enviar tudo ao computador. Por isso a bateria alimenta o controlador do motor
+através de relés, e não diretamente.
+
+As responsabilidades ficam divididas entre duas placas. A placa de
+condicionamento, a AQ1, fica entre o controlador e o motor e só adequa as
+tensões e as correntes das fases para o conversor analógico-digital. A placa
+de medição concentra o resto: lê esses sinais, roda o observador, comanda os
+relés e o controlador do motor.
+
+A ligação com o computador é por Ethernet, através de um \textit{switch}. A
+equipe precisava de um meio de comunicação simples e padronizado: quase todo
+computador tem porta de rede cabeada, o que dispensa conversores seriais, e o
+\textit{switch} permite acrescentar outras placas no futuro.
 
 \avanca
 
 \slide{20}{Gabinete: potência e segurança}
 
-Tudo isso fica dentro de um gabinete. A placa liga a potência por relés, com
-uma pré-carga que evita o pico de corrente na partida. A parada de emergência
-é física. E é a própria placa que comanda o controlador do motor.
+A parte de potência e segurança fica no gabinete. A bateria é ligada em dois
+passos: primeiro um relé de pré-carga, com um resistor em série, carrega os
+capacitores do controlador e evita o pico de corrente na partida; depois o
+relé de potência fecha. A parada de emergência é física. E é a própria placa
+que comanda o controlador do motor.
 
 \avanca
 
 \slide{21}{Placa de medição: camadas do firmware}
 
-A placa usa um microcontrolador RISC-V com o sistema operacional Zephyr. O
-programa foi organizado em camadas. A mais baixa cuida do acesso ao
-\textit{hardware} e da comunicação, a do meio reúne os módulos do sistema,
-como o observador e a segurança, e a mais alta é a aplicação. Tensões e
-correntes são medidas em pares, no mesmo instante, e o observador dá um passo
-a cada medida.
+Para executar essas tarefas, a placa usa um microcontrolador RISC-V com o
+sistema operacional Zephyr. O programa foi organizado em camadas. A mais
+baixa cuida do acesso ao \textit{hardware} e da comunicação, a do meio reúne
+os módulos do sistema, como o observador e a segurança, e a mais alta é a
+aplicação. Tensões e correntes são medidas em pares, no mesmo instante, e o
+observador dá um passo a cada medida.
 
 \avanca
 
@@ -254,9 +274,9 @@ Com esses critérios, foram comparadas as seguintes opções.
 
 \slide{23}{Sensor Hall com núcleo toroidal}
 
-O fio da fase passa por dentro do núcleo, que concentra o campo magnético
-numa pequena fenda. O sensor Hall fica nessa fenda e mede um campo
-proporcional à corrente.
+No sensor escolhido, o fio da fase passa por dentro de um núcleo toroidal,
+que concentra o campo magnético numa pequena fenda. O sensor Hall fica nessa
+fenda e mede um campo proporcional à corrente.
 
 \avanca
 
@@ -270,148 +290,171 @@ com uma, quatro e oito voltas do fio, para varrer uma faixa maior de campo.
 
 \slide{25}{Placa de condicionamento das fases (AQ1)}
 
-Esta é a placa de condicionamento. Ela recebe os sensores de corrente e as
+Os sensores e as tensões das fases chegam à placa de medição através da
+placa de condicionamento, a AQ1. Ela recebe os sensores de corrente e as
 tensões das fases e entrega esses sinais, já filtrados, à placa de medição.
 
 \avanca
 
 \slide{26}{Observador embarcado}
 
-Dentro da placa o observador funciona em etapas. O modo deslizante estima a
-FEM, um PLL tira dela o ângulo e a rotação, e a FEM é reconstruída a partir
-do ângulo, o que limpa o ruído do chaveamento. Para o torque, usa-se a
+Para levar o observador para dentro da placa, o modo deslizante descrito na
+fundamentação foi modificado em dois pontos. O modo deslizante continua
+estimando a FEM. Mas o ângulo do rotor não é necessariamente zero no início,
+então foi adicionado um PLL, que acompanha a FEM e tira dela o ângulo e a
+rotação a partir de qualquer posição. Além disso, a FEM gerada pelo modo
+deslizante tem muita trepidação, uma oscilação rápida causada pelo próprio
+chaveamento. Por isso a FEM é reconstruída de forma analítica a partir do
+ângulo estimado, o que remove essa trepidação. Para o torque, usa-se a
 corrente medida junto com o ângulo estimado.
 
 \avanca
 
 \slide{27}{Aplicação de supervisão}
 
-Esta é a tela principal da aplicação. Por ela se acompanha e comanda o
-ensaio, se calibram os sensores, se ajusta o observador e se grava tudo em
-CSV.
+A operação do sistema é feita pela aplicação de supervisão, no computador.
+Pela tela principal se acompanha e comanda o ensaio, se ajusta o observador e
+se grava tudo em CSV.
 
 \avanca
 
-\slide{28}{Protocolo em arquivo único}
+\slide{28}{Aplicação de supervisão: calibração dos sensores}
 
-A comunicação entre a placa e o computador é descrita num único arquivo.
-Dele saem tanto o código da placa quanto o da aplicação, então os dois lados
-sempre falam a mesma língua.
-
-\avanca
-
-\slide{29}{Identificação dos parâmetros do motor}
-
-Para o modelar o motor foram medidos seus parametros, visto que o fabricante não fornece todos os dados. A resistência foi medida
-por metodo de kelvin. A indutância, por dois métodos diferentes, um com o motor parado
-e outro com ele girando. E as perdas mecânicas, girando o motor sem carga em
-várias rotações, modeladas como atrito viscoso mais uma parcela constante.
+A calibração dos sensores é feita nesta tela. Para cada canal se define o
+ganho, o deslocamento de zero e os limites válidos. O valor editado vai pela
+rede até a placa, que aplica o ajuste e o grava em memória não volátil. A
+confirmação vem pelo próximo pacote de dados, quando a leitura do canal passa
+a refletir o novo valor.
 
 \avanca
 
-\slide{30}{Ajuste automático dos ganhos do observador}
+\slide{29}{Protocolo em arquivo único}
 
-Já os ganhos do observador foram ajustados de forma automática, em simulação. O motor passa
-por vários patamares de rotação, e cada conjunto de ganhos recebe uma nota
-pelo erro de torque e de rotação, com o torque pesando mais. A evolução
-diferencial procura a menor nota.
-
-\avanca
-
-\slide{31}{Ensaio do coeficiente de torque da hélice}
-
-O ensaio da hélice é feito por patamares de acelerador. Em cada um, espera-se
-a rotação estabilizar e registram-se rotação e torque. O torque da hélice é o
-torque estimado do motor menos as perdas sem carga, e com ele se calcula o
-coeficiente de torque, que é comparado com a curva do fabricante.
+Para que a placa e o computador se entendam, os dois precisam concordar no
+formato das mensagens. Esse formato é descrito num único arquivo. Dele saem
+tanto o código da placa quanto o da aplicação, então os dois lados sempre
+falam a mesma língua.
 
 \avanca
 
-\parte{Resultados e discussão}{32}{62}{9 min}
+\slide{30}{Identificação dos parâmetros do motor}
 
-\slide{32}{Resultados e discussão}
-
-\avanca
-
-\slide{33}{Parâmetros elétricos do motor}
-
-Começando pelos parâmetros do motor. A resistência saiu bem consistente. Na
-indutância os dois métodos não concordam, dando cerca de 7 microhenries com o
-motor parado e cerca de 11 com ele girando. No observador foi usado o valor
-medido com o motor girando, e essa diferença volta na discussão.
-
-\avanca
-
-\slide{34}{Sensor de corrente: montagem do ensaio}
-
-Esta é a montagem do ensaio do sensor, na bancada do laboratório.
+O modelo do motor da fundamentação depende de parâmetros que o fabricante
+não fornece por completo, então eles foram medidos. A resistência foi medida
+pelo método de Kelvin, a quatro terminais. A indutância, por dois métodos
+diferentes: com o motor parado, pelo método da ressonância LC, que liga
+capacitores conhecidos ao enrolamento e mede a frequência de ressonância; e
+com o motor girando, pelo ajuste harmônico, que ajusta o modelo aos registros
+de tensão e corrente. E as perdas
+mecânicas, girando o motor sem carga em várias rotações, modeladas como
+atrito viscoso mais uma parcela constante.
 
 \avanca
 
-\slide{35}{Sensor de corrente: tensão de saída $\times$ corrente}
+\slide{31}{Ajuste automático dos ganhos do observador}
 
-A tensão de saída do sensor cresce em linha reta com a corrente nas três
-configurações, e quanto mais voltas de fio, mais inclinada fica a reta.
-
-\avanca
-
-\slide{36}{Sensor de corrente: curva $\Delta$V $\times$ B}
-
-Convertendo a corrente em campo magnético, as três configurações se juntam
-numa mesma reta, colada na sensibilidade de catálogo. O sensor se mantém
-linear bem além da faixa em que é usado.
+Com o modelo do motor definido, falta escolher os ganhos do observador, que
+foram ajustados de forma automática, em simulação. O motor passa por vários
+patamares de rotação, e cada conjunto de ganhos recebe uma nota pelo erro de
+torque e de rotação, com o torque pesando mais. A evolução diferencial, um
+método de otimização por população de tentativas, procura a menor nota.
 
 \avanca
 
-\slide{37}{Sensor de corrente: parâmetros por configuração}
+\slide{32}{Ensaio do coeficiente de torque da hélice}
 
-A tabela resume o ensaio. A sensibilidade média ficou cerca de 5 \% abaixo do
-valor típico, dentro da faixa do fabricante, e os ajustes são praticamente
-retas perfeitas. Na montagem usada, o sensor mede até cerca de 60 amperes por
-fase.
+Por fim, o ensaio que é a finalidade da bancada: levantar o coeficiente de
+torque da hélice. Ele é feito por patamares de acelerador. Em cada um,
+espera-se a rotação estabilizar e registram-se rotação e torque. O torque da
+hélice é o torque estimado do motor menos as perdas sem carga, e com ele se
+calcula o coeficiente de torque, que é comparado com a curva do fabricante.
+
+\avanca
+
+\parte{Resultados e discussão}{33}{62}{10,9 min}
+
+\slide{33}{Resultados e discussão}
+
+\avanca
+
+\slide{34}{Parâmetros elétricos do motor}
+
+Os primeiros resultados são os parâmetros do motor, levantados pelos métodos
+da metodologia. A resistência saiu bem consistente. Na indutância os dois
+métodos não concordam: a ressonância LC, com o motor parado, dá cerca de 7
+microhenries, e o ajuste harmônico, com ele girando, cerca de 11. No
+observador foi usado o valor do ajuste harmônico, e essa diferença volta na discussão.
+
+\avanca
+
+\slide{35}{Sensor de corrente: montagem do ensaio}
+
+Em seguida, o sensor de corrente. O ensaio de caracterização foi montado na
+bancada do laboratório, como mostra a foto.
+
+\avanca
+
+\slide{36}{Sensor de corrente: tensão de saída $\times$ corrente}
+
+Variando a corrente na fonte e lendo a tensão do sensor, a tensão de saída
+cresce em linha reta com a corrente nas três configurações, e quanto mais
+voltas de fio, mais inclinada fica a reta.
+
+\avanca
+
+\slide{37}{Sensor de corrente: curva $\Delta$V $\times$ B}
+
+Como o catálogo do sensor informa a sensibilidade em campo magnético, a
+corrente foi convertida em campo. Assim, as três configurações se juntam numa
+mesma reta, colada na sensibilidade de catálogo e dentro da faixa do
+fabricante. O sensor se mantém linear bem além da faixa em que é usado.
 
 \avanca
 
 \slide{38}{Simulação: desempenho do PLL}
 
-Antes do motor real, o observador foi testado em simulação. O ângulo estimado
-pelo PLL acompanha o ângulo real, e o erro entre os dois fica em poucos
-graus. Esse erro é maior em rotação baixa, onde a FEM é pequena.
+Antes do motor real, o observador foi testado em simulação, começando pelo
+PLL, que extrai o ângulo do rotor a partir da FEM estimada. O ângulo estimado
+acompanha o ângulo real, e o erro entre os dois fica em poucos graus. Esse
+erro é maior em rotação baixa, onde a FEM é pequena, um efeito próprio do
+modo deslizante, que perde o sincronismo em valores baixos de rotação.
 
 \avanca
 
 \slide{39}{Ajuste automático: convergência da otimização}
 
-Esta é a busca dos ganhos. Cada barra clara é uma tentativa, e a linha escura
-é a melhor encontrada até aquele ponto. A busca acha uma boa solução logo no
-começo e depois só confirma. Os picos são tentativas em que o observador não
-funcionou.
+Os ganhos usados nessa simulação vêm da busca automática descrita na
+metodologia. Cada barra clara é uma tentativa, e a linha escura é a melhor
+encontrada até aquele ponto. A convergência é relativamente rápida: em poucas
+iterações a busca já converge.
 
 \avanca
 
 \slide{40}{Ajuste automático: ganhos obtidos por hélice}
 
-Estes são os ganhos encontrados para cada hélice. Os ganhos do modo
-deslizante quase não mudam de uma hélice para a outra, e quem muda é o ganho
-ligado à FEM, que acompanha a carga. Nas duas, o erro final ficou cerca de um
-quinto menor que o do ponto de partida, sem nenhum ajuste manual.
+Foi rodado o ajuste para ambas as hélices. Os ganhos do modo deslizante quase
+não mudam de uma hélice para a outra, e quem muda é o ganho ligado à FEM, que
+acompanha a carga. Nas duas, o erro final ficou cerca de um quinto menor que
+o do ponto de partida, sem nenhum ajuste manual.
 
 \avanca
 
 \slide{41}{Ajuste automático: sensibilidade da função-custo a cada ganho}
 
-Para conferir se o ponto encontrado é bom, cada ganho foi variado sozinho. O
-primeiro está no fundo do vale, como esperado. O segundo está numa região
-plana, antes de uma subida forte em que o observador deixa de funcionar. E o
-terceiro quase não muda o resultado.
+Para cada um dos ganhos, rodou-se a sensibilidade em torno do ponto ótimo,
+variando um ganho por vez com os demais fixos. O primeiro está no fundo do
+vale, como esperado. O segundo está numa região plana, antes de uma subida
+forte em que o observador perde o sincronismo. E o terceiro quase não muda o
+resultado.
 
 \avanca
 
 \slide{42}{Simulação: rotação e torque, hélice APC 15x6E}
 
-Com esses ganhos, a simulação da 15x6E. A rotação estimada segue a real em
-todos os patamares. O torque oscila por causa do acionamento do motor, mas a
-média estimada fica praticamente sobre a real.
+Com esses ganhos, simulou-se o conjunto com a hélice 15x6E, em patamares de
+rotação. A rotação estimada segue a real em todos os patamares. O torque
+oscila por causa do acionamento do motor, mas a média estimada fica
+praticamente sobre a real.
 
 \avanca
 
@@ -424,43 +467,48 @@ pouco acima do real, e essa diferença diminui conforme a rotação sobe.
 
 \slide{44}{Simulação: correntes e FEM nos eixos $\alpha\beta$}
 
-Olhando de perto as correntes e a FEM, a estimativa segue o valor real, com a
-oscilação típica do modo deslizante em volta.
+Dentro do observador, as correntes e a FEM nos eixos alfa e beta mostram que
+a estimativa segue o valor real, com a oscilação típica do modo deslizante em
+volta.
 
 \avanca
 
 \slide{45}{Simulação: identificação do coeficiente $k_Q$ por patamar}
 
-Por fim, o mesmo cálculo do ensaio de hélice feito na simulação. Em todos os
-patamares o coeficiente estimado fica praticamente igual ao verdadeiro, com
-diferença abaixo de meio por cento. Com isso, o observador se demonstra teoricamente valido para estimar os coeficientes da helice.
+Por fim, o ensaio de hélice da metodologia foi refeito na simulação, onde o
+coeficiente verdadeiro é conhecido. Em todos os patamares o coeficiente
+estimado fica praticamente igual ao verdadeiro, com diferença abaixo de meio
+por cento. Com isso, o observador se mostra teoricamente válido para estimar
+os coeficientes da hélice.
 
 \avanca
 
 \slide{46}{Ensaio em laboratório com osciloscópio}
 
-O primeiro teste com o motor girando foi no laboratório, com um osciloscópio.
-Foram registradas as tensões e as correntes das fases, estas já pelos sensores
-da placa, além do comando do acelerador e de um tacômetro óptico, que serve de
-referência de rotação.
+Validado em simulação, o observador precisava ser testado com dados reais. O
+primeiro teste com o motor girando foi no laboratório, com um osciloscópio.
+Foram registradas as tensões e as correntes das fases, estas já pelos
+sensores da placa, além do comando do acelerador e de um tacômetro óptico,
+que serve de referência de rotação.
 
 \avanca
 
 \slide{47}{Laboratório: perdas a vazio}
 
 Nessas condições, com o motor girando sem hélice, foram levantadas as perdas
-mecânicas em várias rotações. A reta se ajusta bem aos pontos, com R² de
-0,93. E o tacômetro concordou com a rotação calculada pelas tensões, com
-desvio abaixo de 0,1 \%.
+mecânicas em várias rotações, com o torque calculado pelo balanço de
+potência. A reta se ajusta bem aos pontos, com R² de 0,93. E o tacômetro
+concordou com a rotação calculada pelas tensões, com desvio abaixo de
+0,1 \%.
 
 \avanca
 
 \slide{48}{Laboratório: observador nos registros do osciloscópio}
 
-Depois, o observador foi rodado sobre esses registros reais. A rotação
-estimada segue a do tacômetro com erro abaixo de 0,1 \%, e o torque ficou
-alguns por cento abaixo da referência. Em rotação muito baixa o observador
-perde o ângulo, e aí a rotação continua disponível, mas o torque não.
+Aplicou-se então o observador sobre esses registros, a fim de comparar o
+torque que vem do balanço de potência com o do observador. A rotação estimada
+segue a do tacômetro com erro abaixo de 0,1 \%, e o torque ficou alguns por
+cento abaixo da referência.
 
 \avanca
 
@@ -474,8 +522,9 @@ o torque vem do observador rodando dentro da placa.
 
 \slide{50}{Ensaio na interface: hélice APC 15x6E}
 
-Este é o ensaio da 15x6E visto na interface. A cada degrau de acelerador, a
-rotação e o torque estimados sobem junto.
+Com o sistema montado, as duas hélices foram ensaiadas pela interface. Na
+15x6E, a cada degrau de acelerador, a rotação e o torque estimados sobem
+junto.
 
 \avanca
 
@@ -487,18 +536,20 @@ E o mesmo para a 17x10E.
 
 \slide{52}{1º ensaio: coeficiente de torque das hélices}
 
-No primeiro ensaio, a linha é a curva do fabricante e os pontos são as
-medidas. Nas duas hélices os pontos ficaram bem acima da curva, e mais ainda
-em rotação baixa.
+Desses ensaios sai o coeficiente de torque, calculado como na metodologia. No
+primeiro ensaio, a linha é a curva do fabricante e os pontos são as medidas.
+Nas duas hélices os pontos ficaram bem acima da curva, e mais ainda em
+rotação baixa.
 
 \avanca
 
 \slide{53}{1º ensaio: torque das hélices}
 
 A tabela mostra o tamanho disso, de 20 a quase 50 \% acima do catálogo, um
-valor muito alto. Além disso, ajustando uma curva aos pontos, o torque seguia
-a rotação elevada a 1,68, e não ao quadrado, como se espera de uma hélice. Isso
-levou a considerar que havia algum erro nas perdas descontadas do torque.
+valor acima do esperado. Além disso, ao se ajustar uma curva aos pontos, o
+torque seguia a rotação elevada a um coeficiente menor do que dois, e não ao
+quadrado, como se espera de uma hélice. Isso levou a considerar que houvesse
+um erro nas perdas descontadas do torque.
 
 \avanca
 
@@ -575,12 +626,13 @@ computador precisa ser configurado à mão.
 
 \slide{62}{Limitações}
 
-Resumindo as limitações, não há uma medida de torque independente no eixo, a
+Resumindo as limitações: não há uma medida de torque independente no eixo, a
 indutância ficou incerta, a corrente tem um teto, a memória impede a conexão
-automática, a tração e o vento não foram medidos.
+automática, e a tração e o vento não foram medidos.
+
 \avanca
 
-\parte{Conclusão}{63}{68}{1,8 min}
+\parte{Conclusão}{63}{68}{2,0 min}
 
 \slide{63}{Conclusão}
 

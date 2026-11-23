@@ -16,7 +16,10 @@
       \[ J\,\frac{d\omega_m}{dt} = T_e - B\,\omega_m - T_L \]
       \begin{itemize}
         \small
-        \item A força contraeletromotriz (FEM) carrega a rotação e o ângulo
+        \item Parte elétrica: resistência, indutância e força
+              contraeletromotriz (FEM) por fase
+        \item Parte mecânica: inércia, atrito e carga no eixo
+        \item A FEM carrega a rotação e o ângulo do rotor
       \end{itemize}
     \end{column}
   \end{columns}
@@ -48,7 +51,7 @@
         \begin{bmatrix} x_\alpha \\ x_\beta \end{bmatrix}
       \]
       \begin{itemize}
-        \item $i_a + i_b + i_c = 0$: bastam duas correntes medidas
+        \item Reduz o número de equações e o acoplamento entre as fases
         \item Observador em $\alpha\beta$; torque pela projeção em $dq$
       \end{itemize}
     \end{column}
@@ -57,9 +60,10 @@
 \end{frame}
 
 \begin{frame}{Conjugado da hélice}
-  \[ Q = C_Q\,\rho\,n^2 D^5, \qquad C_Q = \frac{C_P}{2\pi} \]
+  \[ Q = C_Q\,\rho\,n^2 D^5, \qquad C_Q = \frac{C_P}{2\pi},
+     \qquad J = \frac{V}{n\,D} \;\text{(razão de avanço)} \]
   \centering
-  \includegraphics[height=0.62\textheight]{Revisao/Selig_propeller_data_cp.png}
+  \includegraphics[height=0.6\textheight]{Revisao/Selig_propeller_data_cp.png}
   \fonte[McCrink e Gregory (2015); Selig (2026)]
 \end{frame}
 
@@ -68,7 +72,8 @@
     \begin{column}{0.36\textwidth}
       \begin{itemize}
         \item Torque da hélice cresce com $n^2$
-        \item Cruzamento com a curva do motor define rotação, corrente e tração
+        \item O ponto de operação depende da combinação motor--hélice
+        \item Rotação máxima: cruzamento dos envelopes de torque dos dois
         \item Hélices de referência: APC 15x6E e 17x10E
       \end{itemize}
     \end{column}
@@ -85,8 +90,10 @@
   \tikzfig{1}{0.62}{smo_generico}
   \begin{itemize}
     \small
-    \item Estima as correntes e força o erro a zero com um termo chaveado
-    \item O sinal de chaveamento, filtrado, é a FEM: dela saem rotação e ângulo
+    \item Objetivo: estimar rotação e torque a partir de tensão e corrente
+    \item Roda um modelo das correntes junto do motor real; um termo
+          chaveado leva o erro a zero
+    \item O sinal de chaveamento, filtrado, é a FEM: dela saem ângulo e rotação
   \end{itemize}
   \fonte[Adaptado de Utkin (1992); Slotine e Li (1991)]
 \end{frame}
