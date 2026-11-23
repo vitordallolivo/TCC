@@ -27,7 +27,7 @@ roteiro.tex               # texto falado, slide a slide (gera roteiro.pdf)
 ensaio_voz/ensaio.py      # vídeo com voz sintética (Piper), tempo medido por slide
 ensaio_voz/graficos.py    # gera tempos_prioridade.pdf
 ensaio_voz/prioridade.csv # prioridade de cada slide, de 0 a 10 (editar à mão)
-ensaio_voz/tempos_*.json  # tempos medidos (calmo = voz Faber; edresson = 23/11/2026)
+ensaio_voz/tempos_*.json  # tempos medidos (calmo = voz Faber; 23nov = provisório, refazer com a Faber)
 apresentacao.pdf          # versão compilada
 tempos_prioridade.pdf     # tempo de fala por slide e tabela de prioridade
 ```
@@ -39,8 +39,8 @@ verdade, e as regras levantadas em `../abnt.md`. Uma figura por slide; as
 frases de ligação ficam no `roteiro.tex`, não nos slides. Cada bloco do
 roteiro introduz o conceito antes de chegar ao resultado.
 
-Medida com voz sintética (voz pt-BR edresson, 23/11/2026): cerca de 29,5
-minutos, acima dos 20 da defesa. `tempos_prioridade.pdf` mostra onde estão os
+Medida provisória com voz sintética (23/11/2026, voz substituta, refazer com a
+Faber): cerca de 25 minutos, acima dos 20 da defesa. `tempos_prioridade.pdf` mostra onde estão os
 slides mais longos e a prioridade de cada um, para guiar os cortes.
 
 ```bash

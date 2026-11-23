@@ -26,12 +26,12 @@
 {\Large\textbf{Roteiro da apresentação}}
 
 Um bloco por slide; o número entre colchetes é a página do PDF da
-apresentação. Tempos medidos com voz sintética (\texttt{ensaio\_voz}): cerca de 29,5
+apresentação. Tempos medidos com voz sintética (\texttt{ensaio\_voz}): cerca de 25
 minutos no total. Tempo e prioridade de cada slide em
 \texttt{tempos\_prioridade.pdf}.
 
 
-\parte{Abertura e Introdução}{1}{6}{2,7 min}
+\parte{Abertura e Introdução}{1}{6}{2,6 min}
 
 \slide{1}{Capa}
 
@@ -45,9 +45,7 @@ Guilherme Dobrikopf.
 
 \slide{2}{Sumário}
 
-A apresentação segue a ordem do trabalho escrito, começando pela introdução,
-passando pela fundamentação teórica e pela metodologia, depois os resultados
-com a discussão e, por fim, a conclusão.
+A apresentação segue a ordem do trabalho escrito.
 
 \avanca
 
@@ -91,7 +89,7 @@ desenvolver o programa de supervisão.
 
 \avanca
 
-\parte{Fundamentação teórica}{7}{12}{3,6 min}
+\parte{Fundamentação teórica}{7}{12}{3,0 min}
 
 \slide{7}{Fundamentação teórica}
 
@@ -100,27 +98,23 @@ desenvolver o programa de supervisão.
 \slide{8}{Modelo do motor BLDC}
 
 Para estimar o que acontece no eixo sem medir o eixo, primeiro é preciso
-descrever o motor por equações, ou seja, modelá-lo. O modelo é dividido em
-duas partes, uma elétrica e uma mecânica.
+descrever o motor por equações, ou seja, modelá-lo, em uma parte elétrica e
+uma mecânica.
 
-Na parte elétrica, o motor é modelado como uma resistência, uma indutância e
-uma força contraeletromotriz, a FEM, em cada fase, ligadas em estrela. A FEM
-é a tensão que o próprio motor gera ao girar. Como é um motor BLDC,
-considera-se que ela tem forma trapezoidal e amplitude proporcional à
-rotação, então ela carrega a rotação e a posição do rotor. Na parte mecânica,
-o torque elétrico vem dessa FEM junto com a corrente, e o eixo é modelado com
-a inércia, o atrito e a carga.
+Na parte elétrica, cada fase é uma resistência, uma indutância e uma força
+contraeletromotriz, a FEM, que é a tensão gerada pelo próprio motor ao girar.
+Ela é trapezoidal e proporcional à rotação, então carrega a rotação e a
+posição do rotor. Na parte mecânica, o torque vem dessa FEM junto com a
+corrente, e o eixo tem inércia, atrito e carga.
 
 \avanca
 
 \slide{9}{Transformadas de Clarke e Park}
 
-A fim de reduzir o número de equações e o acoplamento entre elas, as
-grandezas das três fases são levadas para dois eixos. A transformada de
-Clarke passa as três fases para dois eixos fixos, alfa e beta. A
-transformada de Park gira esses eixos junto com o rotor, e nesse referencial
-as grandezas ficam praticamente constantes. O observador trabalha em alfa e
-beta, e o torque sai da projeção das correntes medidas no ângulo do rotor.
+A fim de reduzir o número de equações e o acoplamento entre elas, as três
+fases são levadas para dois eixos fixos, alfa e beta, pela transformada de
+Clarke. A de Park gira esses eixos junto com o rotor, e é nela que o torque é
+calculado.
 
 \avanca
 
@@ -156,7 +150,7 @@ chaveamento, depois de filtrado, é justamente a FEM, e dessa estimativa saem o
 
 \avanca
 
-\parte{Metodologia}{13}{32}{10,2 min}
+\parte{Metodologia}{13}{32}{8,2 min}
 
 \slide{13}{Metodologia}
 
@@ -184,12 +178,9 @@ a montagem de tudo no gabinete.
 
 \slide{16}{Planejamento: placa de medição}
 
-O planejamento da placa de medição foi quebrado em três frentes,
-\textit{hardware}, \textit{firmware} e observador. Assim cada parte podia
-avançar e ser testada sozinha. O \textit{hardware} foi do esquemático ao
-protótipo, o \textit{firmware} foi validado camada por camada, e o observador
-saiu da simulação para dentro da placa. No fim, as três frentes se juntam na
-placa de medição completa.
+A placa de medição foi dividida em três frentes, \textit{hardware},
+\textit{firmware} e observador, cada uma testada sozinha antes de se juntarem
+na placa completa.
 
 \avanca
 
@@ -213,21 +204,17 @@ devolvendo os dados dez vezes por segundo.
 
 \slide{19}{Cadeia de aquisição}
 
-Para ensaiar o conjunto, definiu-se que o sistema precisa ligar e desligar a
-bateria com segurança, medir as fases do motor, comandar o controlador e
-enviar tudo ao computador. Por isso a bateria alimenta o controlador do motor
-através de relés, e não diretamente.
+Para ensaiar o conjunto, o sistema precisa ligar a bateria com segurança,
+medir as fases, comandar o controlador e enviar tudo ao computador. Por isso
+a bateria chega ao controlador através de relés.
 
-As responsabilidades ficam divididas entre duas placas. A placa de
-condicionamento, a AQ1, fica entre o controlador e o motor e só adequa as
-tensões e as correntes das fases para o conversor analógico-digital. A placa
-de medição concentra o resto: lê esses sinais, roda o observador, comanda os
-relés e o controlador do motor.
+A placa de condicionamento, a AQ1, só adequa as tensões e correntes das
+fases para o conversor. A placa de medição faz o resto: lê os sinais, roda o
+observador e comanda os relés e o controlador.
 
-A ligação com o computador é por Ethernet, através de um \textit{switch}. A
-equipe precisava de um meio de comunicação simples e padronizado: quase todo
-computador tem porta de rede cabeada, o que dispensa conversores seriais, e o
-\textit{switch} permite acrescentar outras placas no futuro.
+A ligação com o computador é por Ethernet: quase todo computador tem porta
+de rede, o que dispensa conversores, e o \textit{switch} permite acrescentar
+outras placas.
 
 \avanca
 
@@ -283,30 +270,26 @@ fenda e mede um campo proporcional à corrente.
 \slide{24}{Ensaio de caracterização do conjunto núcleo–sensor}
 
 Para caracterizar o sensor, uma fonte passa uma corrente conhecida pelo
-núcleo, e um multímetro lê a tensão de saída do sensor. O ensaio foi repetido
-com uma, quatro e oito voltas do fio, para varrer uma faixa maior de campo.
+núcleo e um multímetro lê a tensão de saída, com uma, quatro e oito voltas do
+fio.
 
 \avanca
 
 \slide{25}{Placa de condicionamento das fases (AQ1)}
 
-Os sensores e as tensões das fases chegam à placa de medição através da
-placa de condicionamento, a AQ1. Ela recebe os sensores de corrente e as
-tensões das fases e entrega esses sinais, já filtrados, à placa de medição.
+Os sinais das fases chegam à placa de medição pela placa de
+condicionamento, a AQ1, que os entrega já filtrados.
 
 \avanca
 
 \slide{26}{Observador embarcado}
 
-Para levar o observador para dentro da placa, o modo deslizante descrito na
-fundamentação foi modificado em dois pontos. O modo deslizante continua
-estimando a FEM. Mas o ângulo do rotor não é necessariamente zero no início,
-então foi adicionado um PLL, que acompanha a FEM e tira dela o ângulo e a
-rotação a partir de qualquer posição. Além disso, a FEM gerada pelo modo
-deslizante tem muita trepidação, uma oscilação rápida causada pelo próprio
-chaveamento. Por isso a FEM é reconstruída de forma analítica a partir do
-ângulo estimado, o que remove essa trepidação. Para o torque, usa-se a
-corrente medida junto com o ângulo estimado.
+Para levar o observador para dentro da placa, o modo deslizante foi
+modificado em dois pontos. Como o ângulo do rotor não é necessariamente zero
+no início, foi adicionado um PLL, que tira da FEM o ângulo e a rotação. E
+como a FEM do modo deslizante tem muita trepidação, uma oscilação rápida do
+chaveamento, ela é reconstruída de forma analítica a partir do ângulo. O
+torque usa a corrente medida e o ângulo estimado.
 
 \avanca
 
@@ -320,34 +303,26 @@ se grava tudo em CSV.
 
 \slide{28}{Aplicação de supervisão: calibração dos sensores}
 
-A calibração dos sensores é feita nesta tela. Para cada canal se define o
-ganho, o deslocamento de zero e os limites válidos. O valor editado vai pela
-rede até a placa, que aplica o ajuste e o grava em memória não volátil. A
-confirmação vem pelo próximo pacote de dados, quando a leitura do canal passa
-a refletir o novo valor.
+A calibração dos sensores é feita nesta tela: ganho, deslocamento de zero e
+limites de cada canal. A placa aplica o ajuste e o grava em memória não
+volátil.
 
 \avanca
 
 \slide{29}{Protocolo em arquivo único}
 
-Para que a placa e o computador se entendam, os dois precisam concordar no
-formato das mensagens. Esse formato é descrito num único arquivo. Dele saem
-tanto o código da placa quanto o da aplicação, então os dois lados sempre
-falam a mesma língua.
+Placa e computador precisam concordar no formato das mensagens. Esse formato
+é descrito num único arquivo, do qual saem o código dos dois lados.
 
 \avanca
 
 \slide{30}{Identificação dos parâmetros do motor}
 
-O modelo do motor da fundamentação depende de parâmetros que o fabricante
-não fornece por completo, então eles foram medidos. A resistência foi medida
-pelo método de Kelvin, a quatro terminais. A indutância, por dois métodos
-diferentes: com o motor parado, pelo método da ressonância LC, que liga
-capacitores conhecidos ao enrolamento e mede a frequência de ressonância; e
-com o motor girando, pelo ajuste harmônico, que ajusta o modelo aos registros
-de tensão e corrente. E as perdas
-mecânicas, girando o motor sem carga em várias rotações, modeladas como
-atrito viscoso mais uma parcela constante.
+Os parâmetros do modelo não são fornecidos por completo pelo fabricante,
+então foram medidos. A resistência, pelo método de Kelvin. A indutância, pela
+ressonância LC com o motor parado e pelo ajuste harmônico com ele girando. E
+as perdas mecânicas, girando o motor sem carga, modeladas como atrito viscoso
+mais uma parcela constante.
 
 \avanca
 
@@ -371,7 +346,7 @@ calcula o coeficiente de torque, que é comparado com a curva do fabricante.
 
 \avanca
 
-\parte{Resultados e discussão}{33}{62}{10,9 min}
+\parte{Resultados e discussão}{33}{62}{9,8 min}
 
 \slide{33}{Resultados e discussão}
 
@@ -423,29 +398,24 @@ modo deslizante, que perde o sincronismo em valores baixos de rotação.
 
 \slide{39}{Ajuste automático: convergência da otimização}
 
-Os ganhos usados nessa simulação vêm da busca automática descrita na
-metodologia. Cada barra clara é uma tentativa, e a linha escura é a melhor
-encontrada até aquele ponto. A convergência é relativamente rápida: em poucas
+Os ganhos usados nessa simulação vêm da busca automática. Cada barra clara é
+uma tentativa e a linha escura é a melhor até aquele ponto; em poucas
 iterações a busca já converge.
 
 \avanca
 
 \slide{40}{Ajuste automático: ganhos obtidos por hélice}
 
-Foi rodado o ajuste para ambas as hélices. Os ganhos do modo deslizante quase
-não mudam de uma hélice para a outra, e quem muda é o ganho ligado à FEM, que
-acompanha a carga. Nas duas, o erro final ficou cerca de um quinto menor que
-o do ponto de partida, sem nenhum ajuste manual.
+Foi rodado o ajuste para ambas as hélices. Os ganhos do modo deslizante
+quase não mudam, e quem acompanha a carga é o ganho ligado à FEM.
 
 \avanca
 
 \slide{41}{Ajuste automático: sensibilidade da função-custo a cada ganho}
 
-Para cada um dos ganhos, rodou-se a sensibilidade em torno do ponto ótimo,
-variando um ganho por vez com os demais fixos. O primeiro está no fundo do
-vale, como esperado. O segundo está numa região plana, antes de uma subida
-forte em que o observador perde o sincronismo. E o terceiro quase não muda o
-resultado.
+Para cada ganho, rodou-se a sensibilidade em torno do ponto ótimo. O
+primeiro está no fundo do vale, o segundo antes de uma subida em que o
+observador perde o sincronismo, e o terceiro quase não muda o resultado.
 
 \avanca
 
@@ -584,15 +554,12 @@ dependem de uma extrapolação das perdas e merecem mais cuidado.
 
 \slide{58}{Discussão: o que mudou entre os ensaios}
 
-Entre os dois ensaios, a rotação e o torque medido se repetiram, e o que
-mudou foram as perdas descontadas. Afastar a mesa de objetos próximos não
-mudou nada, então o vento em volta da hélice não era a causa.
+Entre os dois ensaios, rotação e torque medido se repetiram; o que mudou
+foram as perdas descontadas. O vento em volta da hélice foi descartado.
 
-A diferença nas perdas tem três causas possíveis. O método, já que no
-laboratório o torque veio do balanço de potência e no segundo ensaio veio do
-observador. A montagem, com outro controlador e outros cabos, cuja queda de
-tensão entra na conta como se fosse do motor. E o aquecimento do motor, que
-muda a resistência e o ímã, enquanto os parâmetros foram medidos a frio.
+Ficam três causas possíveis. O método, balanço de potência no laboratório e
+observador no segundo ensaio. A montagem, com outro controlador e outros
+cabos. E o aquecimento do motor, já que os parâmetros foram medidos a frio.
 
 \avanca
 
@@ -607,20 +574,17 @@ condições do ensaio.
 
 \slide{60}{Discussão: indutância, corrente e montagem}
 
-Sobre a indutância, o método com o motor parado trabalha numa frequência bem
-mais alta e com corrente muito menor que na operação, e o método com o motor
-girando inclui os cabos. Um ensaio com corrente de operação resolveria isso.
-A corrente fica limitada pelo sensor a cerca de 60 amperes, o que bastou para
-estas hélices.
+Sobre a indutância, o método com o motor parado trabalha em frequência mais
+alta e corrente menor que na operação, e o método com o motor girando inclui
+os cabos. Um ensaio com corrente de operação resolveria isso.
 
 \avanca
 
 \slide{61}{Discussão: memória do microcontrolador}
 
-Este gráfico mostra como a memória do microcontrolador ficou ocupada. A maior
-parte vai para a rede e para o sistema operacional, e sobrou pouco espaço
-livre. Por isso a placa não distribui endereço de rede sozinha, e o
-computador precisa ser configurado à mão.
+A maior parte da memória do microcontrolador vai para a rede e para o
+sistema operacional. Por isso a placa não distribui endereço de rede sozinha,
+e o computador é configurado à mão.
 
 \avanca
 
@@ -632,7 +596,7 @@ automática, e a tração e o vento não foram medidos.
 
 \avanca
 
-\parte{Conclusão}{63}{68}{2,0 min}
+\parte{Conclusão}{63}{68}{1,6 min}
 
 \slide{63}{Conclusão}
 
@@ -651,23 +615,17 @@ computador pela rede, e a aplicação comanda e registra os ensaios.
 \slide{65}{Contribuições e trabalhos futuros}
 
 Como contribuições ficam uma placa de baixo custo que estima rotação e torque
-sem sensor no eixo, os ensaios definidos no computador sem precisar regravar
-a placa, e o ajuste automático do observador, que pode ser repetido para
-outros motores.
+sem sensor no eixo, ensaios definidos no computador sem regravar a placa, e o
+ajuste automático do observador, reaproveitável para outros motores.
 
-Como trabalhos futuros, ficam os seguintes pontos.
+Como trabalhos futuros:
 \begin{itemize}
-  \item Um dinamômetro, para ter uma medida de torque de referência direto no
-        eixo e comparar com o observador.
-  \item Células de carga para medir a tração, um tubo de Pitot para a
-        velocidade do ar e ensaios em túnel de vento, saindo da condição
+  \item Um dinamômetro, como referência de torque no eixo.
+  \item Tração, velocidade do ar e túnel de vento, saindo da condição
         estática.
-  \item Levar o observador para a região de enfraquecimento de campo, onde o
-        motor passa da rotação nominal.
-  \item Estudar a bateria, levantando a relação entre o estado de carga e a
-        tensão em aberto, e o efeito da temperatura.
-  \item Uma bancada física com seis graus de liberdade, para ensaiar o
-        conjunto em movimento.
+  \item O observador na região de enfraquecimento de campo.
+  \item O estudo da bateria: estado de carga e temperatura.
+  \item Uma bancada com seis graus de liberdade.
 \end{itemize}
 
 \avanca
