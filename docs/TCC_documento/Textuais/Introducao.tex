@@ -10,9 +10,13 @@ A equipe Albatroz Aerodesign constitui um projeto de extensão universitária vi
     \\ Fonte: Equipe Albatroz.
 \end{figure}
 
-O sistema motopropulsor constitui um subsistema crítico no projeto de aeronaves de competição, uma vez que seu desempenho determina diretamente a capacidade de carga útil da aeronave, fator decisivo nas competições da SAE \cite{SilvaGomes2022}. Neste contexto, os motores BLDC (\textit{Brushless Direct Current}) são empregados quase que universalmente. Sua adoção é impulsionada não apenas por vantagens técnicas intrínsecas — como alta eficiência e elevada densidade de potência \cite{Krishnan2017} — mas também por um requisito regulamentar: desde 2022, o regulamento da SAE Brasil Aerodesign restringe o uso a motores elétricos sem escovas, consolidando-os como a solução padrão para a categoria \cite{SAEBrasil2024}. 
+O sistema motopropulsor constitui um subsistema crítico no projeto de aeronaves de competição, uma vez que seu desempenho determina diretamente a capacidade de carga útil da aeronave, fator decisivo nas competições da SAE \cite{SilvaGomes2022}. Neste contexto, os motores BLDC (\textit{Brushless Direct Current}) são empregados quase que universalmente. Sua adoção é impulsionada não apenas por vantagens técnicas intrínsecas — como alta eficiência e elevada densidade de potência \cite{Krishnan2017} — mas também por um requisito regulamentar: desde 2022, o regulamento da SAE BRASIL Aerodesign restringe o uso a motores elétricos sem escovas, consolidando-os como a solução padrão para a categoria \cite{SAEBrasil2024}. 
 
 Historicamente, a equipe Albatroz realizava medições de forma fragmentada, carecendo de um sistema integrado para aquisição sincronizada e abrangente de dados, o que limitava a profundidade e confiabilidade das análises de desempenho propulsivo, como pode ser visualizado na \autoref{fig:CMP_concepcao}.
+
+Para diagnosticar e caracterizar esses motores, é comum recorrer a técnicas de estimação de estado, que permitem inferir variáveis internas não medidas diretamente. Em motores BLDC, o uso de técnicas como o método \textit{sensorless} é particularmente vantajoso, pois alia confiabilidade à redução de custos com sensores mecânicos adicionais \cite{Krishnan2017}.
+
+Diante desse panorama, verifica-se uma lacuna técnica na infraestrutura de testes da equipe: a ausência de uma bancada de ensaios automatizada e instrumentada que possibilite a aquisição sincronizada de dados elétricos do motor, parâmetros aerodinâmicos da hélice e a validação dos algoritmos de estimação. Trabalhos anteriores em equipes similares desenvolveram bancadas focadas em medições de tração ou parâmetros elétricos de forma isolada (e.g., \cite{Costa2021}), mas frequentemente não integram uma arquitetura de aquisição unificada que correlacione diretamente os fenômenos elétricos, mecânicos e aerodinâmicos.
 
 \begin{figure}[ht]
     \centering
@@ -21,10 +25,6 @@ Historicamente, a equipe Albatroz realizava medições de forma fragmentada, car
     \label{fig:CMP_concepcao}
     \\ Fonte: \cite{albatroz2023desempenho}.
 \end{figure}
-
-Para diagnosticar e caracterizar esses motores, é comum recorrer a técnicas de estimação de estado, que permitem inferir variáveis internas não medidas diretamente. Em motores BLDC, o uso de técnicas como o método \textit{sensorless} é particularmente vantajoso, pois alia confiabilidade à redução de custos com sensores mecânicos adicionais \cite{Krishnan2017}.
-
-Diante desse panorama, verifica-se uma lacuna técnica na infraestrutura de testes da equipe: a ausência de uma bancada de ensaios automatizada e instrumentada que possibilite a aquisição sincronizada de dados elétricos do motor, parâmetros aerodinâmicos da hélice e a validação dos algoritmos de estimação. Trabalhos anteriores em equipes similares desenvolveram bancadas focadas em medições de tração ou parâmetros elétricos de forma isolada (e.g., \cite{Costa2021}), mas frequentemente não integram uma arquitetura de aquisição unificada que correlacione diretamente os fenômenos elétricos, mecânicos e aerodinâmicos.
 
 Portanto, a motivação central deste trabalho é o desenvolvimento de uma bancada de medição avançada para sistemas propulsivos com motores BLDC. A proposta avança além da simples automação, integrando: 1) um sistema de aquisição elétrica de alta precisão com \textit{hardware} dedicado; 2) a modelagem dinâmica do motor e o projeto de um observador de estados por modos deslizantes para estimação de velocidade e torque; 3) a integração da medição, do acionamento e da segurança em uma única placa de medição; 4) uma infraestrutura de comunicação em rede robusta; e 5) um \textit{software} de supervisão. O objetivo final é fornecer uma ferramenta de caracterização que permita a aquisição sincronizada e o comparativo sistemático entre as grandezas medidas diretamente (tensão e corrente de fase) e as variáveis estimadas pelo observador (força eletromotriz, velocidade angular, torque no eixo).
 
@@ -69,7 +69,7 @@ Desenvolver um sistema de aquisição de dados para ensaios de conjuntos motopro
     embarcado.
 
     \item \textbf{Integrar a placa de medição e o supervisório em uma rede
-    Ethernet:} Estabelecer a infraestrutura de comunicação com Protocolo de Controle de Transmissão e Protocolo de Datagrama do Usuário (TCP/UDP) que interliga
+    Ethernet:} Estabelecer a infraestrutura de comunicação com Protocolo de Controle de Transmissão e Protocolo de Datagrama do Usuário (UDP) que interliga
     a placa de medição ao \textit{software} de supervisão, definindo o protocolo de
     troca de pacotes e a estrutura de telemetria que padroniza os dados
     trafegados entre o \textit{firmware} embarcado e a aplicação \textit{desktop}.
